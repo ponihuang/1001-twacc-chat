@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="mobile-page">
+  <main class="mobile-shell">
+    <header class="mobile-topbar">
+      <div>
+        <span class="eyebrow">Mobile Fullscreen</span>
+        <h1>{{.Title}}</h1>
+      </div>
+      <a class="ghost-link" href="/">入口</a>
+    </header>
+
+    <section class="mobile-panel panel-surface">
+      <strong>對話列表</strong>
+      <div class="mobile-conversation-list">
+        <article class="mobile-conversation is-active">
+          <div>
+            <strong>客服窗口</strong>
+            <span>待接聊天列表 API</span>
+          </div>
+          <small>2</small>
+        </article>
+        <article class="mobile-conversation">
+          <div>
+            <strong>群組公告</strong>
+            <span>之後接群組與未讀狀態</span>
+          </div>
+          <small>1</small>
+        </article>
+      </div>
+    </section>
+
+    <section class="mobile-chat panel-surface">
+      <div class="mobile-chat-header">
+        <strong>客服窗口</strong>
+        <span>單欄切換模式</span>
+      </div>
+      <div class="mobile-messages">
+        <div class="message-row incoming">
+          <div class="message-bubble">
+            <p>手機版之後會拆成列表頁與訊息頁切換。</p>
+          </div>
+        </div>
+        <div class="message-row outgoing">
+          <div class="message-bubble">
+            <p>目前先做全畫面骨架，保留底部輸入區與未讀提示位置。</p>
+          </div>
+        </div>
+      </div>
+      <div class="mobile-composer">
+        <span>輸入框 / 上傳按鈕 / 語系切換待接入</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

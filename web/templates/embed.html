@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="embed-page">
+  <main class="embed-shell">
+    <div class="embed-dock">Chat</div>
+    <section class="embed-window panel-surface">
+      <header class="embed-header">
+        <div>
+          <span class="eyebrow">Embedded Floating Chat</span>
+          <h1>{{.Title}}</h1>
+        </div>
+        <div class="embed-controls">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </header>
+
+      <div class="embed-body">
+        <p>這個模式預留給插在其他網站頁面中的浮動聊天窗。</p>
+        <ul>
+          <li>建議第一版使用 iframe 載入，隔離樣式與 session 邊界</li>
+          <li>後續可在這裡接 embed token、未讀數與最小化狀態</li>
+          <li>聊天 API 與權限邏輯應和桌機 / 手機版共用</li>
+        </ul>
+      </div>
+
+      <footer class="embed-footer">
+        <span>240 x 420 compact shell</span>
+        <a class="ghost-link" href="/">回到入口</a>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

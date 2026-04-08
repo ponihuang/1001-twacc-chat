@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="desktop-page">
+  <main class="desktop-shell">
+    <aside class="desktop-sidebar">
+      <div>
+        <span class="eyebrow">Desktop Fullscreen</span>
+        <h1 class="brand-title">1001 TWACC Chat</h1>
+      </div>
+      <div class="search-panel panel-surface compact-panel">
+        <strong>Conversations</strong>
+        <p>搜尋、分類與未讀狀態會在後續接入聊天列表 API。</p>
+      </div>
+      <div class="conversation-list">
+        <article class="conversation-card is-active">
+          <strong>採購小組</strong>
+          <span>3 人群組</span>
+          <small>下午 2:18</small>
+        </article>
+        <article class="conversation-card">
+          <strong>王小明</strong>
+          <span>等待聊天列表 API</span>
+          <small>昨天</small>
+        </article>
+        <article class="conversation-card">
+          <strong>財務窗口</strong>
+          <span>等待訊息列表與上傳流程</span>
+          <small>週一</small>
+        </article>
+      </div>
+    </aside>
+
+    <section class="desktop-stage">
+      <header class="stage-header panel-surface compact-panel">
+        <div>
+          <span class="eyebrow">Conversation Stage</span>
+          <h2>桌機版聊天工作區</h2>
+        </div>
+        <div class="stage-actions">
+          <span class="badge">Files 40MB</span>
+          <span class="badge muted">Group Ready</span>
+        </div>
+      </header>
+
+      <section class="message-board panel-surface">
+        <div class="message-row incoming">
+          <div class="message-bubble">
+            <strong>系統提示</strong>
+            <p>這裡會接上訊息列表、檔案上傳入口與對話詳情。</p>
+          </div>
+        </div>
+        <div class="message-row outgoing">
+          <div class="message-bubble">
+            <strong>你</strong>
+            <p>桌機版優先支援雙欄瀏覽、多會話切換與檔案操作。</p>
+          </div>
+        </div>
+      </section>
+
+      <footer class="composer panel-surface compact-panel">
+        <div>
+          <strong>Message Composer</strong>
+          <p>後續在這裡接文字輸入、圖片 / 檔案上傳與權限提示。</p>
+        </div>
+        <a class="ghost-link" href="/">回到入口</a>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

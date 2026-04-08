@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="overview-page">
+  <main class="overview-shell">
+    <section class="overview-hero panel-surface">
+      <span class="eyebrow">Chat System MVP</span>
+      <h1>{{.Title}}</h1>
+      <p>聊天系統本體提供統一 API 與三種 Web 形態，不為任何單一外部系統另開專屬產品窗口。</p>
+      <div class="entry-grid">
+        <a class="entry-card" href="/chat">
+          <span class="entry-kicker">Desktop</span>
+          <strong>桌機全畫面</strong>
+          <p>雙欄工作區，適合長時間處理多個對話與檔案操作。</p>
+        </a>
+        <a class="entry-card" href="/m/chat">
+          <span class="entry-kicker">Mobile</span>
+          <strong>手機全畫面</strong>
+          <p>單欄切換流程，優先處理對話列表與訊息頁面切換。</p>
+        </a>
+        <a class="entry-card" href="/embed/chat">
+          <span class="entry-kicker">Embed</span>
+          <strong>嵌入式浮動視窗</strong>
+          <p>可插入其他系統頁面中的輕量聊天入口，適合客服與內嵌通知。</p>
+        </a>
+      </div>
+    </section>
+
+    <section class="overview-notes panel-surface">
+      <h2>目前方向</h2>
+      <ul>
+        <li>外部整合走統一 API 契約，不單獨為 ERP 開分類或專屬頁面</li>
+        <li>桌機、手機、嵌入式三種形態共用同一套聊天能力與權限邏輯</li>
+        <li>下一步聚焦聊天列表、訊息流、上傳與 embed token / session 邊界</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

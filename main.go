@@ -1,7 +1,13 @@
 package main
 
-import "fmt"
+import (
+	"log"
+
+	"1001-twacc-chat/internal/app"
+)
 
 func main() {
-	fmt.Println("Hello, 1001-twacc-chat!")
+	if err := app.Run(); err != nil {
+		log.Fatal(err)
+	}
 }
