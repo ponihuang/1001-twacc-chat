@@ -13,7 +13,7 @@ import (
 func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 	mux.HandleFunc("GET /", indexHandler)
 	mux.HandleFunc("GET /chat", desktopHandler)
 	mux.HandleFunc("GET /m/chat", mobileHandler)
