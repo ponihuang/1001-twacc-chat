@@ -20,6 +20,7 @@ func Run() error {
 
 	var integrationHandler *erp.Handler
 	var chatHandler *chat.Handler
+	realtimeHub := chat.NewHub()
 	if cfg.EnableMySQL {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -49,11 +50,11 @@ func Run() error {
 		integrationHandler = erp.NewHandler(integrationService, sessionService, cfg.IntegrationSharedToken)
 
 		chatRepo := storemysql.NewChatRepository(dbStore.DB())
-		chatService := chat.NewService(chatRepo)
-		chatHandler = chat.NewHandler(chatService, sessionService)
+		chatService := chat.NewService(chatRepo, realtimeHub)
+		chatHandler = chat.NewHandler(chatService, sessionService, realtimeHub)
 	} else {
 		integrationHandler = erp.NewHandler(nil, nil, cfg.IntegrationSharedToken)
-		chatHandler = chat.NewHandler(nil, nil)
+		chatHandler = chat.NewHandler(nil, nil, nil)
 	}
 
 	server := &http.Server{

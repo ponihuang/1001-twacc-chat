@@ -176,6 +176,26 @@ func (r *ChatRepository) CreateOrGetDirectConversation(actorUserID int64, source
 	return conversation, created, nil
 }
 
+// ListConversationMemberIDs returns all user IDs in a conversation.
+func (r *ChatRepository) ListConversationMemberIDs(conversationID int64) ([]int64, error) {
+	rows, err := r.db.Query(`SELECT user_id FROM conversation_members WHERE conversation_id = ? ORDER BY id ASC`, conversationID)
+	if err != nil {
+		return nil, fmt.Errorf("list conversation members: %w", err)
+	}
+	defer rows.Close()
+
+	var userIDs []int64
+	for rows.Next() {
+		var userID int64
+		if err := rows.Scan(&userID); err != nil {
+			return nil, fmt.Errorf("scan conversation member: %w", err)
+		}
+		userIDs = append(userIDs, userID)
+	}
+
+	return userIDs, rows.Err()
+}
+
 // GetConversationForUser returns conversation metadata if the user belongs to the conversation.
 func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (chat.Conversation, error) {
 	var conversation chat.Conversation

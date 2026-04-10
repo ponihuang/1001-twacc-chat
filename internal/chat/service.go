@@ -24,12 +24,13 @@ var (
 
 // Service implements chat list and message list rules.
 type Service struct {
-	repo Repository
+	repo   Repository
+	broker Broker
 }
 
 // NewService builds a chat service.
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo Repository, broker Broker) *Service {
+	return &Service{repo: repo, broker: broker}
 }
 
 // ListConversations returns conversations visible to the current user.
@@ -94,15 +95,29 @@ func (s *Service) CreateDirectConversation(actor SessionPrincipal, req CreateDir
 		status = 201
 	}
 
+	data := DirectConversationData{
+		ConversationID: conversation.ID,
+		Type:           conversation.Type,
+		Title:          conversation.Title,
+	}
+
+	if s.broker != nil {
+		memberIDs, err := s.repo.ListConversationMemberIDs(conversation.ID)
+		if err != nil {
+			return Response{}, 500, err
+		}
+		s.broker.PublishToUsers(memberIDs, RealtimeEvent{
+			EventType:      "conversation.ready",
+			ConversationID: conversation.ID,
+			Conversation:   &data,
+		})
+	}
+
 	return Response{
 		Success: true,
 		Code:    code,
 		Message: message,
-		Data: DirectConversationData{
-			ConversationID: conversation.ID,
-			Type:           conversation.Type,
-			Title:          conversation.Title,
-		},
+		Data:    data,
 	}, status, nil
 }
 
@@ -189,20 +204,34 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 		return Response{}, statusCode(err), err
 	}
 
+	item := MessageItem{
+		MessageID:   created.ID,
+		SenderID:    created.SenderID,
+		SenderName:  created.SenderName,
+		MessageType: created.MessageType,
+		Content:     created.Content,
+		CreatedAt:   created.CreatedAt.Format(time.RFC3339),
+	}
+
+	if s.broker != nil {
+		memberIDs, err := s.repo.ListConversationMemberIDs(conversationID)
+		if err != nil {
+			return Response{}, 500, err
+		}
+		s.broker.PublishToUsers(memberIDs, RealtimeEvent{
+			EventType:      "message.created",
+			ConversationID: conversationID,
+			Message:        item,
+		})
+	}
+
 	return Response{
 		Success: true,
 		Code:    "MESSAGE_SENT",
 		Message: "讯息发送成功",
 		Data: SentMessageData{
 			ConversationID: conversationID,
-			Message: MessageItem{
-				MessageID:   created.ID,
-				SenderID:    created.SenderID,
-				SenderName:  created.SenderName,
-				MessageType: created.MessageType,
-				Content:     created.Content,
-				CreatedAt:   created.CreatedAt.Format(time.RFC3339),
-			},
+			Message:        item,
 		},
 	}, 201, nil
 }

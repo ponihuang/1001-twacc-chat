@@ -43,6 +43,7 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 		mux.HandleFunc("POST /api/users/{user_id}/devices/{device_id}/approve", integrationHandler.ApproveDevice)
 	}
 	if chatHandler != nil {
+		mux.HandleFunc("GET /ws", chatHandler.ServeWebSocket)
 		mux.HandleFunc("GET /api/conversations", chatHandler.ListConversations)
 		mux.HandleFunc("POST /api/conversations/direct", chatHandler.CreateDirectConversation)
 		mux.HandleFunc("GET /api/conversations/{conversation_id}/messages", chatHandler.ListMessages)

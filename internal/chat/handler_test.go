@@ -21,7 +21,7 @@ func (s stubSessionAuthenticator) Authenticate(token string) (auth.Session, erro
 }
 
 func TestSendMessageHandlerRejectsInvalidJSON(t *testing.T) {
-	handler := NewHandler(NewService(&mockRepository{}), stubSessionAuthenticator{session: auth.Session{UserID: 7}})
+	handler := NewHandler(NewService(&mockRepository{}, nil), stubSessionAuthenticator{session: auth.Session{UserID: 7}}, nil)
 	request := httptest.NewRequest(http.MethodPost, "/api/conversations/9/messages", bytes.NewBufferString(`{"type":"text"`))
 	request.Header.Set("Authorization", "Bearer token")
 	request.SetPathValue("conversation_id", "9")
@@ -57,7 +57,7 @@ func TestSendMessageHandlerSuccess(t *testing.T) {
 			CreatedAt:      time.Date(2026, 4, 7, 3, 0, 0, 0, time.UTC),
 		},
 	}
-	handler := NewHandler(NewService(repo), stubSessionAuthenticator{session: auth.Session{UserID: 7}})
+	handler := NewHandler(NewService(repo, nil), stubSessionAuthenticator{session: auth.Session{UserID: 7}}, nil)
 	request := httptest.NewRequest(http.MethodPost, "/api/conversations/9/messages", bytes.NewBufferString(`{"type":"text","content":"hello"}`))
 	request.Header.Set("Authorization", "Bearer token")
 	request.SetPathValue("conversation_id", "9")
@@ -89,7 +89,7 @@ func TestCreateDirectConversationHandlerSuccess(t *testing.T) {
 	handler := NewHandler(NewService(&mockRepository{
 		directConversation: Conversation{ID: 13, Type: "direct", Title: "User B"},
 		directCreated:      true,
-	}), stubSessionAuthenticator{session: auth.Session{UserID: 7}})
+	}, nil), stubSessionAuthenticator{session: auth.Session{UserID: 7}}, nil)
 
 	request := httptest.NewRequest(http.MethodPost, "/api/conversations/direct", bytes.NewBufferString(`{"source_system":"erp","external_user_id":"user_b"}`))
 	request.Header.Set("Authorization", "Bearer token")

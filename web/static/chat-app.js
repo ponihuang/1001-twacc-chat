@@ -16,9 +16,13 @@
   const directStatus = app.querySelector("[data-direct-status]");
   const directExternalUserIDInput = app.querySelector("#direct-external-user-id");
   const messageBoard = app.querySelector("[data-message-board]");
+  const realtimeStateNode = app.querySelector("[data-realtime-state]");
 
   let conversations = [];
   let activeConversationID = Number(localStorage.getItem(storageKeys.activeConversationID) || 0);
+  let realtimeSocket = null;
+  let reconnectTimer = 0;
+  let reconnectAttempts = 0;
 
   function readSessionToken() {
     return localStorage.getItem(storageKeys.token) || "";
@@ -69,6 +73,14 @@
       return value;
     }
     return date.toLocaleString();
+  }
+
+  function setRealtimeState(text, isConnected) {
+    if (!realtimeStateNode) {
+      return;
+    }
+    realtimeStateNode.textContent = text;
+    realtimeStateNode.classList.toggle("is-live", Boolean(isConnected));
   }
 
   function renderConversationList(items) {
@@ -194,6 +206,117 @@
     renderMessages(result.data || {});
   }
 
+  function websocketURL() {
+    const token = readSessionToken();
+    if (!token) {
+      return "";
+    }
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return protocol + "//" + window.location.host + "/ws?token=" + encodeURIComponent(token);
+  }
+
+  function clearReconnectTimer() {
+    if (!reconnectTimer) {
+      return;
+    }
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = 0;
+  }
+
+  function closeRealtimeSocket() {
+    clearReconnectTimer();
+    if (!realtimeSocket) {
+      setRealtimeState("WS 未連線", false);
+      return;
+    }
+
+    const socket = realtimeSocket;
+    realtimeSocket = null;
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.close();
+    setRealtimeState("WS 未連線", false);
+  }
+
+  function scheduleRealtimeReconnect() {
+    if (!readSessionToken() || reconnectTimer) {
+      return;
+    }
+
+    const delay = Math.min(1000 * Math.max(reconnectAttempts, 1), 5000);
+    reconnectTimer = window.setTimeout(function () {
+      reconnectTimer = 0;
+      connectRealtime();
+    }, delay);
+    setRealtimeState("WS 重連中", false);
+  }
+
+  function handleRealtimeEvent(event) {
+    if (!event || !event.event_type) {
+      return;
+    }
+
+    if (event.event_type === "conversation.ready") {
+      loadConversations();
+      if (event.conversation_id) {
+        activeConversationID = Number(event.conversation_id);
+        localStorage.setItem(storageKeys.activeConversationID, String(activeConversationID));
+        loadMessages(activeConversationID);
+      }
+      return;
+    }
+
+    if (event.event_type === "message.created") {
+      loadConversations();
+      if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
+        loadMessages(activeConversationID);
+      }
+    }
+  }
+
+  function connectRealtime() {
+    const url = websocketURL();
+    if (!url) {
+      closeRealtimeSocket();
+      return;
+    }
+    if (realtimeSocket && (realtimeSocket.readyState === WebSocket.OPEN || realtimeSocket.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    closeRealtimeSocket();
+    setRealtimeState("WS 連線中", false);
+
+    const socket = new WebSocket(url);
+    realtimeSocket = socket;
+
+    socket.onopen = function () {
+      reconnectAttempts = 0;
+      setRealtimeState("WS 已連線", true);
+    };
+
+    socket.onmessage = function (raw) {
+      try {
+        handleRealtimeEvent(JSON.parse(raw.data));
+      } catch (_) {
+      }
+    };
+
+    socket.onerror = function () {
+      setRealtimeState("WS 連線異常", false);
+    };
+
+    socket.onclose = function () {
+      if (realtimeSocket === socket) {
+        realtimeSocket = null;
+      }
+      reconnectAttempts += 1;
+      scheduleRealtimeReconnect();
+    };
+  }
+
   async function createDirectConversation(event) {
     event.preventDefault();
     const headers = authHeaders();
@@ -230,6 +353,7 @@
   }
 
   document.addEventListener("twacc:session-changed", function () {
+    connectRealtime();
     loadConversations();
   });
 
@@ -244,5 +368,6 @@
     directForm.addEventListener("submit", createDirectConversation);
   }
 
+  connectRealtime();
   loadConversations();
 })();

@@ -69,6 +69,14 @@ type DirectConversationData struct {
 	Title          string `json:"title"`
 }
 
+// RealtimeEvent is the WebSocket payload pushed to chat clients.
+type RealtimeEvent struct {
+	EventType      string                  `json:"event_type"`
+	ConversationID int64                   `json:"conversation_id,omitempty"`
+	Conversation   *DirectConversationData `json:"conversation,omitempty"`
+	Message        MessageItem             `json:"message,omitempty"`
+}
+
 // MessageItem is the API-facing message item.
 type MessageItem struct {
 	MessageID   int64  `json:"message_id"`
@@ -113,11 +121,18 @@ type Response struct {
 	Data    any    `json:"data,omitempty"`
 }
 
+// Broker publishes realtime chat events to connected clients.
+type Broker interface {
+	PublishToUsers(userIDs []int64, event RealtimeEvent)
+	Subscribe(userID int64) (<-chan RealtimeEvent, func())
+}
+
 // Repository defines persistence required by chat list and message list endpoints.
 type Repository interface {
 	IsSystemAdmin(userID int64) (bool, error)
 	ListConversations(userID int64) ([]ConversationSummary, error)
 	CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error)
+	ListConversationMemberIDs(conversationID int64) ([]int64, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
 	ListMessages(conversationID int64, limit int) ([]Message, error)
 	CreateMessage(input CreateMessageInput) (Message, error)

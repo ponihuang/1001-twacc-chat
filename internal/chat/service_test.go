@@ -11,6 +11,7 @@ type mockRepository struct {
 	conversations       map[int64][]ConversationSummary
 	headers             map[string]Conversation
 	messages            map[int64][]Message
+	memberIDs           map[int64][]int64
 	createdMessages     []CreateMessageInput
 	createMessageResult Message
 	createMessageErr    error
@@ -75,6 +76,28 @@ func (m *mockRepository) CreateOrGetDirectConversation(actorUserID int64, source
 	return Conversation{ID: 15, Type: "direct", Title: externalUserID}, true, nil
 }
 
+func (m *mockRepository) ListConversationMemberIDs(conversationID int64) ([]int64, error) {
+	return append([]int64(nil), m.memberIDs[conversationID]...), nil
+}
+
+type mockBroker struct {
+	userIDs []int64
+	event   RealtimeEvent
+	calls   int
+}
+
+func (m *mockBroker) PublishToUsers(userIDs []int64, event RealtimeEvent) {
+	m.userIDs = append([]int64(nil), userIDs...)
+	m.event = event
+	m.calls++
+}
+
+func (m *mockBroker) Subscribe(userID int64) (<-chan RealtimeEvent, func()) {
+	ch := make(chan RealtimeEvent)
+	close(ch)
+	return ch, func() {}
+}
+
 func conversationKey(userID, conversationID int64) string {
 	return time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(userID + conversationID)).Format(time.RFC3339Nano)
 }
@@ -85,7 +108,7 @@ func TestListConversations(t *testing.T) {
 			7: {{ConversationID: 9, Type: "group", Title: "採購小組", MemberCount: 3, LastMessageType: "text", LastMessagePreview: "hello", LastMessageAt: time.Date(2026, 4, 7, 1, 2, 3, 0, time.UTC)}},
 		},
 	}
-	service := NewService(repo)
+	service := NewService(repo, nil)
 
 	resp, status, err := service.ListConversations(SessionPrincipal{UserID: 7})
 	if err != nil {
@@ -109,7 +132,7 @@ func TestListConversations(t *testing.T) {
 
 func TestListConversationsRejectsSystemAdmin(t *testing.T) {
 	repo := &mockRepository{admins: map[int64]bool{9: true}}
-	service := NewService(repo)
+	service := NewService(repo, nil)
 
 	_, _, err := service.ListConversations(SessionPrincipal{UserID: 9})
 	if !errors.Is(err, ErrSystemAdminCannotChat) {
@@ -129,7 +152,7 @@ func TestListMessages(t *testing.T) {
 			},
 		},
 	}
-	service := NewService(repo)
+	service := NewService(repo, nil)
 
 	resp, status, err := service.ListMessages(9, SessionPrincipal{UserID: 7})
 	if err != nil {
@@ -152,7 +175,7 @@ func TestListMessages(t *testing.T) {
 }
 
 func TestListMessagesRejectsMissingConversation(t *testing.T) {
-	service := NewService(&mockRepository{})
+	service := NewService(&mockRepository{}, nil)
 
 	_, _, err := service.ListMessages(9, SessionPrincipal{UserID: 7})
 	if !errors.Is(err, ErrConversationNotFound) {
@@ -164,8 +187,12 @@ func TestCreateDirectConversation(t *testing.T) {
 	repo := &mockRepository{
 		directConversation: Conversation{ID: 13, Type: "direct", Title: "User B"},
 		directCreated:      true,
+		memberIDs: map[int64][]int64{
+			13: {7, 8},
+		},
 	}
-	service := NewService(repo)
+	broker := &mockBroker{}
+	service := NewService(repo, broker)
 
 	resp, status, err := service.CreateDirectConversation(SessionPrincipal{UserID: 7}, CreateDirectConversationRequest{
 		SourceSystem:   "erp",
@@ -185,12 +212,21 @@ func TestCreateDirectConversation(t *testing.T) {
 	if data.ConversationID != 13 || data.Title != "User B" {
 		t.Fatalf("unexpected direct conversation data: %+v", data)
 	}
+	if broker.calls != 1 {
+		t.Fatalf("broker calls = %d, want 1", broker.calls)
+	}
+	if broker.event.EventType != "conversation.ready" || broker.event.ConversationID != 13 {
+		t.Fatalf("unexpected realtime event: %+v", broker.event)
+	}
 }
 
 func TestSendMessage(t *testing.T) {
 	repo := &mockRepository{
 		headers: map[string]Conversation{
 			conversationKey(7, 9): {ID: 9, Type: "direct", Title: "王小明"},
+		},
+		memberIDs: map[int64][]int64{
+			9: {7, 8},
 		},
 		createMessageResult: Message{
 			ID:             3,
@@ -202,7 +238,8 @@ func TestSendMessage(t *testing.T) {
 			CreatedAt:      time.Date(2026, 4, 7, 1, 2, 0, 0, time.UTC),
 		},
 	}
-	service := NewService(repo)
+	broker := &mockBroker{}
+	service := NewService(repo, broker)
 
 	resp, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "TEXT", Content: "  hello  "})
 	if err != nil {
@@ -225,10 +262,16 @@ func TestSendMessage(t *testing.T) {
 	if data.ConversationID != 9 || data.Message.MessageID != 3 {
 		t.Fatalf("unexpected sent message data: %+v", data)
 	}
+	if broker.calls != 1 {
+		t.Fatalf("broker calls = %d, want 1", broker.calls)
+	}
+	if broker.event.EventType != "message.created" || broker.event.ConversationID != 9 {
+		t.Fatalf("unexpected realtime event: %+v", broker.event)
+	}
 }
 
 func TestSendMessageRejectsUnsupportedType(t *testing.T) {
-	service := NewService(&mockRepository{})
+	service := NewService(&mockRepository{}, nil)
 
 	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "image", Content: "hello"})
 	if !errors.Is(err, ErrUnsupportedMessageType) {
@@ -240,7 +283,7 @@ func TestSendMessageRejectsUnsupportedType(t *testing.T) {
 }
 
 func TestSendMessageRejectsEmptyContent(t *testing.T) {
-	service := NewService(&mockRepository{})
+	service := NewService(&mockRepository{}, nil)
 
 	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "text", Content: "   "})
 	if !errors.Is(err, ErrMessageContentRequired) {
@@ -252,7 +295,7 @@ func TestSendMessageRejectsEmptyContent(t *testing.T) {
 }
 
 func TestSendMessageRejectsMissingConversation(t *testing.T) {
-	service := NewService(&mockRepository{})
+	service := NewService(&mockRepository{}, nil)
 
 	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "text", Content: "hello"})
 	if !errors.Is(err, ErrConversationNotFound) {
