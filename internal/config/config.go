@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,6 +56,8 @@ type MySQLConfig struct {
 
 // Load reads runtime configuration from environment variables.
 func Load() Config {
+	loadDotEnv(".env")
+
 	return Config{
 		Port: envOrDefault("PORT", defaultPort),
 		Server: ServerConfig{
@@ -80,6 +83,65 @@ func Load() Config {
 		IntegrationSharedToken: strings.TrimSpace(os.Getenv("INTEGRATION_SHARED_TOKEN")),
 		LoginTokenTTL:          durationEnv("LOGIN_TOKEN_TTL", 24*time.Hour),
 	}
+}
+
+func loadDotEnv(path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+
+		_ = os.Setenv(key, parseDotEnvValue(value))
+	}
+}
+
+func parseDotEnvValue(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+
+	if len(value) >= 2 {
+		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
+			unquoted, err := strconv.Unquote(value)
+			if err == nil {
+				return unquoted
+			}
+		}
+		if strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") {
+			return value[1 : len(value)-1]
+		}
+	}
+
+	if index := strings.Index(value, " #"); index >= 0 {
+		return strings.TrimSpace(value[:index])
+	}
+
+	return strings.TrimSpace(value)
 }
 
 // Enabled returns true when MySQL should be initialized at startup.

@@ -58,6 +58,8 @@
 go run .
 ```
 
+程式啟動時會先嘗試讀取專案根目錄的 `.env`，再載入系統環境變數；若兩邊都有同名變數，系統環境變數優先。
+
 預設啟動於 `http://localhost:8080`。
 
 若要啟用 MySQL 與外部系統接入 / 管理 API：
@@ -73,6 +75,8 @@ MYSQL_USER=root
 MYSQL_PASSWORD=secret
 INTEGRATION_SHARED_TOKEN=your-shared-token
 ```
+
+建議把以上內容放進根目錄 `.env` 後直接執行 `go run .`。
 
 若未設定 `INTEGRATION_SHARED_TOKEN`，目前程式會以開發模式允許未帶 `Authorization` 的外部系統 register / login 請求。文件語意已改為統一外部整合能力；路由命名後續建議由 `/api/erp/*` 收斂為更中性的 `/api/integrations/*` 或 `/api/external/*`。
 
@@ -148,4 +152,3 @@ INTEGRATION_SHARED_TOKEN=your-shared-token
 go build ./...
 go test ./...
 ```
-
