@@ -63,6 +63,7 @@ func (m *mockRepository) CreateMessage(input CreateMessageInput) (Message, error
 		MessageType:    input.MessageType,
 		Content:        input.Content,
 		CreatedAt:      time.Date(2026, 4, 7, 2, 0, 0, 0, time.UTC),
+		Attachment:     attachmentFromInput(input.Attachment),
 	}, nil
 }
 
@@ -96,6 +97,19 @@ func (m *mockBroker) Subscribe(userID int64) (<-chan RealtimeEvent, func()) {
 	ch := make(chan RealtimeEvent)
 	close(ch)
 	return ch, func() {}
+}
+
+func attachmentFromInput(value *AttachmentInput) *Attachment {
+	if value == nil {
+		return nil
+	}
+
+	return &Attachment{
+		OriginalName: value.OriginalName,
+		StoragePath:  value.StoragePath,
+		MIMEType:     value.MIMEType,
+		SizeBytes:    value.SizeBytes,
+	}
 }
 
 func conversationKey(userID, conversationID int64) string {
@@ -273,12 +287,46 @@ func TestSendMessage(t *testing.T) {
 func TestSendMessageRejectsUnsupportedType(t *testing.T) {
 	service := NewService(&mockRepository{}, nil)
 
-	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "image", Content: "hello"})
+	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "voice", Content: "hello"})
 	if !errors.Is(err, ErrUnsupportedMessageType) {
 		t.Fatalf("expected ErrUnsupportedMessageType, got %v", err)
 	}
 	if status != 400 {
 		t.Fatalf("status = %d, want 400", status)
+	}
+}
+
+func TestSendImageMessage(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 9): {ID: 9, Type: "direct", Title: "王小明"},
+		},
+		memberIDs: map[int64][]int64{
+			9: {7, 8},
+		},
+	}
+	service := NewService(repo, nil)
+
+	resp, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{
+		Type:    "image",
+		Content: "",
+		Attachment: &AttachmentInput{
+			OriginalName: "photo.png",
+			StoragePath:  "/uploads/photo.png",
+			MIMEType:     "image/png",
+			SizeBytes:    1234,
+		},
+	})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+
+	data := resp.Data.(SentMessageData)
+	if data.Message.Attachment == nil || data.Message.Attachment.URL != "/uploads/photo.png" {
+		t.Fatalf("unexpected attachment payload: %+v", data.Message.Attachment)
 	}
 }
 

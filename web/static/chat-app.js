@@ -16,7 +16,12 @@
   const directStatus = app.querySelector("[data-direct-status]");
   const directExternalUserIDInput = app.querySelector("#direct-external-user-id");
   const messageBoard = app.querySelector("[data-message-board]");
+  const messageForm = app.querySelector("[data-message-form]");
+  const messageStatus = app.querySelector("[data-message-status]");
   const realtimeStateNode = app.querySelector("[data-realtime-state]");
+  const composerInput = messageForm.querySelector(".composer-input");
+  const composerFileInput = messageForm.querySelector(".composer-file-input");
+  const fileStateNode = messageForm.querySelector("[data-file-state]");
 
   let conversations = [];
   let activeConversationID = Number(localStorage.getItem(storageKeys.activeConversationID) || 0);
@@ -75,6 +80,24 @@
     return date.toLocaleString();
   }
 
+  function formatBytes(size) {
+    if (!size) {
+      return "0 B";
+    }
+    if (size < 1024) {
+      return size + " B";
+    }
+    if (size < 1024 * 1024) {
+      return (size / 1024).toFixed(1) + " KB";
+    }
+    return (size / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function setMessageStatus(text, isError) {
+    messageStatus.textContent = text;
+    messageStatus.classList.toggle("is-error", Boolean(isError));
+  }
+
   function setRealtimeState(text, isConnected) {
     if (!realtimeStateNode) {
       return;
@@ -99,7 +122,7 @@
 
     conversationList.innerHTML = items.map(function (item) {
       const active = item.conversation_id === activeConversationID ? " is-active" : "";
-      const preview = item.last_message_preview || (item.type === "direct" ? "一對一對話" : "群組對話");
+      const preview = conversationPreview(item);
       const meta = formatTime(item.last_message_at) || (item.member_count + " 位成員");
       return [
         '<button type="button" class="conversation-card conversation-button' + active + '" data-conversation-id="' + item.conversation_id + '">',
@@ -125,6 +148,16 @@
     });
   }
 
+  function conversationPreview(item) {
+    if (item.last_message_type === "image") {
+      return "圖片";
+    }
+    if (item.last_message_type === "file") {
+      return "附件";
+    }
+    return item.last_message_preview || (item.type === "direct" ? "一對一對話" : "群組對話");
+  }
+
   function renderMessages(data) {
     if (!data.messages || !data.messages.length) {
       messageBoard.innerHTML = [
@@ -139,11 +172,18 @@
     }
 
     messageBoard.innerHTML = data.messages.map(function (message) {
+      const outgoing = (app.dataset.actor || "").indexOf(message.sender_name) >= 0 ? " outgoing" : "";
+      const attachment = renderAttachment(message.attachment);
+      const contentText = displayMessageContent(message);
+      const content = contentText
+        ? ("<p>" + escapeHTML(contentText) + "</p>")
+        : "";
       return [
-        '<div class="message-row incoming">',
+        '<div class="message-row' + outgoing + '">',
         '<div class="message-bubble">',
         "<strong>" + escapeHTML(message.sender_name) + "</strong>",
-        "<p>" + escapeHTML(message.content) + "</p>",
+        content,
+        attachment,
         "<small>" + escapeHTML(formatTime(message.created_at)) + "</small>",
         "</div>",
         "</div>"
@@ -151,11 +191,51 @@
     }).join("");
   }
 
+  function displayMessageContent(message) {
+    if (!message) {
+      return "";
+    }
+    if (message.attachment && message.content === message.attachment.original_name) {
+      return "";
+    }
+    return message.content || "";
+  }
+
+  function renderAttachment(attachment) {
+    if (!attachment || !attachment.url) {
+      return "";
+    }
+
+    if ((attachment.mime_type || "").indexOf("image/") === 0) {
+      return [
+        '<a class="message-attachment image-attachment" href="' + escapeHTML(attachment.url) + '" target="_blank" rel="noreferrer">',
+        '<img src="' + escapeHTML(attachment.url) + '" alt="' + escapeHTML(attachment.original_name || "image") + '">',
+        "</a>"
+      ].join("");
+    }
+
+    return [
+      '<a class="message-attachment file-attachment" href="' + escapeHTML(attachment.url) + '" target="_blank" rel="noreferrer">',
+      "<strong>" + escapeHTML(attachment.original_name || "附件") + "</strong>",
+      "<small>" + escapeHTML(formatBytes(attachment.size_bytes)) + "</small>",
+      "</a>"
+    ].join("");
+  }
+
+  function updateSelectedFileState() {
+    if (!fileStateNode || !composerFileInput) {
+      return;
+    }
+    const file = composerFileInput.files && composerFileInput.files[0];
+    fileStateNode.textContent = file ? ("已選擇：" + file.name + " (" + formatBytes(file.size) + ")") : "尚未選擇檔案";
+  }
+
   async function loadConversations() {
     const headers = authHeaders();
     if (!headers) {
       renderConversationList([]);
       conversationSummary.textContent = "請先登入，再載入對話列表。";
+      setMessageStatus("請先登入並選擇對話。", false);
       return;
     }
 
@@ -187,23 +267,18 @@
       return;
     }
 
+    setMessageStatus("正在載入訊息...", false);
     const response = await fetch("/api/conversations/" + conversationID + "/messages", {
       headers: { Authorization: headers.Authorization }
     });
     const result = await parseJSON(response);
     if (!response.ok || !result.success) {
-      messageBoard.innerHTML = [
-        '<div class="message-row incoming">',
-        '<div class="message-bubble">',
-        "<strong>系統提示</strong>",
-        "<p>" + escapeHTML(result.message || "訊息讀取失敗。") + "</p>",
-        "</div>",
-        "</div>"
-      ].join("");
+      setMessageStatus(result.message || "訊息讀取失敗。", true);
       return;
     }
 
     renderMessages(result.data || {});
+    setMessageStatus("已載入訊息。", false);
   }
 
   function websocketURL() {
@@ -352,6 +427,67 @@
     await loadConversations();
   }
 
+  async function sendMessage(event) {
+    event.preventDefault();
+    const headers = authHeaders();
+    const content = composerInput.value.trim();
+    const file = composerFileInput && composerFileInput.files ? composerFileInput.files[0] : null;
+    if (!headers) {
+      setMessageStatus("請先登入。", true);
+      return;
+    }
+    if (!activeConversationID) {
+      setMessageStatus("請先建立或選擇對話。", true);
+      return;
+    }
+    if (!content && !file) {
+      setMessageStatus("請輸入訊息內容或選擇檔案。", true);
+      return;
+    }
+
+    setMessageStatus("訊息送出中...", false);
+    let response;
+    if (file) {
+      const formData = new FormData();
+      formData.set("content", content);
+      formData.set("file", file);
+      response = await fetch("/api/conversations/" + activeConversationID + "/messages", {
+        method: "POST",
+        headers: { Authorization: headers.Authorization },
+        body: formData
+      });
+    } else {
+      response = await fetch("/api/conversations/" + activeConversationID + "/messages", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({ type: "text", content: content })
+      });
+    }
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      setMessageStatus(result.message || "送出失敗。", true);
+      return;
+    }
+
+    composerInput.value = "";
+    if (composerFileInput) {
+      composerFileInput.value = "";
+    }
+    updateSelectedFileState();
+    await loadMessages(activeConversationID);
+    await loadConversations();
+    setMessageStatus("訊息已送出。", false);
+  }
+
+  function handleComposerKeydown(event) {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    sendMessage(event);
+  }
+
   document.addEventListener("twacc:session-changed", function () {
     connectRealtime();
     loadConversations();
@@ -366,6 +502,12 @@
 
   if (directForm) {
     directForm.addEventListener("submit", createDirectConversation);
+  }
+  messageForm.addEventListener("submit", sendMessage);
+  composerInput.addEventListener("keydown", handleComposerKeydown);
+  if (composerFileInput) {
+    composerFileInput.addEventListener("change", updateSelectedFileState);
+    updateSelectedFileState();
   }
 
   connectRealtime();

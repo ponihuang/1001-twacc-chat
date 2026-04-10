@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"1001-twacc-chat/internal/auth"
@@ -51,10 +52,10 @@ func Run() error {
 
 		chatRepo := storemysql.NewChatRepository(dbStore.DB())
 		chatService := chat.NewService(chatRepo, realtimeHub)
-		chatHandler = chat.NewHandler(chatService, sessionService, realtimeHub)
+		chatHandler = chat.NewHandler(chatService, sessionService, realtimeHub, chat.NewLocalFileStore(filepath.Join("web", "uploads")))
 	} else {
 		integrationHandler = erp.NewHandler(nil, nil, cfg.IntegrationSharedToken)
-		chatHandler = chat.NewHandler(nil, nil, nil)
+		chatHandler = chat.NewHandler(nil, nil, nil, nil)
 	}
 
 	server := &http.Server{

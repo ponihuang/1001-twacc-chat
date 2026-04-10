@@ -280,6 +280,8 @@ strong {
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 18px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .stage-header,
@@ -300,6 +302,9 @@ strong {
   padding: 28px;
   display: grid;
   gap: 18px;
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .message-row {
@@ -320,6 +325,62 @@ strong {
 
 .message-row.outgoing .message-bubble {
   background: rgba(51, 71, 59, 0.1);
+}
+
+.composer {
+  align-items: flex-end;
+}
+
+.composer-main {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+}
+
+.composer-fields {
+  display: grid;
+  gap: 10px;
+  flex: 1;
+}
+
+.composer-input {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.composer-file-label {
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.composer-file-input {
+  width: 100%;
+  color: var(--muted);
+}
+
+.composer-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
+.message-attachment {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.message-attachment img {
+  display: block;
+  max-width: 240px;
+  max-height: 240px;
+  border-radius: 14px;
+  object-fit: cover;
 }
 
 .mobile-page {

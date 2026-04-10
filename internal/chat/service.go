@@ -10,16 +10,21 @@ import (
 const (
 	messageListLimit = 100
 	textMessageType  = "text"
+	imageMessageType = "image"
+	fileMessageType  = "file"
 )
 
 var (
-	ErrConversationNotFound   = errors.New("conversation not found")
-	ErrInsufficientRole       = errors.New("insufficient role")
-	ErrSystemAdminCannotChat  = errors.New("system admin cannot chat")
-	ErrUnsupportedMessageType = errors.New("unsupported message type")
-	ErrMessageContentRequired = errors.New("message content required")
-	ErrTargetUserNotFound     = errors.New("target user not found")
-	ErrDirectChatSelfNotAllow = errors.New("direct conversation with self is not allowed")
+	ErrConversationNotFound      = errors.New("conversation not found")
+	ErrInsufficientRole          = errors.New("insufficient role")
+	ErrSystemAdminCannotChat     = errors.New("system admin cannot chat")
+	ErrUnsupportedMessageType    = errors.New("unsupported message type")
+	ErrMessageContentRequired    = errors.New("message content required")
+	ErrTargetUserNotFound        = errors.New("target user not found")
+	ErrDirectChatSelfNotAllow    = errors.New("direct conversation with self is not allowed")
+	ErrAttachmentRequired        = errors.New("attachment required")
+	ErrAttachmentTooLarge        = errors.New("attachment too large")
+	ErrUnsupportedAttachmentType = errors.New("unsupported attachment type")
 )
 
 // Service implements chat list and message list rules.
@@ -152,6 +157,7 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 			MessageType: message.MessageType,
 			Content:     message.Content,
 			CreatedAt:   message.CreatedAt.Format(time.RFC3339),
+			Attachment:  attachmentItem(message.Attachment),
 		})
 	}
 
@@ -181,13 +187,16 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 	}
 
 	messageType := strings.ToLower(strings.TrimSpace(req.Type))
-	if messageType != textMessageType {
+	if messageType != textMessageType && messageType != imageMessageType && messageType != fileMessageType {
 		return Response{}, statusCode(ErrUnsupportedMessageType), ErrUnsupportedMessageType
 	}
 
 	content := strings.TrimSpace(req.Content)
-	if content == "" {
+	if messageType == textMessageType && content == "" {
 		return Response{}, statusCode(ErrMessageContentRequired), ErrMessageContentRequired
+	}
+	if messageType != textMessageType && req.Attachment == nil {
+		return Response{}, statusCode(ErrAttachmentRequired), ErrAttachmentRequired
 	}
 
 	if _, err := s.repo.GetConversationForUser(actor.UserID, conversationID); err != nil {
@@ -199,6 +208,7 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 		SenderID:       actor.UserID,
 		MessageType:    messageType,
 		Content:        content,
+		Attachment:     req.Attachment,
 	})
 	if err != nil {
 		return Response{}, statusCode(err), err
@@ -211,6 +221,7 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 		MessageType: created.MessageType,
 		Content:     created.Content,
 		CreatedAt:   created.CreatedAt.Format(time.RFC3339),
+		Attachment:  attachmentItem(created.Attachment),
 	}
 
 	if s.broker != nil {
@@ -254,7 +265,7 @@ func (s *Service) requireChatUser(userID int64) error {
 
 func statusCode(err error) int {
 	switch {
-	case errors.Is(err, ErrUnsupportedMessageType), errors.Is(err, ErrMessageContentRequired), errors.Is(err, ErrTargetUserNotFound):
+	case errors.Is(err, ErrUnsupportedMessageType), errors.Is(err, ErrMessageContentRequired), errors.Is(err, ErrAttachmentRequired), errors.Is(err, ErrAttachmentTooLarge), errors.Is(err, ErrUnsupportedAttachmentType):
 		return 400
 	case errors.Is(err, ErrDirectChatSelfNotAllow):
 		return 409
@@ -262,7 +273,22 @@ func statusCode(err error) int {
 		return 403
 	case errors.Is(err, ErrConversationNotFound):
 		return 404
+	case errors.Is(err, ErrTargetUserNotFound):
+		return 404
 	default:
 		return 500
+	}
+}
+
+func attachmentItem(value *Attachment) *AttachmentItem {
+	if value == nil {
+		return nil
+	}
+
+	return &AttachmentItem{
+		OriginalName: value.OriginalName,
+		URL:          value.StoragePath,
+		MIMEType:     value.MIMEType,
+		SizeBytes:    value.SizeBytes,
 	}
 }

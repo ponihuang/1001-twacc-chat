@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"strconv"
@@ -21,11 +22,12 @@ type Handler struct {
 	service  *Service
 	sessions SessionAuthenticator
 	broker   Broker
+	files    FileStore
 }
 
 // NewHandler builds the HTTP handler for chat endpoints.
-func NewHandler(service *Service, sessions SessionAuthenticator, broker Broker) *Handler {
-	return &Handler{service: service, sessions: sessions, broker: broker}
+func NewHandler(service *Service, sessions SessionAuthenticator, broker Broker, files FileStore) *Handler {
+	return &Handler{service: service, sessions: sessions, broker: broker, files: files}
 }
 
 // ListConversations handles GET /api/conversations.
@@ -346,8 +348,8 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req CreateMessageRequest
-	if err := decodeJSON(r, &req); err != nil {
+	req, err := h.decodeMessageRequest(r)
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
 		return
 	}
@@ -359,6 +361,55 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, status, resp)
+}
+
+func (h *Handler) decodeMessageRequest(r *http.Request) (CreateMessageRequest, error) {
+	contentType := strings.TrimSpace(r.Header.Get("Content-Type"))
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	if strings.EqualFold(mediaType, "multipart/form-data") {
+		return h.decodeMultipartMessage(r)
+	}
+
+	var req CreateMessageRequest
+	if err := decodeJSON(r, &req); err != nil {
+		return CreateMessageRequest{}, err
+	}
+	return req, nil
+}
+
+func (h *Handler) decodeMultipartMessage(r *http.Request) (CreateMessageRequest, error) {
+	if h.files == nil {
+		return CreateMessageRequest{}, ErrAttachmentRequired
+	}
+
+	if err := r.ParseMultipartForm(maxAttachmentSize + (1 << 20)); err != nil {
+		return CreateMessageRequest{}, err
+	}
+
+	req := CreateMessageRequest{
+		Type:    strings.TrimSpace(r.FormValue("type")),
+		Content: strings.TrimSpace(r.FormValue("content")),
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) {
+			return req, nil
+		}
+		return CreateMessageRequest{}, err
+	}
+	defer file.Close()
+
+	attachment, detectedType, err := h.files.Save(file, header)
+	if err != nil {
+		return CreateMessageRequest{}, err
+	}
+
+	if req.Type == "" {
+		req.Type = detectedType
+	}
+	req.Attachment = attachment
+	return req, nil
 }
 
 func (h *Handler) requireSession(w http.ResponseWriter, r *http.Request) (SessionPrincipal, bool) {
@@ -409,9 +460,15 @@ func errorResponse(err error) Response {
 	case errors.Is(err, ErrDirectChatSelfNotAllow):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "不可与自己建立一对一对话"}
 	case errors.Is(err, ErrUnsupportedMessageType):
-		return Response{Success: false, Code: "INVALID_REQUEST", Message: "目前仅支持 text 讯息"}
+		return Response{Success: false, Code: "INVALID_REQUEST", Message: "目前仅支持 text / image / file 讯息"}
 	case errors.Is(err, ErrMessageContentRequired):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "content 不可为空"}
+	case errors.Is(err, ErrAttachmentRequired):
+		return Response{Success: false, Code: "INVALID_REQUEST", Message: "附件不可为空"}
+	case errors.Is(err, ErrAttachmentTooLarge):
+		return Response{Success: false, Code: "INVALID_REQUEST", Message: "附件大小超过 40MB 限制"}
+	case errors.Is(err, ErrUnsupportedAttachmentType):
+		return Response{Success: false, Code: "INVALID_REQUEST", Message: "附件格式不支持"}
 	case errors.Is(err, ErrSystemAdminCannotChat):
 		return Response{Success: false, Code: "SYSTEM_ADMIN_CANNOT_CHAT", Message: "system_admin 不可使用聊天功能"}
 	case errors.Is(err, ErrInsufficientRole):

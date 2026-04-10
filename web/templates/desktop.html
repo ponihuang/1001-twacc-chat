@@ -54,12 +54,23 @@
         </article>
       </div>
       <div class="auth-panel panel-surface compact-panel">
-        <strong>登入狀態</strong>
+        <strong>開發測試狀態</strong>
+        <p>這塊只用來確認登入與 token 保存，正式版可整塊移除。</p>
         <div class="conversation-list">
           <article class="conversation-card is-active">
             <strong>目前狀態</strong>
             <span data-login-state>未登入</span>
             <small data-token-state>尚未保存 session token</small>
+          </article>
+          <article class="conversation-card">
+            <strong>下一步</strong>
+            <span>用 token 呼叫 conversations API</span>
+            <small>登入後可接聊天清單</small>
+          </article>
+          <article class="conversation-card">
+            <strong>訊息功能</strong>
+            <span>登入完成後再接 messages / send</span>
+            <small>目前先完成 token 保存</small>
           </article>
         </div>
       </div>
@@ -87,13 +98,23 @@
         </div>
       </section>
 
-      <footer class="composer panel-surface compact-panel">
-        <div>
+      <form class="composer panel-surface compact-panel" data-message-form>
+        <div class="composer-main">
           <strong>Message Composer</strong>
-          <p>後續在這裡接文字輸入、圖片 / 檔案上傳與權限提示。</p>
+          <p data-message-status>請先登入並選擇對話。</p>
+          <small>支援文字、jpg、png、doc、pdf、xlsx，單檔上限 40MB。</small>
         </div>
-        <a class="ghost-link" href="/">回到入口</a>
-      </footer>
+        <div class="composer-fields">
+          <textarea class="text-input composer-input" name="content" rows="3" placeholder="輸入文字訊息"></textarea>
+          <label class="composer-file-label" for="composer-file">附加圖片 / 檔案</label>
+          <input id="composer-file" class="composer-file-input" name="file" type="file" accept=".jpg,.jpeg,.png,.doc,.pdf,.xlsx">
+          <small data-file-state>尚未選擇檔案</small>
+        </div>
+        <div class="composer-actions">
+          <button type="submit" class="primary-button">送出訊息</button>
+          <a class="ghost-link" href="/">回到入口</a>
+        </div>
+      </form>
     </section>
   </main>
 </body>

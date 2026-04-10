@@ -41,6 +41,7 @@ type Message struct {
 	MessageType    string
 	Content        string
 	CreatedAt      time.Time
+	Attachment     *Attachment
 }
 
 // CreateMessageInput is the normalized payload stored for a new message.
@@ -49,6 +50,24 @@ type CreateMessageInput struct {
 	SenderID       int64
 	MessageType    string
 	Content        string
+	Attachment     *AttachmentInput
+}
+
+// Attachment stores metadata for a single uploaded file.
+type Attachment struct {
+	ID           int64
+	OriginalName string
+	StoragePath  string
+	MIMEType     string
+	SizeBytes    int64
+}
+
+// AttachmentInput is the storage payload for a new uploaded file.
+type AttachmentInput struct {
+	OriginalName string
+	StoragePath  string
+	MIMEType     string
+	SizeBytes    int64
 }
 
 // ConversationItem is the API-facing chat list item.
@@ -79,12 +98,21 @@ type RealtimeEvent struct {
 
 // MessageItem is the API-facing message item.
 type MessageItem struct {
-	MessageID   int64  `json:"message_id"`
-	SenderID    int64  `json:"sender_id"`
-	SenderName  string `json:"sender_name"`
-	MessageType string `json:"message_type"`
-	Content     string `json:"content"`
-	CreatedAt   string `json:"created_at"`
+	MessageID   int64           `json:"message_id"`
+	SenderID    int64           `json:"sender_id"`
+	SenderName  string          `json:"sender_name"`
+	MessageType string          `json:"message_type"`
+	Content     string          `json:"content"`
+	CreatedAt   string          `json:"created_at"`
+	Attachment  *AttachmentItem `json:"attachment,omitempty"`
+}
+
+// AttachmentItem is the API-facing uploaded file metadata.
+type AttachmentItem struct {
+	OriginalName string `json:"original_name"`
+	URL          string `json:"url"`
+	MIMEType     string `json:"mime_type"`
+	SizeBytes    int64  `json:"size_bytes"`
 }
 
 // MessageListData is the API-facing message list payload.
@@ -97,8 +125,9 @@ type MessageListData struct {
 
 // CreateMessageRequest is the HTTP payload for sending a chat message.
 type CreateMessageRequest struct {
-	Type    string `json:"type"`
-	Content string `json:"content"`
+	Type       string           `json:"type"`
+	Content    string           `json:"content"`
+	Attachment *AttachmentInput `json:"-"`
 }
 
 // CreateDirectConversationRequest is the HTTP payload for creating/loading a direct conversation.
