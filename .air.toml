@@ -1,0 +1,34 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/main ."
+bin = "./tmp/main"
+delay = 500
+exclude_dir = ["tmp", "web/uploads", ".git"]
+exclude_file = []
+exclude_regex = ["_test\\.go"]
+exclude_unchanged = true
+follow_symlink = false
+include_ext = ["go", "html", "css", "js", "md", "toml"]
+kill_delay = "0s"
+log = "build-errors.log"
+poll = false
+poll_interval = 0
+rerun = false
+send_interrupt = false
+stop_on_error = true
+
+[color]
+app = "yellow"
+build = "cyan"
+main = "magenta"
+runner = "green"
+watcher = "blue"
+
+[log]
+main_only = false
+time = true
+
+[misc]
+clean_on_exit = true

@@ -16,7 +16,7 @@
 
 ## 1.1 Web 入口
 
-- `GET /chat`：桌機版全畫面聊天骨架
+- `GET /chat`：桌機版全畫面聊天測試頁
 - `GET /m/chat`：手機版全畫面聊天骨架
 - `GET /embed/chat`：嵌入式浮動視窗骨架
 
@@ -151,6 +151,36 @@
 
 - 取得使用者的對話列表
 
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- 回應項目包含 `conversation_id`、`type`、`title`、`member_count`
+- 若已有最後一則訊息，會附帶 `last_message_type`、`last_message_preview`、`last_message_at`
+
+### `POST /api/conversations/direct`
+
+用途：
+
+- 建立或取得一對一對話
+
+請求草案：
+
+```json
+{
+  "source_system": "erp",
+  "external_user_id": "user_b"
+}
+```
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 需為一般聊天使用者，`system_admin` 不可建立聊天
+- 若指定使用者不存在，回 `404 USER_NOT_FOUND`
+- 若一對一對話已存在，回 `200 CONVERSATION_EXISTS`
+- 若新建成功，回 `201 CONVERSATION_CREATED`
+- 建立或載入成功後，WebSocket 會對對話成員推送 `conversation.ready` 事件，讓雙方可即時看到這個對話
+
 ### `GET /api/conversations/{conversation_id}/messages`
 
 用途：
@@ -161,9 +191,9 @@
 
 用途：
 
-- 傳送文字訊息
+- 傳送文字、圖片或一般檔案訊息
 
-請求草案：
+文字訊息請求草案：
 
 ```json
 {
@@ -175,8 +205,12 @@
 目前實作補充：
 
 - 需帶 `Authorization: Bearer <session-token>`
-- 目前只接受 `type = text`
-- `content` 去除前後空白後不可為空
+- JSON 請求可傳 `type = text`
+- `multipart/form-data` 可上傳圖片或一般檔案，欄位使用 `file` 與可選的 `content`
+- 目前支援 `.jpg`、`.jpeg`、`.png`、`.doc`、`.pdf`、`.xlsx`
+- 單檔大小上限 `40MB`
+- 純文字訊息的 `content` 去除前後空白後不可為空
+- 圖片 / 檔案訊息若未輸入文字，可只送附件
 - actor 必須是對話成員
 - actor 若為 `system_admin`，需回 `403 SYSTEM_ADMIN_CANNOT_CHAT`
 
@@ -201,11 +235,93 @@
 }
 ```
 
+附件訊息回應草案：
+
+```json
+{
+  "success": true,
+  "code": "MESSAGE_SENT",
+  "message": "讯息发送成功",
+  "data": {
+    "conversation_id": 123,
+    "message": {
+      "message_id": 789,
+      "sender_id": 7,
+      "sender_name": "王小明",
+      "message_type": "image",
+      "content": "",
+      "created_at": "2026-04-07T03:05:00Z",
+      "attachment": {
+        "original_name": "sample.png",
+        "url": "/uploads/sample.png",
+        "mime_type": "image/png",
+        "size_bytes": 12345
+      }
+    }
+  }
+}
+```
+
 補充原則：
 
 - 對外整合不另開 ERP 專屬前端視窗
 - 其他系統若需要頁面內聊天能力，應使用嵌入式浮動視窗或直接呼叫 API
 - 桌機、手機、嵌入式三種前端形態共用同一套聊天 API
+
+### `GET /ws`
+
+用途：
+
+- 建立登入後的 WebSocket 即時通知連線
+
+目前實作補充：
+
+- 連線方式：`ws://host/ws?token=<session-token>` 或 `wss://host/ws?token=<session-token>`
+- token 使用既有 `/api/erp/login` 取得的 session token
+- WebSocket 目前只負責推送事件通知；建立對話與送訊息仍使用既有 REST API
+- 目前事件類型：
+  - `conversation.ready`
+  - `message.created`
+
+事件草案：
+
+```json
+{
+  "event_type": "conversation.ready",
+  "conversation_id": 123,
+  "conversation": {
+    "conversation_id": 123,
+    "type": "direct",
+    "title": "user_b"
+  }
+}
+```
+
+```json
+{
+  "event_type": "message.created",
+  "conversation_id": 123,
+  "message": {
+    "message_id": 456,
+    "sender_id": 7,
+    "sender_name": "王小明",
+    "message_type": "text",
+    "content": "hello",
+    "created_at": "2026-04-07T03:00:00Z"
+  }
+}
+```
+
+### `GET /uploads/{filename}`
+
+用途：
+
+- 讀取已上傳的圖片或檔案
+
+目前實作補充：
+
+- 後端會把附件存到 `web/uploads/`
+- 訊息回應中的 `attachment.url` 會直接指向 `/uploads/{filename}`
 
 ## 4. 群組
 
@@ -395,4 +511,3 @@
   "message": "目前登入 IP 不在白名單中，請聯絡管理員或確認白名單設定"
 }
 ```
-
