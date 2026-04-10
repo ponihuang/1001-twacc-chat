@@ -62,6 +62,13 @@ type ConversationItem struct {
 	LastMessageAt      string `json:"last_message_at,omitempty"`
 }
 
+// DirectConversationData is the API-facing payload for a direct conversation create/load request.
+type DirectConversationData struct {
+	ConversationID int64  `json:"conversation_id"`
+	Type           string `json:"type"`
+	Title          string `json:"title"`
+}
+
 // MessageItem is the API-facing message item.
 type MessageItem struct {
 	MessageID   int64  `json:"message_id"`
@@ -86,6 +93,12 @@ type CreateMessageRequest struct {
 	Content string `json:"content"`
 }
 
+// CreateDirectConversationRequest is the HTTP payload for creating/loading a direct conversation.
+type CreateDirectConversationRequest struct {
+	SourceSystem   string `json:"source_system"`
+	ExternalUserID string `json:"external_user_id"`
+}
+
 // SentMessageData is the API-facing payload for a newly created message.
 type SentMessageData struct {
 	ConversationID int64       `json:"conversation_id"`
@@ -104,6 +117,7 @@ type Response struct {
 type Repository interface {
 	IsSystemAdmin(userID int64) (bool, error)
 	ListConversations(userID int64) ([]ConversationSummary, error)
+	CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
 	ListMessages(conversationID int64, limit int) ([]Message, error)
 	CreateMessage(input CreateMessageInput) (Message, error)

@@ -6,6 +6,7 @@
   <title>{{.Title}}</title>
   <link rel="stylesheet" href="/static/app.css">
   <script defer src="/static/auth.js"></script>
+  <script defer src="/static/chat-app.js"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app>
@@ -31,6 +32,27 @@
         </div>
         <div class="auth-status" data-auth-status>尚未登入</div>
       </form>
+      <div class="search-panel panel-surface compact-panel">
+        <strong>Conversations</strong>
+        <p data-conversation-summary>登入後會載入真實對話列表，也可先建立一個一對一對話。</p>
+      </div>
+      <form class="auth-panel panel-surface compact-panel" data-direct-form>
+        <div>
+          <strong>快速建立一對一對話</strong>
+          <p>開發測試用，建立成功後會自動切到該對話。</p>
+        </div>
+        <label class="field-label" for="direct-external-user-id">目標外部使用者編號</label>
+        <input id="direct-external-user-id" class="text-input" name="external_user_id" value="user_b" required>
+        <button type="submit" class="primary-button">建立 / 載入對話</button>
+        <div class="auth-status" data-direct-status>尚未建立對話</div>
+      </form>
+      <div class="conversation-list" data-conversation-list>
+        <article class="conversation-card is-placeholder">
+          <strong>尚未載入對話</strong>
+          <span>登入後會自動讀取列表</span>
+          <small>等待中</small>
+        </article>
+      </div>
       <div class="auth-panel panel-surface compact-panel">
         <strong>登入狀態</strong>
         <div class="conversation-list">
@@ -40,27 +62,6 @@
             <small data-token-state>尚未保存 session token</small>
           </article>
         </div>
-      </div>
-      <div class="search-panel panel-surface compact-panel">
-        <strong>Conversations</strong>
-        <p>搜尋、分類與未讀狀態會在後續接入聊天列表 API。</p>
-      </div>
-      <div class="conversation-list">
-        <article class="conversation-card is-active">
-          <strong>採購小組</strong>
-          <span>3 人群組</span>
-          <small>下午 2:18</small>
-        </article>
-        <article class="conversation-card">
-          <strong>王小明</strong>
-          <span>等待聊天列表 API</span>
-          <small>昨天</small>
-        </article>
-        <article class="conversation-card">
-          <strong>財務窗口</strong>
-          <span>等待訊息列表與上傳流程</span>
-          <small>週一</small>
-        </article>
       </div>
     </aside>
 
@@ -76,17 +77,11 @@
         </div>
       </header>
 
-      <section class="message-board panel-surface">
+      <section class="message-board panel-surface" data-message-board>
         <div class="message-row incoming">
           <div class="message-bubble">
             <strong>系統提示</strong>
-            <p>這裡會接上訊息列表、檔案上傳入口與對話詳情。</p>
-          </div>
-        </div>
-        <div class="message-row outgoing">
-          <div class="message-bubble">
-            <strong>你</strong>
-            <p>桌機版優先支援雙欄瀏覽、多會話切換與檔案操作。</p>
+            <p>先完成頁面登入，再建立或選擇一個對話，這裡就會載入真實訊息。</p>
           </div>
         </div>
       </section>

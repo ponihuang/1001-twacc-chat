@@ -70,6 +70,33 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// CreateDirectConversation handles POST /api/conversations/direct.
+func (h *Handler) CreateDirectConversation(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	actor, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req CreateDirectConversationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, svcErr := h.service.CreateDirectConversation(actor, req)
+	if svcErr != nil {
+		writeJSON(w, status, errorResponse(svcErr))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // SendMessage handles POST /api/conversations/{conversation_id}/messages.
 func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {
@@ -146,6 +173,10 @@ func errorResponse(err error) Response {
 	switch {
 	case errors.Is(err, ErrConversationNotFound):
 		return Response{Success: false, Code: "CONVERSATION_NOT_FOUND", Message: "找不到指定对话"}
+	case errors.Is(err, ErrTargetUserNotFound):
+		return Response{Success: false, Code: "USER_NOT_FOUND", Message: "找不到目标使用者"}
+	case errors.Is(err, ErrDirectChatSelfNotAllow):
+		return Response{Success: false, Code: "INVALID_REQUEST", Message: "不可与自己建立一对一对话"}
 	case errors.Is(err, ErrUnsupportedMessageType):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "目前仅支持 text 讯息"}
 	case errors.Is(err, ErrMessageContentRequired):

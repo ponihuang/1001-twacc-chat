@@ -112,6 +112,70 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 	return items, rows.Err()
 }
 
+// CreateOrGetDirectConversation creates a direct conversation with the target user, or returns the existing one.
+func (r *ChatRepository) CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (chat.Conversation, bool, error) {
+	var targetUserID int64
+	row := r.db.QueryRow(`SELECT id FROM users WHERE source_system = ? AND external_user_id = ? LIMIT 1`, sourceSystem, externalUserID)
+	if err := row.Scan(&targetUserID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return chat.Conversation{}, false, chat.ErrTargetUserNotFound
+		}
+		return chat.Conversation{}, false, fmt.Errorf("find target user: %w", err)
+	}
+	if targetUserID == actorUserID {
+		return chat.Conversation{}, false, chat.ErrDirectChatSelfNotAllow
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return chat.Conversation{}, false, fmt.Errorf("begin create direct conversation: %w", err)
+	}
+	defer tx.Rollback()
+
+	var conversationID int64
+	existing := tx.QueryRow(`
+		SELECT c.id
+		  FROM conversations c
+		  JOIN conversation_members cm1 ON cm1.conversation_id = c.id AND cm1.user_id = ?
+		  JOIN conversation_members cm2 ON cm2.conversation_id = c.id AND cm2.user_id = ?
+		 WHERE c.type = 'direct'
+		 LIMIT 1`, actorUserID, targetUserID)
+	if err := existing.Scan(&conversationID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return chat.Conversation{}, false, fmt.Errorf("find direct conversation: %w", err)
+	}
+
+	created := false
+	if conversationID == 0 {
+		result, err := tx.Exec(`INSERT INTO conversations (type, name, created_by) VALUES ('direct', NULL, ?)`, actorUserID)
+		if err != nil {
+			return chat.Conversation{}, false, fmt.Errorf("insert conversation: %w", err)
+		}
+
+		conversationID, err = result.LastInsertId()
+		if err != nil {
+			return chat.Conversation{}, false, fmt.Errorf("read conversation id: %w", err)
+		}
+
+		if _, err := tx.Exec(`INSERT INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, 'member'), (?, ?, 'member')`,
+			conversationID, actorUserID, conversationID, targetUserID,
+		); err != nil {
+			return chat.Conversation{}, false, fmt.Errorf("insert conversation members: %w", err)
+		}
+		created = true
+	}
+
+	if err := tx.Commit(); err != nil {
+		return chat.Conversation{}, false, fmt.Errorf("commit direct conversation: %w", err)
+	}
+
+	conversation, err := r.GetConversationForUser(actorUserID, conversationID)
+	if err != nil {
+		return chat.Conversation{}, false, err
+	}
+
+	return conversation, created, nil
+}
+
 // GetConversationForUser returns conversation metadata if the user belongs to the conversation.
 func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (chat.Conversation, error) {
 	var conversation chat.Conversation

@@ -18,6 +18,8 @@ var (
 	ErrSystemAdminCannotChat  = errors.New("system admin cannot chat")
 	ErrUnsupportedMessageType = errors.New("unsupported message type")
 	ErrMessageContentRequired = errors.New("message content required")
+	ErrTargetUserNotFound     = errors.New("target user not found")
+	ErrDirectChatSelfNotAllow = errors.New("direct conversation with self is not allowed")
 )
 
 // Service implements chat list and message list rules.
@@ -61,6 +63,47 @@ func (s *Service) ListConversations(actor SessionPrincipal) (Response, int, erro
 	}
 
 	return Response{Success: true, Code: "CONVERSATIONS_OK", Message: "对话列表读取成功", Data: items}, 200, nil
+}
+
+// CreateDirectConversation creates or loads a direct conversation with another externally-identified user.
+func (s *Service) CreateDirectConversation(actor SessionPrincipal, req CreateDirectConversationRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	sourceSystem := strings.TrimSpace(req.SourceSystem)
+	externalUserID := strings.TrimSpace(req.ExternalUserID)
+	if sourceSystem == "" || externalUserID == "" {
+		return Response{}, 400, ErrTargetUserNotFound
+	}
+
+	conversation, created, err := s.repo.CreateOrGetDirectConversation(actor.UserID, sourceSystem, externalUserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	code := "CONVERSATION_EXISTS"
+	message := "一对一对话已存在"
+	status := 200
+	if created {
+		code = "CONVERSATION_CREATED"
+		message = "一对一对话创建成功"
+		status = 201
+	}
+
+	return Response{
+		Success: true,
+		Code:    code,
+		Message: message,
+		Data: DirectConversationData{
+			ConversationID: conversation.ID,
+			Type:           conversation.Type,
+			Title:          conversation.Title,
+		},
+	}, status, nil
 }
 
 // ListMessages returns recent messages for a conversation visible to the current user.
@@ -182,8 +225,10 @@ func (s *Service) requireChatUser(userID int64) error {
 
 func statusCode(err error) int {
 	switch {
-	case errors.Is(err, ErrUnsupportedMessageType), errors.Is(err, ErrMessageContentRequired):
+	case errors.Is(err, ErrUnsupportedMessageType), errors.Is(err, ErrMessageContentRequired), errors.Is(err, ErrTargetUserNotFound):
 		return 400
+	case errors.Is(err, ErrDirectChatSelfNotAllow):
+		return 409
 	case errors.Is(err, ErrSystemAdminCannotChat), errors.Is(err, ErrInsufficientRole):
 		return 403
 	case errors.Is(err, ErrConversationNotFound):

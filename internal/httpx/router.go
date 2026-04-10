@@ -44,6 +44,7 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 	}
 	if chatHandler != nil {
 		mux.HandleFunc("GET /api/conversations", chatHandler.ListConversations)
+		mux.HandleFunc("POST /api/conversations/direct", chatHandler.CreateDirectConversation)
 		mux.HandleFunc("GET /api/conversations/{conversation_id}/messages", chatHandler.ListMessages)
 		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages", chatHandler.SendMessage)
 	}

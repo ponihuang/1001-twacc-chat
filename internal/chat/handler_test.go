@@ -84,3 +84,32 @@ func TestSendMessageHandlerSuccess(t *testing.T) {
 		t.Fatalf("unexpected sent message payload: %+v", resp.Data)
 	}
 }
+
+func TestCreateDirectConversationHandlerSuccess(t *testing.T) {
+	handler := NewHandler(NewService(&mockRepository{
+		directConversation: Conversation{ID: 13, Type: "direct", Title: "User B"},
+		directCreated:      true,
+	}), stubSessionAuthenticator{session: auth.Session{UserID: 7}})
+
+	request := httptest.NewRequest(http.MethodPost, "/api/conversations/direct", bytes.NewBufferString(`{"source_system":"erp","external_user_id":"user_b"}`))
+	request.Header.Set("Authorization", "Bearer token")
+
+	recorder := httptest.NewRecorder()
+	handler.CreateDirectConversation(recorder, request)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", recorder.Code)
+	}
+
+	var resp struct {
+		Success bool                   `json:"success"`
+		Code    string                 `json:"code"`
+		Data    DirectConversationData `json:"data"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.Success || resp.Data.ConversationID != 13 {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+}

@@ -14,6 +14,9 @@ type mockRepository struct {
 	createdMessages     []CreateMessageInput
 	createMessageResult Message
 	createMessageErr    error
+	directConversation  Conversation
+	directCreated       bool
+	directErr           error
 }
 
 func (m *mockRepository) IsSystemAdmin(userID int64) (bool, error) {
@@ -60,6 +63,16 @@ func (m *mockRepository) CreateMessage(input CreateMessageInput) (Message, error
 		Content:        input.Content,
 		CreatedAt:      time.Date(2026, 4, 7, 2, 0, 0, 0, time.UTC),
 	}, nil
+}
+
+func (m *mockRepository) CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error) {
+	if m.directErr != nil {
+		return Conversation{}, false, m.directErr
+	}
+	if m.directConversation.ID != 0 {
+		return m.directConversation, m.directCreated, nil
+	}
+	return Conversation{ID: 15, Type: "direct", Title: externalUserID}, true, nil
 }
 
 func conversationKey(userID, conversationID int64) string {
@@ -144,6 +157,33 @@ func TestListMessagesRejectsMissingConversation(t *testing.T) {
 	_, _, err := service.ListMessages(9, SessionPrincipal{UserID: 7})
 	if !errors.Is(err, ErrConversationNotFound) {
 		t.Fatalf("expected ErrConversationNotFound, got %v", err)
+	}
+}
+
+func TestCreateDirectConversation(t *testing.T) {
+	repo := &mockRepository{
+		directConversation: Conversation{ID: 13, Type: "direct", Title: "User B"},
+		directCreated:      true,
+	}
+	service := NewService(repo)
+
+	resp, status, err := service.CreateDirectConversation(SessionPrincipal{UserID: 7}, CreateDirectConversationRequest{
+		SourceSystem:   "erp",
+		ExternalUserID: "user_b",
+	})
+	if err != nil {
+		t.Fatalf("CreateDirectConversation returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+
+	data, ok := resp.Data.(DirectConversationData)
+	if !ok {
+		t.Fatalf("unexpected data type %T", resp.Data)
+	}
+	if data.ConversationID != 13 || data.Title != "User B" {
+		t.Fatalf("unexpected direct conversation data: %+v", data)
 	}
 }
 
