@@ -5,13 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
   <link rel="stylesheet" href="/static/app.css">
+  <script defer src="/static/auth.js"></script>
 </head>
 <body class="desktop-page">
-  <main class="desktop-shell">
+  <main class="desktop-shell" data-auth-app>
     <aside class="desktop-sidebar">
       <div>
         <span class="eyebrow">Desktop Fullscreen</span>
         <h1 class="brand-title">1001 TWACC Chat</h1>
+      </div>
+      <form class="auth-panel panel-surface compact-panel" data-login-form>
+        <div>
+          <span class="eyebrow">登入</span>
+          <strong>Web 測試登入</strong>
+          <p>直接輸入帳號登入；底層仍使用既有外部 API，登入成功後會把 session token 保存在瀏覽器。</p>
+        </div>
+        <label class="field-label" for="external-user-id">帳號</label>
+        <input id="external-user-id" class="text-input" name="external_user_id" placeholder="例如：asq" required>
+        <input id="source-system" type="hidden" name="source_system" value="erp">
+        <input id="device-id" type="hidden" name="device_id">
+        <input id="integration-token" type="hidden" name="integration_token" value="{{.IntegrationSharedToken}}">
+        <div class="auth-actions">
+          <button type="submit" class="primary-button">登入並保存</button>
+          <button type="button" class="secondary-button" data-logout-button>清除登入</button>
+        </div>
+        <div class="auth-status" data-auth-status>尚未登入</div>
+      </form>
+      <div class="auth-panel panel-surface compact-panel">
+        <strong>登入狀態</strong>
+        <div class="conversation-list">
+          <article class="conversation-card is-active">
+            <strong>目前狀態</strong>
+            <span data-login-state>未登入</span>
+            <small data-token-state>尚未保存 session token</small>
+          </article>
+        </div>
       </div>
       <div class="search-panel panel-surface compact-panel">
         <strong>Conversations</strong>

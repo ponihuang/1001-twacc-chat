@@ -57,8 +57,10 @@ func Run() error {
 	}
 
 	server := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      httpx.NewRouter(integrationHandler, chatHandler),
+		Addr: ":" + cfg.Port,
+		Handler: httpx.NewRouter(integrationHandler, chatHandler, httpx.UIConfig{
+			IntegrationSharedToken: cfg.IntegrationSharedToken,
+		}),
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,

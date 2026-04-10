@@ -1,0 +1,195 @@
+(function () {
+  const app = document.querySelector("[data-auth-app]");
+  if (!app) {
+    return;
+  }
+
+  const loginForm = app.querySelector("[data-login-form]");
+  const logoutButton = app.querySelector("[data-logout-button]");
+  const statusNode = app.querySelector("[data-auth-status]");
+  const loginStateNode = app.querySelector("[data-login-state]");
+  const tokenStateNode = app.querySelector("[data-token-state]");
+  const sourceSystemInput = app.querySelector("#source-system");
+  const externalUserIDInput = app.querySelector("#external-user-id");
+  const deviceIDInput = app.querySelector("#device-id");
+  const integrationTokenInput = app.querySelector("#integration-token");
+
+  const storageKeys = {
+    token: "twacc_chat_session_token",
+    expiresAt: "twacc_chat_session_expires_at",
+    role: "twacc_chat_role",
+    sourceSystem: "twacc_chat_source_system",
+    externalUserID: "twacc_chat_external_user_id",
+    deviceID: "twacc_chat_device_id",
+    integrationToken: "twacc_chat_integration_token"
+  };
+
+  function generateDeviceID() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID();
+    }
+    return "device-" + Date.now();
+  }
+
+  function maskToken(token) {
+    if (!token) {
+      return "尚未保存 session token";
+    }
+    if (token.length <= 12) {
+      return token;
+    }
+    return token.slice(0, 6) + "..." + token.slice(-4);
+  }
+
+  function readSession() {
+    return {
+      token: localStorage.getItem(storageKeys.token) || "",
+      expiresAt: localStorage.getItem(storageKeys.expiresAt) || "",
+      role: localStorage.getItem(storageKeys.role) || "",
+      sourceSystem: localStorage.getItem(storageKeys.sourceSystem) || "",
+      externalUserID: localStorage.getItem(storageKeys.externalUserID) || "",
+      deviceID: localStorage.getItem(storageKeys.deviceID) || "",
+      integrationToken: localStorage.getItem(storageKeys.integrationToken) || ""
+    };
+  }
+
+  function renderSessionState() {
+    const session = readSession();
+    deviceIDInput.value = session.deviceID || generateDeviceID();
+    if (!session.deviceID) {
+      localStorage.setItem(storageKeys.deviceID, deviceIDInput.value);
+    }
+    integrationTokenInput.value = session.integrationToken || integrationTokenInput.value;
+    sourceSystemInput.value = session.sourceSystem || sourceSystemInput.value;
+    externalUserIDInput.value = session.externalUserID || externalUserIDInput.value;
+
+    if (session.token) {
+      loginStateNode.textContent = "已登入";
+      tokenStateNode.textContent = maskToken(session.token);
+      statusNode.textContent = session.expiresAt
+        ? "已保存 session token，過期時間：" + session.expiresAt
+        : "已保存 session token";
+      statusNode.classList.remove("is-error");
+      statusNode.classList.add("is-success");
+      app.dataset.sessionToken = session.token;
+      app.dataset.userRole = session.role || "";
+      app.dataset.actor = [session.sourceSystem || "unknown", session.externalUserID || "unknown"].join(" / ");
+      document.dispatchEvent(new CustomEvent("twacc:session-changed"));
+      return;
+    }
+
+    loginStateNode.textContent = "未登入";
+    tokenStateNode.textContent = "尚未保存 session token";
+    statusNode.textContent = "尚未登入";
+    statusNode.classList.remove("is-error", "is-success");
+    delete app.dataset.sessionToken;
+    delete app.dataset.userRole;
+    delete app.dataset.actor;
+    document.dispatchEvent(new CustomEvent("twacc:session-changed"));
+  }
+
+  async function parseJSON(response) {
+    const text = await response.text();
+    if (!text) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function requestHeaders(integrationToken) {
+    return {
+      "Content-Type": "application/json",
+      ...(integrationToken ? { Authorization: "Bearer " + integrationToken } : {})
+    };
+  }
+
+  async function registerUser(payload, integrationToken) {
+    const response = await fetch("/api/erp/register", {
+      method: "POST",
+      headers: requestHeaders(integrationToken),
+      body: JSON.stringify({
+        source_system: payload.source_system,
+        external_user_id: payload.external_user_id,
+        display_name: payload.external_user_id
+      })
+    });
+
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || "註冊失敗");
+    }
+  }
+
+  async function loginUser(payload, integrationToken) {
+    const response = await fetch("/api/erp/login", {
+      method: "POST",
+      headers: requestHeaders(integrationToken),
+      body: JSON.stringify(payload)
+    });
+
+    const result = await parseJSON(response);
+    return { response, result };
+  }
+
+  async function submitLogin(event) {
+    event.preventDefault();
+
+    const payload = {
+      source_system: sourceSystemInput.value.trim(),
+      external_user_id: externalUserIDInput.value.trim(),
+      device_id: deviceIDInput.value.trim() || generateDeviceID()
+    };
+    const integrationToken = integrationTokenInput.value.trim();
+    localStorage.setItem(storageKeys.deviceID, payload.device_id);
+    localStorage.setItem(storageKeys.integrationToken, integrationToken);
+
+    statusNode.textContent = "登入中...";
+    statusNode.classList.remove("is-error", "is-success");
+
+    try {
+      let responseData = await loginUser(payload, integrationToken);
+      if (responseData.response.status === 404 && responseData.result.code === "USER_NOT_FOUND") {
+        statusNode.textContent = "使用者不存在，正在自動註冊...";
+        await registerUser(payload, integrationToken);
+        statusNode.textContent = "註冊完成，重新登入中...";
+        responseData = await loginUser(payload, integrationToken);
+      }
+
+      if (!responseData.response.ok || !responseData.result.success || !responseData.result.token) {
+        throw new Error(responseData.result.message || "登入失敗");
+      }
+
+      localStorage.setItem(storageKeys.token, responseData.result.token);
+      localStorage.setItem(storageKeys.expiresAt, responseData.result.expires_at || "");
+      localStorage.setItem(storageKeys.role, responseData.result.data && responseData.result.data.role ? responseData.result.data.role : "");
+      localStorage.setItem(storageKeys.sourceSystem, payload.source_system);
+      localStorage.setItem(storageKeys.externalUserID, payload.external_user_id);
+
+      renderSessionState();
+    } catch (error) {
+      statusNode.textContent = error.message || "登入失敗";
+      statusNode.classList.remove("is-success");
+      statusNode.classList.add("is-error");
+    }
+  }
+
+  function clearSession() {
+    localStorage.removeItem(storageKeys.token);
+    localStorage.removeItem(storageKeys.expiresAt);
+    localStorage.removeItem(storageKeys.role);
+    localStorage.removeItem(storageKeys.sourceSystem);
+    localStorage.removeItem(storageKeys.externalUserID);
+    sourceSystemInput.value = "erp";
+    externalUserIDInput.value = "";
+    renderSessionState();
+  }
+
+  loginForm.addEventListener("submit", submitLogin);
+  logoutButton.addEventListener("click", clearSession);
+  renderSessionState();
+})();

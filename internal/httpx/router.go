@@ -4,20 +4,36 @@ import (
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"1001-twacc-chat/internal/chat"
 	"1001-twacc-chat/internal/erp"
 )
 
+type UIConfig struct {
+	IntegrationSharedToken string
+}
+
 // NewRouter builds the HTTP routes used by the chat MVP scaffold.
-func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler) http.Handler {
+func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiConfig UIConfig) http.Handler {
 	mux := http.NewServeMux()
+	pages := pageData{
+		IntegrationSharedToken: strings.TrimSpace(uiConfig.IntegrationSharedToken),
+	}
 
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
-	mux.HandleFunc("GET /", indexHandler)
-	mux.HandleFunc("GET /chat", desktopHandler)
-	mux.HandleFunc("GET /m/chat", mobileHandler)
-	mux.HandleFunc("GET /embed/chat", embedHandler)
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		indexHandler(w, r, pages)
+	})
+	mux.HandleFunc("GET /chat", func(w http.ResponseWriter, r *http.Request) {
+		desktopHandler(w, r, pages)
+	})
+	mux.HandleFunc("GET /m/chat", func(w http.ResponseWriter, r *http.Request) {
+		mobileHandler(w, r, pages)
+	})
+	mux.HandleFunc("GET /embed/chat", func(w http.ResponseWriter, r *http.Request) {
+		embedHandler(w, r, pages)
+	})
 	mux.HandleFunc("GET /healthz", healthHandler)
 	if integrationHandler != nil {
 		mux.HandleFunc("POST /api/erp/register", integrationHandler.Register)
@@ -35,29 +51,34 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler) http.
 	return mux
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
+func indexHandler(w http.ResponseWriter, r *http.Request, data pageData) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 
-	renderTemplate(w, "index.html", pageData{Title: "1001 TWACC Chat"})
+	data.Title = "1001 TWACC Chat"
+	renderTemplate(w, "index.html", data)
 }
 
-func desktopHandler(w http.ResponseWriter, _ *http.Request) {
-	renderTemplate(w, "desktop.html", pageData{Title: "TWACC Chat Desktop"})
+func desktopHandler(w http.ResponseWriter, _ *http.Request, data pageData) {
+	data.Title = "TWACC Chat Desktop"
+	renderTemplate(w, "desktop.html", data)
 }
 
-func mobileHandler(w http.ResponseWriter, _ *http.Request) {
-	renderTemplate(w, "mobile.html", pageData{Title: "TWACC Chat Mobile"})
+func mobileHandler(w http.ResponseWriter, _ *http.Request, data pageData) {
+	data.Title = "TWACC Chat Mobile"
+	renderTemplate(w, "mobile.html", data)
 }
 
-func embedHandler(w http.ResponseWriter, _ *http.Request) {
-	renderTemplate(w, "embed.html", pageData{Title: "TWACC Chat Embed"})
+func embedHandler(w http.ResponseWriter, _ *http.Request, data pageData) {
+	data.Title = "TWACC Chat Embed"
+	renderTemplate(w, "embed.html", data)
 }
 
 type pageData struct {
-	Title string
+	Title                  string
+	IntegrationSharedToken string
 }
 
 func renderTemplate(w http.ResponseWriter, name string, data pageData) {
