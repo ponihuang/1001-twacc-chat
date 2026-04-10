@@ -136,12 +136,13 @@ strong {
 }
 
 .desktop-page {
-  min-height: 100vh;
+  height: 100vh;
   padding: 18px;
+  overflow: hidden;
 }
 
 .desktop-shell {
-  min-height: calc(100vh - 36px);
+  height: calc(100vh - 36px);
   display: grid;
   grid-template-columns: 340px 1fr;
   gap: 18px;
@@ -161,6 +162,7 @@ strong {
   border-radius: 32px;
   background: rgba(255, 249, 241, 0.84);
   box-shadow: var(--shadow);
+  overflow-y: auto;
 }
 
 .brand-title {
