@@ -61,6 +61,7 @@ func (s *Service) ListConversations(actor SessionPrincipal) (Response, int, erro
 			MemberCount:        conversation.MemberCount,
 			LastMessageType:    conversation.LastMessageType,
 			LastMessagePreview: conversation.LastMessagePreview,
+			UnreadCount:        conversation.UnreadCount,
 		}
 		if !conversation.LastMessageAt.IsZero() {
 			item.LastMessageAt = conversation.LastMessageAt.Format(time.RFC3339)
@@ -145,6 +146,9 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 
 	messages, err := s.repo.ListMessages(conversationID, messageListLimit)
 	if err != nil {
+		return Response{}, 500, err
+	}
+	if err := s.repo.MarkConversationRead(actor.UserID, conversationID); err != nil {
 		return Response{}, 500, err
 	}
 

@@ -124,9 +124,12 @@
       const active = item.conversation_id === activeConversationID ? " is-active" : "";
       const preview = conversationPreview(item);
       const meta = formatTime(item.last_message_at) || (item.member_count + " 位成員");
+      const unread = item.unread_count > 0
+        ? ('<span class="conversation-unread-badge" aria-label="未讀訊息 ' + item.unread_count + ' 則">' + item.unread_count + "</span>")
+        : "";
       return [
         '<button type="button" class="conversation-card conversation-button' + active + '" data-conversation-id="' + item.conversation_id + '">',
-        "<strong>" + escapeHTML(item.title) + "</strong>",
+        '<span class="conversation-card-header"><strong>' + escapeHTML(item.title) + "</strong>" + unread + "</span>",
         "<span>" + escapeHTML(preview) + "</span>",
         "<small>" + escapeHTML(meta) + "</small>",
         "</button>"
@@ -168,6 +171,7 @@
         "</div>",
         "</div>"
       ].join("");
+      scrollMessageBoardToLatest();
       return;
     }
 
@@ -189,6 +193,13 @@
         "</div>"
       ].join("");
     }).join("");
+    scrollMessageBoardToLatest();
+  }
+
+  function scrollMessageBoardToLatest() {
+    window.requestAnimationFrame(function () {
+      messageBoard.scrollTop = messageBoard.scrollHeight;
+    });
   }
 
   function displayMessageContent(message) {
@@ -231,12 +242,30 @@
   }
 
   async function loadConversations() {
+    const items = await fetchConversationItems();
+    if (!items) {
+      return;
+    }
+
+    renderConversationList(items);
+    if (!activeConversationID && items.length) {
+      activeConversationID = items[0].conversation_id;
+      localStorage.setItem(storageKeys.activeConversationID, String(activeConversationID));
+    }
+
+    if (activeConversationID) {
+      renderConversationList(items);
+      await loadMessages(activeConversationID);
+    }
+  }
+
+  async function fetchConversationItems() {
     const headers = authHeaders();
     if (!headers) {
       renderConversationList([]);
       conversationSummary.textContent = "請先登入，再載入對話列表。";
       setMessageStatus("請先登入並選擇對話。", false);
-      return;
+      return null;
     }
 
     const response = await fetch("/api/conversations", {
@@ -246,22 +275,21 @@
     if (!response.ok || !result.success) {
       renderConversationList([]);
       conversationSummary.textContent = result.message || "對話列表讀取失敗。";
-      return;
+      return null;
     }
 
-    renderConversationList(result.data || []);
-    if (!activeConversationID && result.data && result.data.length) {
-      activeConversationID = result.data[0].conversation_id;
-      localStorage.setItem(storageKeys.activeConversationID, String(activeConversationID));
-    }
-
-    if (activeConversationID) {
-      renderConversationList(result.data || []);
-      await loadMessages(activeConversationID);
-    }
+    return result.data || [];
   }
 
-  async function loadMessages(conversationID) {
+  async function refreshConversationListOnly() {
+    const items = await fetchConversationItems();
+    if (!items) {
+      return;
+    }
+    renderConversationList(items);
+  }
+
+  async function loadMessages(conversationID, refreshListAfterRead) {
     const headers = authHeaders();
     if (!headers || !conversationID) {
       return;
@@ -279,6 +307,9 @@
 
     renderMessages(result.data || {});
     setMessageStatus("已載入訊息。", false);
+    if (refreshListAfterRead !== false) {
+      await refreshConversationListOnly();
+    }
   }
 
   function websocketURL() {

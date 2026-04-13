@@ -12,12 +12,18 @@ type mockRepository struct {
 	headers             map[string]Conversation
 	messages            map[int64][]Message
 	memberIDs           map[int64][]int64
+	markedReads         []readMarker
 	createdMessages     []CreateMessageInput
 	createMessageResult Message
 	createMessageErr    error
 	directConversation  Conversation
 	directCreated       bool
 	directErr           error
+}
+
+type readMarker struct {
+	userID         int64
+	conversationID int64
 }
 
 func (m *mockRepository) IsSystemAdmin(userID int64) (bool, error) {
@@ -43,6 +49,11 @@ func (m *mockRepository) ListMessages(conversationID int64, limit int) ([]Messag
 		messages = messages[len(messages)-limit:]
 	}
 	return messages, nil
+}
+
+func (m *mockRepository) MarkConversationRead(userID, conversationID int64) error {
+	m.markedReads = append(m.markedReads, readMarker{userID: userID, conversationID: conversationID})
+	return nil
 }
 
 func (m *mockRepository) CreateMessage(input CreateMessageInput) (Message, error) {
@@ -119,7 +130,7 @@ func conversationKey(userID, conversationID int64) string {
 func TestListConversations(t *testing.T) {
 	repo := &mockRepository{
 		conversations: map[int64][]ConversationSummary{
-			7: {{ConversationID: 9, Type: "group", Title: "採購小組", MemberCount: 3, LastMessageType: "text", LastMessagePreview: "hello", LastMessageAt: time.Date(2026, 4, 7, 1, 2, 3, 0, time.UTC)}},
+			7: {{ConversationID: 9, Type: "group", Title: "採購小組", MemberCount: 3, LastMessageType: "text", LastMessagePreview: "hello", LastMessageAt: time.Date(2026, 4, 7, 1, 2, 3, 0, time.UTC), UnreadCount: 2}},
 		},
 	}
 	service := NewService(repo, nil)
@@ -141,6 +152,9 @@ func TestListConversations(t *testing.T) {
 	}
 	if items[0].ConversationID != 9 || items[0].Title != "採購小組" {
 		t.Fatalf("unexpected conversation item: %+v", items[0])
+	}
+	if items[0].UnreadCount != 2 {
+		t.Fatalf("unread_count = %d, want 2", items[0].UnreadCount)
 	}
 }
 
@@ -185,6 +199,9 @@ func TestListMessages(t *testing.T) {
 	}
 	if len(data.Messages) != 2 {
 		t.Fatalf("len(messages) = %d, want 2", len(data.Messages))
+	}
+	if len(repo.markedReads) != 1 || repo.markedReads[0] != (readMarker{userID: 7, conversationID: 9}) {
+		t.Fatalf("unexpected read markers: %+v", repo.markedReads)
 	}
 }
 

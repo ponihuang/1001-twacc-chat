@@ -78,11 +78,24 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 				 WHERE m.conversation_id = c.id
 				 ORDER BY m.created_at DESC, m.id DESC
 				 LIMIT 1
-			) AS last_message_at
+			) AS last_message_at,
+			(
+				SELECT COUNT(*)
+				  FROM messages m_unread
+				 WHERE m_unread.conversation_id = c.id
+				   AND m_unread.sender_id <> ?
+				   AND m_unread.id > COALESCE((
+						SELECT cr.last_read_message_id
+						  FROM conversation_reads cr
+						 WHERE cr.conversation_id = c.id
+						   AND cr.user_id = ?
+						 LIMIT 1
+				   ), 0)
+			) AS unread_count
 		  FROM conversation_members cm
 		  JOIN conversations c ON c.id = cm.conversation_id
 		 WHERE cm.user_id = ?
-		 ORDER BY COALESCE(last_message_at, c.created_at) DESC, c.id DESC`, userID, userID)
+		 ORDER BY COALESCE(last_message_at, c.created_at) DESC, c.id DESC`, userID, userID, userID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list conversations: %w", err)
 	}
@@ -100,6 +113,7 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 			&item.LastMessageType,
 			&item.LastMessagePreview,
 			&lastMessageAt,
+			&item.UnreadCount,
 		); err != nil {
 			return nil, fmt.Errorf("scan conversation summary: %w", err)
 		}
@@ -313,6 +327,38 @@ func (r *ChatRepository) ListMessages(conversationID int64, limit int) ([]chat.M
 	}
 
 	return items, rows.Err()
+}
+
+// MarkConversationRead stores the latest message the user has read in a conversation.
+func (r *ChatRepository) MarkConversationRead(userID, conversationID int64) error {
+	var latestMessageID sql.NullInt64
+	row := r.db.QueryRow(`
+		SELECT (
+			SELECT MAX(m.id)
+			  FROM messages m
+			 WHERE m.conversation_id = cm.conversation_id
+		)
+		  FROM conversation_members cm
+		 WHERE cm.user_id = ?
+		   AND cm.conversation_id = ?
+		 LIMIT 1`, userID, conversationID)
+	if err := row.Scan(&latestMessageID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return chat.ErrConversationNotFound
+		}
+		return fmt.Errorf("load latest conversation message: %w", err)
+	}
+
+	if _, err := r.db.Exec(`
+		INSERT INTO conversation_reads (conversation_id, user_id, last_read_message_id, last_read_at)
+		VALUES (?, ?, ?, NOW())
+		ON DUPLICATE KEY UPDATE
+			last_read_message_id = VALUES(last_read_message_id),
+			last_read_at = VALUES(last_read_at)`, conversationID, userID, latestMessageID); err != nil {
+		return fmt.Errorf("mark conversation read: %w", err)
+	}
+
+	return nil
 }
 
 // CreateMessage inserts a new message for a conversation member and returns the stored row.

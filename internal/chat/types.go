@@ -23,6 +23,7 @@ type ConversationSummary struct {
 	LastMessageType    string
 	LastMessagePreview string
 	LastMessageAt      time.Time
+	UnreadCount        int
 }
 
 // Conversation stores the minimal metadata needed by the message list response.
@@ -79,6 +80,7 @@ type ConversationItem struct {
 	LastMessageType    string `json:"last_message_type,omitempty"`
 	LastMessagePreview string `json:"last_message_preview,omitempty"`
 	LastMessageAt      string `json:"last_message_at,omitempty"`
+	UnreadCount        int    `json:"unread_count"`
 }
 
 // DirectConversationData is the API-facing payload for a direct conversation create/load request.
@@ -164,5 +166,6 @@ type Repository interface {
 	ListConversationMemberIDs(conversationID int64) ([]int64, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
 	ListMessages(conversationID int64, limit int) ([]Message, error)
+	MarkConversationRead(userID, conversationID int64) error
 	CreateMessage(input CreateMessageInput) (Message, error)
 }
