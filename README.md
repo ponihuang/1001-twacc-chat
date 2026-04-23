@@ -15,6 +15,8 @@
 - `GET /ws`
 - `GET /uploads/{filename}`
 - 桌機版 Web 測試登入、對話列表、一對一對話建立
+- 桌機版左欄下拉選單與子頁切換原型（登入 / 登入狀態 / 建立一對一對話 / 設定）
+- 桌機版設定頁前端原型：頭像預覽、聊天室分類建立與分類列顯示
 - 文字訊息送出、`Enter` 快捷送出
 - 圖片與檔案訊息上傳
 - MySQL 設定讀取、driver 初始化與 migration 自動執行
@@ -29,7 +31,6 @@
 
 目前尚未完成：
 
-- 外部系統接入請求簽章 / timestamp 驗證
 - 群組聊天建立流程
 - 檔案留存策略
 - `system_admin` 管理頁面
@@ -94,11 +95,13 @@ MYSQL_DATABASE=twacc_chat
 MYSQL_USER=root
 MYSQL_PASSWORD=secret
 INTEGRATION_SHARED_TOKEN=your-shared-token
+INTEGRATION_SIGNATURE_SECRET=your-signature-secret
+INTEGRATION_TIMESTAMP_TOLERANCE=5m
 ```
 
 建議把以上內容放進根目錄 `.env` 後直接執行 `go run .`。
 
-若未設定 `INTEGRATION_SHARED_TOKEN`，目前程式會以開發模式允許未帶 `Authorization` 的外部系統 register / login 請求。文件語意已改為統一外部整合能力；路由命名後續建議由 `/api/erp/*` 收斂為更中性的 `/api/integrations/*` 或 `/api/external/*`。
+若未設定 `INTEGRATION_SHARED_TOKEN` 與 `INTEGRATION_SIGNATURE_SECRET`，目前程式會以開發模式允許未帶整合驗證 header 的外部系統 register / login 請求。文件語意已改為統一外部整合能力；路由命名後續建議由 `/api/erp/*` 收斂為更中性的 `/api/integrations/*` 或 `/api/external/*`。
 
 ## 桌機測試頁
 
@@ -107,10 +110,19 @@ INTEGRATION_SHARED_TOKEN=your-shared-token
 - 直接輸入帳號登入
 - 登入後載入對話列表
 - 透過外部使用者編號建立 / 載入一對一對話
+- 左上 icon 可打開左欄下拉選單，切換登入 / 登入狀態 / 建立一對一對話 / 設定子頁
+- 設定頁目前提供頭像預覽與聊天室分類前端原型
+- 聊天室分類目前保存在瀏覽器 `localStorage`，並顯示在左側 `Conversations` 上方
+- `ALL` 為預設分類，固定顯示全部對話
 - 傳送文字訊息
 - `Enter` 送出、`Shift + Enter` 換行
 - 上傳圖片或檔案訊息
 - WebSocket 即時刷新對話列表與目前訊息區
+
+目前限制：
+
+- 設定頁與聊天室分類仍屬前端原型，尚未接正式設定 API
+- 聊天室分類目前只完成前端保存與顯示，尚未真正套用到對話篩選邏輯
 
 附件格式目前支援：
 
@@ -163,6 +175,7 @@ INTEGRATION_SHARED_TOKEN=your-shared-token
 - 三種前端形態應盡量共用同一套聊天元件與 API 契約
 
 目前只有 `/chat` 已完成實際資料串接；`/m/chat` 與 `/embed/chat` 仍為骨架頁面。
+`/chat` 另包含桌機版導覽 / 設定原型，但部分設定互動仍屬前端暫存實作。
 
 ## 認證方式
 
@@ -174,6 +187,18 @@ INTEGRATION_SHARED_TOKEN=your-shared-token
 目前使用：
 
 - `Authorization: Bearer <shared-token>`
+- `X-TWACC-Timestamp: <unix-seconds>`
+- `X-TWACC-Signature: <hex-hmac-sha256>`
+
+簽章字串格式：
+
+```text
+HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
+```
+
+預設 timestamp 容許誤差為 `5m`，可由 `INTEGRATION_TIMESTAMP_TOLERANCE` 調整。
+
+完整對接範例請見 [docs/integration-signature.md](/Users/elva/新公司/聊天系統/1001-twacc-chat-main/docs/integration-signature.md)。
 
 登入成功後，`/api/erp/login` 會回傳 session token。這個端點目前是外部系統接入的第一個相容入口；後續聊天 API、管理 API 與裝置核准 API 使用：
 

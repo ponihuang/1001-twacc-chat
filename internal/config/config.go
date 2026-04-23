@@ -23,14 +23,16 @@ const (
 
 // Config holds application runtime settings.
 type Config struct {
-	Port                   string
-	Server                 ServerConfig
-	MySQL                  MySQLConfig
-	EnableMySQL            bool
-	AutoMigrate            bool
-	MigrationsDir          string
-	IntegrationSharedToken string
-	LoginTokenTTL          time.Duration
+	Port                          string
+	Server                        ServerConfig
+	MySQL                         MySQLConfig
+	EnableMySQL                   bool
+	AutoMigrate                   bool
+	MigrationsDir                 string
+	IntegrationSharedToken        string
+	IntegrationSignatureSecret    string
+	IntegrationTimestampTolerance time.Duration
+	LoginTokenTTL                 time.Duration
 }
 
 // ServerConfig groups HTTP server settings.
@@ -77,11 +79,13 @@ func Load() Config {
 			MaxIdleConns:    intEnv("MYSQL_MAX_IDLE_CONNS", defaultMaxIdleConns),
 			ConnMaxLifetime: durationEnv("MYSQL_CONN_MAX_LIFETIME", defaultConnMaxLifetime),
 		},
-		EnableMySQL:            boolEnv("ENABLE_MYSQL", false),
-		AutoMigrate:            boolEnv("AUTO_MIGRATE", true),
-		MigrationsDir:          envOrDefault("MIGRATIONS_DIR", filepath.Join("db", "migrations")),
-		IntegrationSharedToken: strings.TrimSpace(os.Getenv("INTEGRATION_SHARED_TOKEN")),
-		LoginTokenTTL:          durationEnv("LOGIN_TOKEN_TTL", 24*time.Hour),
+		EnableMySQL:                   boolEnv("ENABLE_MYSQL", false),
+		AutoMigrate:                   boolEnv("AUTO_MIGRATE", true),
+		MigrationsDir:                 envOrDefault("MIGRATIONS_DIR", filepath.Join("db", "migrations")),
+		IntegrationSharedToken:        strings.TrimSpace(os.Getenv("INTEGRATION_SHARED_TOKEN")),
+		IntegrationSignatureSecret:    strings.TrimSpace(os.Getenv("INTEGRATION_SIGNATURE_SECRET")),
+		IntegrationTimestampTolerance: durationEnv("INTEGRATION_TIMESTAMP_TOLERANCE", 5*time.Minute),
+		LoginTokenTTL:                 durationEnv("LOGIN_TOKEN_TTL", 24*time.Hour),
 	}
 }
 

@@ -48,13 +48,25 @@ func Run() error {
 		sessionService := auth.NewService(storemysql.NewSessionRepository(dbStore.DB()), cfg.LoginTokenTTL)
 		integrationRepo := storemysql.NewIntegrationRepository(dbStore.DB())
 		integrationService := erp.NewService(integrationRepo, sessionService)
-		integrationHandler = erp.NewHandler(integrationService, sessionService, cfg.IntegrationSharedToken)
+		integrationHandler = erp.NewHandler(
+			integrationService,
+			sessionService,
+			cfg.IntegrationSharedToken,
+			cfg.IntegrationSignatureSecret,
+			cfg.IntegrationTimestampTolerance,
+		)
 
 		chatRepo := storemysql.NewChatRepository(dbStore.DB())
 		chatService := chat.NewService(chatRepo, realtimeHub)
 		chatHandler = chat.NewHandler(chatService, sessionService, realtimeHub, chat.NewLocalFileStore(filepath.Join("web", "uploads")))
 	} else {
-		integrationHandler = erp.NewHandler(nil, nil, cfg.IntegrationSharedToken)
+		integrationHandler = erp.NewHandler(
+			nil,
+			nil,
+			cfg.IntegrationSharedToken,
+			cfg.IntegrationSignatureSecret,
+			cfg.IntegrationTimestampTolerance,
+		)
 		chatHandler = chat.NewHandler(nil, nil, nil, nil)
 	}
 

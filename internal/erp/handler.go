@@ -1,6 +1,10 @@
 package erp
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -8,26 +12,35 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"1001-twacc-chat/internal/auth"
 )
 
 // Handler exposes external-system auth endpoints plus admin and device routes.
 type Handler struct {
-	service                *Service
-	sessions               SessionAuthenticator
-	integrationSharedToken string
+	service                       *Service
+	sessions                      SessionAuthenticator
+	integrationSharedToken        string
+	integrationSignatureSecret    string
+	integrationTimestampTolerance time.Duration
 }
 
 // NewHandler builds the HTTP handler for external-system access flows.
-func NewHandler(service *Service, sessions SessionAuthenticator, integrationSharedToken string) *Handler {
-	return &Handler{service: service, sessions: sessions, integrationSharedToken: strings.TrimSpace(integrationSharedToken)}
+func NewHandler(service *Service, sessions SessionAuthenticator, integrationSharedToken, integrationSignatureSecret string, integrationTimestampTolerance time.Duration) *Handler {
+	return &Handler{
+		service:                       service,
+		sessions:                      sessions,
+		integrationSharedToken:        strings.TrimSpace(integrationSharedToken),
+		integrationSignatureSecret:    strings.TrimSpace(integrationSignatureSecret),
+		integrationTimestampTolerance: integrationTimestampTolerance,
+	}
 }
 
 // Register handles POST /api/erp/register.
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	if !h.integrationAuthorized(r) {
-		writeJSON(w, http.StatusUnauthorized, Response{Success: false, Code: "INVALID_INTEGRATION_TOKEN", Message: "对接凭证错误"})
+	if resp, status, ok := h.authorizeIntegrationRequest(r); !ok {
+		writeJSON(w, status, resp)
 		return
 	}
 	if h.service == nil {
@@ -52,8 +65,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 // Login handles POST /api/erp/login.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	if !h.integrationAuthorized(r) {
-		writeJSON(w, http.StatusUnauthorized, Response{Success: false, Code: "INVALID_INTEGRATION_TOKEN", Message: "对接凭证错误"})
+	if resp, status, ok := h.authorizeIntegrationRequest(r); !ok {
+		writeJSON(w, status, resp)
 		return
 	}
 	if h.service == nil {
@@ -166,7 +179,59 @@ func (h *Handler) ApproveDevice(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
-func (h *Handler) integrationAuthorized(r *http.Request) bool {
+func (h *Handler) authorizeIntegrationRequest(r *http.Request) (Response, int, bool) {
+	if h.integrationSharedToken == "" && h.integrationSignatureSecret == "" {
+		return Response{}, 0, true
+	}
+
+	if !h.integrationTokenAuthorized(r) {
+		return Response{Success: false, Code: "INVALID_INTEGRATION_TOKEN", Message: "对接凭证错误"}, http.StatusUnauthorized, false
+	}
+
+	if h.integrationSignatureSecret == "" {
+		return Response{}, 0, true
+	}
+
+	timestampHeader := strings.TrimSpace(r.Header.Get("X-TWACC-Timestamp"))
+	if timestampHeader == "" {
+		return Response{Success: false, Code: "INTEGRATION_TIMESTAMP_REQUIRED", Message: "缺少对接请求时间戳"}, http.StatusUnauthorized, false
+	}
+
+	signatureHeader := strings.TrimSpace(r.Header.Get("X-TWACC-Signature"))
+	if signatureHeader == "" {
+		return Response{Success: false, Code: "INTEGRATION_SIGNATURE_REQUIRED", Message: "缺少对接请求签章"}, http.StatusUnauthorized, false
+	}
+
+	requestTimestamp, err := strconv.ParseInt(timestampHeader, 10, 64)
+	if err != nil {
+		return Response{Success: false, Code: "INVALID_INTEGRATION_TIMESTAMP", Message: "对接请求时间戳格式错误"}, http.StatusUnauthorized, false
+	}
+
+	now := time.Now().UTC()
+	requestTime := time.Unix(requestTimestamp, 0).UTC()
+	tolerance := h.integrationTimestampTolerance
+	if tolerance <= 0 {
+		tolerance = 5 * time.Minute
+	}
+	if requestTime.Before(now.Add(-tolerance)) || requestTime.After(now.Add(tolerance)) {
+		return Response{Success: false, Code: "INTEGRATION_TIMESTAMP_EXPIRED", Message: "对接请求时间戳已过期"}, http.StatusUnauthorized, false
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return Response{Success: false, Code: "INVALID_REQUEST", Message: "请求读取失败"}, http.StatusBadRequest, false
+	}
+	_ = r.Body.Close()
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	if !h.integrationSignatureValid(r.Method, r.URL.Path, timestampHeader, body, signatureHeader) {
+		return Response{Success: false, Code: "INVALID_INTEGRATION_SIGNATURE", Message: "对接请求签章错误"}, http.StatusUnauthorized, false
+	}
+
+	return Response{}, 0, true
+}
+
+func (h *Handler) integrationTokenAuthorized(r *http.Request) bool {
 	if h.integrationSharedToken == "" {
 		return true
 	}
@@ -178,6 +243,24 @@ func (h *Handler) integrationAuthorized(r *http.Request) bool {
 	}
 
 	return strings.TrimSpace(strings.TrimPrefix(authHeader, prefix)) == h.integrationSharedToken
+}
+
+func (h *Handler) integrationSignatureValid(method, path, timestamp string, body []byte, provided string) bool {
+	if h.integrationSignatureSecret == "" {
+		return true
+	}
+
+	mac := hmac.New(sha256.New, []byte(h.integrationSignatureSecret))
+	mac.Write([]byte(method))
+	mac.Write([]byte("\n"))
+	mac.Write([]byte(path))
+	mac.Write([]byte("\n"))
+	mac.Write([]byte(timestamp))
+	mac.Write([]byte("\n"))
+	mac.Write(body)
+
+	expected := hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(strings.ToLower(strings.TrimSpace(provided))), []byte(expected))
 }
 
 func (h *Handler) requireSession(w http.ResponseWriter, r *http.Request) (SessionPrincipal, bool) {

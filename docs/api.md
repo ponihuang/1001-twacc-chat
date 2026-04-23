@@ -135,13 +135,21 @@
 }
 ```
 
-外部系統對接 header 規格草案：
+外部系統對接 header 規格：
 
 | Header | 必填 | 規則 |
 | --- | --- | --- |
-| `Authorization` | 是 | `Bearer <shared-token>` 格式；MVP 先採固定 shared token |
-| `X-Request-Timestamp` | 否 | 後續可用於防重放 |
-| `X-Signature` | 否 | 後續可用於驗證請求完整性 |
+| `Authorization` | 是 | `Bearer <shared-token>` 格式 |
+| `X-TWACC-Timestamp` | 是 | Unix timestamp 秒數，例如 `1776384000` |
+| `X-TWACC-Signature` | 是 | `hex(HMAC-SHA256(...))` |
+
+簽章字串格式：
+
+```text
+HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
+```
+
+補充說明請見 [integration-signature.md](/Users/elva/新公司/聊天系統/1001-twacc-chat-main/docs/integration-signature.md)。
 
 ## 3. 聊天
 

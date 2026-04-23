@@ -55,8 +55,11 @@
 ### 3.2 外部系統接入
 
 1. 外部系統呼叫註冊、登入或後續聊天相關 API。
-2. 後端依 `source_system` 與外部帳號建立或查找使用者。
-3. 後端回傳成功或失敗結果與原因碼。
+2. 外部系統先帶 `Authorization: Bearer <shared-token>`。
+3. 外部系統再帶 `X-TWACC-Timestamp` 與 `X-TWACC-Signature`。
+4. 後端先驗證 shared token、timestamp 與 HMAC-SHA256 簽章。
+5. 驗證通過後，後端依 `source_system` 與外部帳號建立或查找使用者。
+6. 後端回傳成功或失敗結果與原因碼。
 
 ### 3.3 三種 Web 介面
 
@@ -88,7 +91,7 @@ MVP 先採傳統模板加靜態資源方式，後續可視需要再拆成 SPA。
 - handler 單元測試
 - service 單元測試
 - API 整合測試
+- 外部系統簽章 / timestamp 驗證測試
 - 上傳限制測試
 - 白名單與權限測試
 - 桌機 / 手機 / 嵌入式三種前端形態驗證
-
