@@ -17,6 +17,7 @@
   const directExternalUserIDInput = app.querySelector("#direct-external-user-id");
   const messageBoard = app.querySelector("[data-message-board]");
   const messageForm = app.querySelector("[data-message-form]");
+  const conversationTitle = app.querySelector("[data-conversation-title]");
   const messageStatus = app.querySelector("[data-message-status]");
   const realtimeStateNode = app.querySelector("[data-realtime-state]");
   const composerInput = messageForm.querySelector(".composer-input");
@@ -24,7 +25,7 @@
   const fileStateNode = messageForm.querySelector("[data-file-state]");
 
   let conversations = [];
-  let activeConversationID = Number(localStorage.getItem(storageKeys.activeConversationID) || 0);
+  let activeConversationID = 0;
   let realtimeSocket = null;
   let reconnectTimer = 0;
   let reconnectAttempts = 0;
@@ -98,6 +99,47 @@
     messageStatus.classList.toggle("is-error", Boolean(isError));
   }
 
+  function setConversationTitle(text) {
+    if (!conversationTitle) {
+      return;
+    }
+    conversationTitle.textContent = text || "目前對話";
+  }
+
+  function setConversationUIActive(isActive) {
+    app.classList.toggle("is-conversation-active", Boolean(isActive));
+  }
+
+  function activeConversationTitle() {
+    const active = conversations.find(function (item) {
+      return item.conversation_id === activeConversationID;
+    });
+    return active ? active.title : "";
+  }
+
+  function renderEmptyConversationState(title, detail) {
+    const stateTitle = title || "請選擇對話對象，開始傳訊息";
+    const stateDetail = detail || stateTitle;
+    setConversationUIActive(false);
+    setConversationTitle(stateTitle);
+    setMessageStatus(stateDetail, false);
+    messageBoard.innerHTML = [
+      '<div class="empty-chat-state">',
+      "<strong>" + escapeHTML(stateTitle) + "</strong>",
+      "</div>"
+    ].join("");
+  }
+
+  function closeActiveConversation() {
+    if (!activeConversationID) {
+      return;
+    }
+    activeConversationID = 0;
+    localStorage.removeItem(storageKeys.activeConversationID);
+    renderConversationList(conversations);
+    renderEmptyConversationState();
+  }
+
   function setRealtimeState(text, isConnected) {
     if (!realtimeStateNode) {
       return;
@@ -117,6 +159,7 @@
         "</article>"
       ].join("");
       conversationSummary.textContent = "目前尚無對話，請先建立一個一對一對話。";
+      renderEmptyConversationState("請選擇對話對象，開始傳訊息");
       return;
     }
 
@@ -163,14 +206,7 @@
 
   function renderMessages(data) {
     if (!data.messages || !data.messages.length) {
-      messageBoard.innerHTML = [
-        '<div class="message-row incoming">',
-        '<div class="message-bubble">',
-        "<strong>" + escapeHTML(data.title || "系統提示") + "</strong>",
-        "<p>目前還沒有訊息，之後可在這裡開始聊天。</p>",
-        "</div>",
-        "</div>"
-      ].join("");
+      messageBoard.innerHTML = "";
       scrollMessageBoardToLatest();
       return;
     }
@@ -248,15 +284,12 @@
     }
 
     renderConversationList(items);
-    if (!activeConversationID && items.length) {
-      activeConversationID = items[0].conversation_id;
-      localStorage.setItem(storageKeys.activeConversationID, String(activeConversationID));
+    if (activeConversationID) {
+      await loadMessages(activeConversationID);
+      return;
     }
 
-    if (activeConversationID) {
-      renderConversationList(items);
-      await loadMessages(activeConversationID);
-    }
+    renderEmptyConversationState();
   }
 
   async function fetchConversationItems() {
@@ -264,7 +297,7 @@
     if (!headers) {
       renderConversationList([]);
       conversationSummary.textContent = "請先登入，再載入對話列表。";
-      setMessageStatus("請先登入並選擇對話。", false);
+      renderEmptyConversationState("請選擇對話對象，開始傳訊息");
       return null;
     }
 
@@ -295,7 +328,9 @@
       return;
     }
 
+    setConversationUIActive(true);
     setMessageStatus("正在載入訊息...", false);
+    setConversationTitle(activeConversationTitle());
     const response = await fetch("/api/conversations/" + conversationID + "/messages", {
       headers: { Authorization: headers.Authorization }
     });
@@ -305,7 +340,9 @@
       return;
     }
 
-    renderMessages(result.data || {});
+    const data = result.data || {};
+    setConversationTitle(data.title || activeConversationTitle() || "目前對話");
+    renderMessages(data);
     setMessageStatus("已載入訊息。", false);
     if (refreshListAfterRead !== false) {
       await refreshConversationListOnly();
@@ -536,6 +573,13 @@
   }
   messageForm.addEventListener("submit", sendMessage);
   composerInput.addEventListener("keydown", handleComposerKeydown);
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape" || !activeConversationID) {
+      return;
+    }
+    event.preventDefault();
+    closeActiveConversation();
+  });
   if (composerFileInput) {
     composerFileInput.addEventListener("change", updateSelectedFileState);
     updateSelectedFileState();

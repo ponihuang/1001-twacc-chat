@@ -4,117 +4,221 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css">
-  <script defer src="/static/auth.js"></script>
-  <script defer src="/static/chat-app.js"></script>
+  <link rel="stylesheet" href="/static/app.css?v=desktop-sidebar-20260423e">
+  <script defer src="/static/sidebar-nav.js?v=desktop-sidebar-20260423e"></script>
+  <script defer src="/static/settings-panel.js?v=desktop-sidebar-20260423e"></script>
+  <script defer src="/static/auth.js?v=desktop-sidebar-20260423e"></script>
+  <script defer src="/static/chat-app.js?v=desktop-sidebar-20260423e"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app>
-    <aside class="desktop-sidebar">
-      <div>
-        <span class="eyebrow">Desktop Fullscreen</span>
-        <h1 class="brand-title">1001 TWACC Chat</h1>
+    <aside class="desktop-sidebar" data-sidebar-shell>
+      <div class="sidebar-topbar">
+        <button type="button" class="sidebar-nav-button" data-sidebar-toggle aria-label="打開選單">
+          <span class="sidebar-nav-icon sidebar-nav-icon-menu" aria-hidden="true"></span>
+          <span class="sidebar-nav-icon sidebar-nav-icon-back" aria-hidden="true"></span>
+        </button>
+        <div class="sidebar-topbar-text">
+          <strong>聊天系統</strong>
+        </div>
+        <a class="sidebar-entry-link" href="/">回到入口</a>
       </div>
-      <form class="auth-panel panel-surface compact-panel" data-login-form>
-        <div>
-          <span class="eyebrow">登入</span>
-          <strong>Web 測試登入</strong>
-          <p>直接輸入帳號登入；底層仍使用既有外部 API，登入成功後會把 session token 保存在瀏覽器。</p>
-        </div>
-        <label class="field-label" for="external-user-id">帳號</label>
-        <input id="external-user-id" class="text-input" name="external_user_id" placeholder="例如：asq" required>
-        <input id="source-system" type="hidden" name="source_system" value="erp">
-        <input id="device-id" type="hidden" name="device_id">
-        <input id="integration-token" type="hidden" name="integration_token" value="{{.IntegrationSharedToken}}">
-        <div class="auth-actions">
-          <button type="submit" class="primary-button">登入並保存</button>
-          <button type="button" class="secondary-button" data-logout-button>清除登入</button>
-        </div>
-        <div class="auth-status" data-auth-status>尚未登入</div>
-      </form>
-      <div class="search-panel panel-surface compact-panel">
-        <strong>Conversations</strong>
-        <p data-conversation-summary>登入後會載入真實對話列表，也可先建立一個一對一對話。</p>
-      </div>
-      <form class="auth-panel panel-surface compact-panel" data-direct-form>
-        <div>
-          <strong>快速建立一對一對話</strong>
-          <p>開發測試用，建立成功後會自動切到該對話。</p>
-        </div>
-        <label class="field-label" for="direct-external-user-id">目標外部使用者編號</label>
-        <input id="direct-external-user-id" class="text-input" name="external_user_id" value="user_b" required>
-        <button type="submit" class="primary-button">建立 / 載入對話</button>
-        <div class="auth-status" data-direct-status>尚未建立對話</div>
-      </form>
-      <div class="conversation-list" data-conversation-list>
-        <article class="conversation-card is-placeholder">
-          <strong>尚未載入對話</strong>
-          <span>登入後會自動讀取列表</span>
-          <small>等待中</small>
+
+      <nav class="sidebar-dropdown panel-surface" data-sidebar-dropdown>
+        <button type="button" class="sidebar-menu-item" data-sidebar-open="login">
+          <span class="sidebar-menu-kicker">1</span>
+          <span class="sidebar-menu-text">
+            <strong>登入</strong>
+            <small>輸入帳號後由既有 API 自動註冊 / 登入</small>
+          </span>
+        </button>
+        <button type="button" class="sidebar-menu-item" data-sidebar-open="status">
+          <span class="sidebar-menu-kicker">2</span>
+          <span class="sidebar-menu-text">
+            <strong>登入狀態</strong>
+            <small>查看目前 session token 與連線狀態</small>
+          </span>
+        </button>
+        <button type="button" class="sidebar-menu-item" data-sidebar-open="direct">
+          <span class="sidebar-menu-kicker">3</span>
+          <span class="sidebar-menu-text">
+            <strong>建立一對一對話</strong>
+            <small>輸入目標外部使用者編號後自動切到該對話</small>
+          </span>
+        </button>
+        <button type="button" class="sidebar-menu-item" data-sidebar-open="settings">
+          <span class="sidebar-menu-kicker">4</span>
+          <span class="sidebar-menu-text">
+            <strong>設定</strong>
+            <small>管理頭像、聊天室分類與顯示順序</small>
+          </span>
+        </button>
+      </nav>
+
+      <section class="sidebar-view is-active" data-sidebar-view="home">
+        <section class="sidebar-panel conversation-panel">
+          <p class="visually-hidden" data-conversation-summary>登入後會載入真實對話列表，也可先建立一個一對一對話。</p>
+          <div class="conversation-category-bar" data-folder-tabs>
+            <button type="button" class="conversation-category-chip is-active">ALL</button>
+          </div>
+          <div class="conversation-list" data-conversation-list>
+            <article class="conversation-card is-placeholder">
+              <strong>尚未載入對話</strong>
+              <span>登入後會自動讀取列表</span>
+              <small>等待中</small>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="sidebar-view" data-sidebar-view="login">
+        <section class="sidebar-panel panel-surface sidebar-detail-panel">
+          <div class="sidebar-view-header">
+            <span class="eyebrow">登入</span>
+            <strong>Web 測試登入</strong>
+            <p>輸入帳號後由既有 API 自動註冊 / 登入。</p>
+          </div>
+
+          <form class="auth-panel" data-login-form>
+            <label class="field-label" for="external-user-id">帳號</label>
+            <input id="external-user-id" class="text-input" name="external_user_id" placeholder="例如：asq" required>
+            <input id="source-system" type="hidden" name="source_system" value="erp">
+            <input id="device-id" type="hidden" name="device_id">
+            <input id="integration-token" type="hidden" name="integration_token" value="{{.IntegrationSharedToken}}">
+            <div class="auth-actions">
+              <button type="submit" class="primary-button">登入並保存</button>
+              <button type="button" class="secondary-button" data-logout-button>清除登入</button>
+            </div>
+            <div class="auth-status" data-auth-status>尚未登入</div>
+          </form>
+        </section>
+      </section>
+
+      <section class="sidebar-view" data-sidebar-view="status">
+        <article class="sidebar-session-card panel-surface sidebar-detail-panel">
+          <div class="sidebar-view-header">
+            <span class="eyebrow">登入狀態</span>
+            <strong>目前連線摘要</strong>
+            <p>檢查登入狀態、session token 與即時連線是否正常。</p>
+          </div>
+          <div class="sidebar-session-text">
+            <strong data-login-state>未登入</strong>
+            <span data-token-state>尚未保存 session token</span>
+          </div>
+          <div class="sidebar-session-badges">
+            <span class="badge muted" data-realtime-state>WS 未連線</span>
+            <span class="badge"><span>Files</span><span>40MB</span></span>
+            <span class="badge muted"><span>Group</span><span>Ready</span></span>
+          </div>
         </article>
-      </div>
-      <div class="auth-panel panel-surface compact-panel">
-        <strong>開發測試狀態</strong>
-        <p>這塊只用來確認登入與 token 保存，正式版可整塊移除。</p>
-        <div class="conversation-list">
-          <article class="conversation-card is-active">
-            <strong>目前狀態</strong>
-            <span data-login-state>未登入</span>
-            <small data-token-state>尚未保存 session token</small>
-          </article>
-          <article class="conversation-card">
-            <strong>下一步</strong>
-            <span>用 token 呼叫 conversations API</span>
-            <small>登入後可接聊天清單</small>
-          </article>
-          <article class="conversation-card">
-            <strong>訊息功能</strong>
-            <span>登入完成後再接 messages / send</span>
-            <small>目前先完成 token 保存</small>
-          </article>
-        </div>
-      </div>
+      </section>
+
+      <section class="sidebar-view" data-sidebar-view="direct">
+        <section class="sidebar-panel panel-surface sidebar-detail-panel">
+          <div class="sidebar-view-header">
+            <span class="eyebrow">建立一對一對話</span>
+            <strong>快速建立 / 載入</strong>
+            <p>輸入目標外部使用者編號後，會自動切到該對話。</p>
+          </div>
+
+          <form class="auth-panel" data-direct-form>
+            <label class="field-label" for="direct-external-user-id">目標外部使用者編號</label>
+            <input id="direct-external-user-id" class="text-input" name="external_user_id" required>
+            <button type="submit" class="primary-button full-width">建立 / 載入對話</button>
+            <div class="auth-status" data-direct-status>尚未建立對話</div>
+          </form>
+        </section>
+      </section>
+
+      <section class="sidebar-view" data-sidebar-view="settings">
+        <section class="sidebar-panel panel-surface sidebar-detail-panel settings-panel" data-settings-panel>
+          <section class="settings-subview is-active" data-settings-view="main">
+            <div class="sidebar-view-header">
+              <span class="eyebrow">設定</span>
+              <strong>個人與分類設定</strong>
+              <p>先以前端骨架管理頭像與聊天室分類，之後再接正式設定 API。</p>
+            </div>
+
+            <section class="settings-profile-card">
+              <div class="settings-avatar" data-avatar-preview>E</div>
+              <div class="settings-profile-meta">
+                <strong>Elva</strong>
+                <span>頭像與顯示資訊</span>
+              </div>
+              <div class="settings-avatar-actions">
+                <label class="secondary-button settings-avatar-upload" for="settings-avatar-input">新增</label>
+                <button type="button" class="secondary-button" data-avatar-edit>編輯</button>
+                <button type="button" class="secondary-button" data-avatar-remove>刪除</button>
+                <input id="settings-avatar-input" type="file" accept=".jpg,.jpeg,.png" hidden data-avatar-input>
+              </div>
+            </section>
+
+            <div class="settings-tabs">
+              <button type="button" class="settings-tab is-active" data-settings-open="folders">聊天室分類</button>
+            </div>
+          </section>
+
+          <section class="settings-subview" data-settings-view="folders">
+            <div class="settings-subview-header">
+              <button type="button" class="secondary-button settings-back-button" data-settings-back>返回</button>
+              <div>
+                <span class="eyebrow">聊天室分類</span>
+                <strong>分類與位置設定</strong>
+                <p>建立資料夾並決定顯示位置，之後可對應到左側聊天清單。</p>
+              </div>
+            </div>
+
+            <section class="settings-pane is-active" data-settings-pane="folders">
+              <div class="settings-pane-header">
+                <div>
+                  <strong>聊天室分類</strong>
+                  <p>可新增資料夾並設定名稱，分類會固定顯示在左側聊天清單上方，預設依 A-Z 排序。</p>
+                </div>
+                <button type="button" class="add-folder-button" data-folder-add>新增</button>
+              </div>
+
+              <div class="settings-folder-list" data-folder-list>
+                <article class="settings-folder-card">
+                  <div class="settings-folder-row">
+                    <label class="field-label" for="folder-name-1">資料夾名稱</label>
+                  </div>
+                  <input id="folder-name-1" class="text-input" value="ALL" data-folder-name>
+                </article>
+              </div>
+            </section>
+          </section>
+        </section>
+      </section>
+
     </aside>
 
     <section class="desktop-stage">
-      <header class="stage-header panel-surface compact-panel">
-        <div>
-          <span class="eyebrow">Conversation Stage</span>
-          <h2>桌機版聊天工作區</h2>
-        </div>
-        <div class="stage-actions">
-          <span class="badge muted" data-realtime-state>WS 未連線</span>
-          <span class="badge">Files 40MB</span>
-          <span class="badge muted">Group Ready</span>
-        </div>
-      </header>
-
-      <section class="message-board panel-surface" data-message-board>
-        <div class="message-row incoming">
-          <div class="message-bubble">
-            <strong>系統提示</strong>
-            <p>先完成頁面登入，再建立或選擇一個對話，這裡就會載入真實訊息。</p>
+      <section class="chat-shell panel-surface">
+        <header class="chat-topbar">
+          <div class="chat-topbar-title">
+            <strong data-conversation-title>目前對話</strong>
+            <span data-message-status>請先登入並選擇對話。</span>
           </div>
-        </div>
-      </section>
+        </header>
 
-      <form class="composer panel-surface compact-panel" data-message-form>
-        <div class="composer-main">
-          <strong>Message Composer</strong>
-          <p data-message-status>請先登入並選擇對話。</p>
-          <small>支援文字、jpg、png、doc、pdf、xlsx，單檔上限 40MB。</small>
-        </div>
-        <div class="composer-fields">
-          <textarea class="text-input composer-input" name="content" rows="3" placeholder="輸入文字訊息"></textarea>
-          <label class="composer-file-label" for="composer-file">附加圖片 / 檔案</label>
-          <input id="composer-file" class="composer-file-input" name="file" type="file" accept=".jpg,.jpeg,.png,.doc,.pdf,.xlsx">
-          <small data-file-state>尚未選擇檔案</small>
-        </div>
-        <div class="composer-actions">
-          <button type="submit" class="primary-button">送出訊息</button>
-          <a class="ghost-link" href="/">回到入口</a>
-        </div>
-      </form>
+        <section class="message-board" data-message-board>
+        </section>
+
+        <form class="composer" data-message-form>
+          <div class="composer-fields">
+            <textarea class="text-input composer-input" name="content" rows="3" placeholder="輸入文字訊息"></textarea>
+            <div class="composer-meta">
+              <label class="composer-file-label" for="composer-file">附加圖片 / 檔案</label>
+              <small>支援文字、jpg、png、doc、pdf、xlsx，單檔上限 40MB。</small>
+            </div>
+            <input id="composer-file" class="composer-file-input" name="file" type="file" accept=".jpg,.jpeg,.png,.doc,.pdf,.xlsx">
+            <small data-file-state>尚未選擇檔案</small>
+          </div>
+          <div class="composer-actions">
+            <button type="submit" class="primary-button">送出訊息</button>
+          </div>
+        </form>
+      </section>
     </section>
   </main>
 </body>

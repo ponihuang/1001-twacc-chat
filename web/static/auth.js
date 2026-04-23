@@ -41,6 +41,25 @@
     return token.slice(0, 6) + "..." + token.slice(-4);
   }
 
+  function formatDateTime(value) {
+    if (!value) {
+      return "";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+    return date.toLocaleString("zh-TW", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
+    });
+  }
+
   function readSession() {
     return {
       token: localStorage.getItem(storageKeys.token) || "",
@@ -65,9 +84,9 @@
 
     if (session.token) {
       loginStateNode.textContent = "已登入";
-      tokenStateNode.textContent = maskToken(session.token);
+      tokenStateNode.textContent = "登入憑證有效";
       statusNode.textContent = session.expiresAt
-        ? "已保存 session token，過期時間：" + session.expiresAt
+        ? "已保存 session token，過期時間：" + formatDateTime(session.expiresAt)
         : "已保存 session token";
       statusNode.classList.remove("is-error");
       statusNode.classList.add("is-success");
