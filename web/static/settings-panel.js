@@ -5,6 +5,8 @@
   }
 
   const storageKey = "twacc_chat_folder_categories";
+  const activeFolderStorageKey = "twacc_chat_active_folder_tab_id";
+  const conversationCatalogStorageKey = "twacc_chat_conversation_catalog";
 
   const avatarPreview = panel.querySelector("[data-avatar-preview]");
   const avatarInput = panel.querySelector("[data-avatar-input]");
@@ -13,9 +15,22 @@
   const folderList = panel.querySelector("[data-folder-list]");
   const folderTabs = document.querySelector("[data-folder-tabs]");
   const addFolderButton = panel.querySelector("[data-folder-add]");
+  const folderListView = panel.querySelector("[data-folder-list-view]");
+  const folderEditView = panel.querySelector("[data-folder-edit-view]");
+  const folderEditBackButton = panel.querySelector("[data-folder-edit-back]");
+  const folderEditNameInput = panel.querySelector("[data-folder-edit-name]");
+  const folderChatList = panel.querySelector("[data-folder-chat-list]");
+  const folderEditSaveButton = panel.querySelector("[data-folder-edit-save]");
+  const folderEditMenuButton = panel.querySelector("[data-folder-edit-menu]");
+  const folderEditMenuPanel = panel.querySelector("[data-folder-edit-menu-panel]");
+  const folderEditDeleteButton = panel.querySelector("[data-folder-edit-delete]");
   const subviews = Array.from(panel.querySelectorAll("[data-settings-view]"));
   const openButtons = Array.from(panel.querySelectorAll("[data-settings-open]"));
   const backButton = panel.querySelector("[data-settings-back]");
+  const conversationList = document.querySelector("[data-conversation-list]");
+
+  let activeFolderID = "";
+  let activeFolderTabID = localStorage.getItem(activeFolderStorageKey) || "";
 
   function setSubview(name) {
     const target = name || "main";
@@ -23,10 +38,21 @@
     subviews.forEach(function (view) {
       view.classList.toggle("is-active", view.dataset.settingsView === target);
     });
+    syncSidebarState();
   }
 
-  function refreshFolderOrders() {
-    // Name ordering is handled by normalizeFolders; no per-card rank UI is shown.
+  function syncSidebarState() {
+    const shell = document.querySelector("[data-sidebar-shell]");
+    if (!shell || (shell.dataset.sidebarView || "home") !== "settings") {
+      return;
+    }
+    const target = panel.dataset.settingsView || "main";
+    document.dispatchEvent(new CustomEvent("twacc:sidebar-state", {
+      detail: {
+        title: target === "folders" ? "聊天室分類" : "設定",
+        backAction: target === "folders" ? "settings-main" : ""
+      }
+    }));
   }
 
   function escapeHTML(value) {
@@ -38,93 +64,67 @@
       .replaceAll("'", "&#39;");
   }
 
-  function createFolderCard(index, folder) {
-    const name = folder && folder.name ? folder.name : ("分類 " + index);
-    const isDefaultFolder = name.toUpperCase() === "ALL";
-    const article = document.createElement("article");
-    article.className = "settings-folder-card";
-    article.dataset.folderIndex = String(index - 1);
-    article.innerHTML = [
-      '<div class="settings-folder-row">',
-      '<label class="field-label">資料夾名稱</label>',
-      isDefaultFolder
-        ? '<span class="settings-folder-default">預設</span>'
-        : [
-          '<div class="settings-folder-actions">',
-          '<button type="button" class="settings-folder-action" data-folder-edit>編輯</button>',
-          '<button type="button" class="settings-folder-action is-danger" data-folder-delete>刪除</button>',
-          "</div>"
-        ].join(""),
-      "</div>",
-      '<input class="text-input" value="' + escapeHTML(name) + '" data-folder-name readonly>',
-    ].join("");
-    return article;
+  function folderID(name) {
+    return "folder_" + encodeURIComponent(String(name || "").trim().toLowerCase()).replaceAll("%", "_");
+  }
+
+  function createDefaultFolder() {
+    return {
+      id: "all",
+      name: "ALL",
+      conversation_ids: []
+    };
   }
 
   function normalizeFolders(items) {
     const folders = Array.isArray(items) ? items : [];
     const seen = new Set();
-    const cleaned = folders
-      .map(function (item, index) {
-        return {
-          name: String((item && item.name) || "").trim() || ("分類 " + (index + 1))
-        };
-      })
-      .filter(function (item) {
-        return item.name !== "";
-      })
-      .filter(function (item) {
-        const key = item.name.toUpperCase();
-        if (seen.has(key)) {
-          return false;
-        }
-        seen.add(key);
-        return true;
-      })
-      .sort(function (a, b) {
-        if (a.name.toUpperCase() === "ALL") {
-          return -1;
-        }
-        if (b.name.toUpperCase() === "ALL") {
-          return 1;
-        }
-        return a.name.localeCompare(b.name, "en", { sensitivity: "base" });
-      });
+    const cleaned = folders.map(function (item, index) {
+      const name = String((item && item.name) || "").trim() || ("分類 " + (index + 1));
+      return {
+        id: item && item.id ? String(item.id) : folderID(name),
+        name: name,
+        conversation_ids: Array.isArray(item && item.conversation_ids)
+          ? item.conversation_ids.map(String)
+          : []
+      };
+    }).filter(function (item) {
+      const key = item.name.toUpperCase();
+      if (!item.name || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    }).sort(function (a, b) {
+      if (a.name.toUpperCase() === "ALL") {
+        return -1;
+      }
+      if (b.name.toUpperCase() === "ALL") {
+        return 1;
+      }
+      return a.name.localeCompare(b.name, "en", { sensitivity: "base" });
+    });
 
     if (!cleaned.length || cleaned[0].name.toUpperCase() !== "ALL") {
-      cleaned.unshift({ name: "ALL" });
+      cleaned.unshift(createDefaultFolder());
     } else {
+      cleaned[0].id = "all";
       cleaned[0].name = "ALL";
     }
 
-    return cleaned.map(function (item, index) {
-      return {
-        name: index === 0 ? "ALL" : item.name
-      };
-    });
+    return cleaned;
   }
 
   function readFolders() {
     try {
       const raw = localStorage.getItem(storageKey);
       if (!raw) {
-        return normalizeFolders([{ name: "ALL" }]);
+        return normalizeFolders([createDefaultFolder()]);
       }
       return normalizeFolders(JSON.parse(raw));
     } catch (_) {
-      return normalizeFolders([{ name: "ALL" }]);
+      return normalizeFolders([createDefaultFolder()]);
     }
-  }
-
-  function collectFoldersFromDOM() {
-    const cards = Array.from(folderList.querySelectorAll(".settings-folder-card"));
-    const folders = cards.map(function (card, index) {
-      const nameInput = card.querySelector("[data-folder-name]");
-      return {
-        name: nameInput ? nameInput.value : ("分類 " + (index + 1))
-      };
-    });
-    return normalizeFolders(folders);
   }
 
   function saveFolders(folders) {
@@ -134,67 +134,215 @@
     return normalized;
   }
 
+  function customFolders(folders) {
+    return folders.filter(function (folder) {
+      return folder.name.toUpperCase() !== "ALL";
+    });
+  }
+
   function renderFolderTabs(folders) {
     if (!folderTabs) {
       return;
     }
-    folderTabs.innerHTML = folders.map(function (folder, index) {
-      const active = index === 0 ? " is-active" : "";
-      return '<button type="button" class="conversation-category-chip' + active + '">' + escapeHTML(folder.name) + "</button>";
-    }).join("");
+    const items = customFolders(folders);
+    const allActive = !activeFolderTabID ? " is-active" : "";
+    folderTabs.innerHTML = [
+      '<button type="button" class="conversation-category-chip' + allActive + '" data-folder-tab-id="">ALL</button>'
+    ].concat(items.map(function (folder) {
+      const active = folder.id === activeFolderTabID ? " is-active" : "";
+      return [
+        '<button type="button" class="conversation-category-chip' + active + '" data-folder-tab-id="' + escapeHTML(folder.id) + '">',
+        escapeHTML(folder.name),
+        "</button>"
+      ].join("");
+    })).join("");
+  }
+
+  function activeFolderTab() {
+    if (!activeFolderTabID) {
+      return null;
+    }
+    return readFolders().find(function (folder) {
+      return folder.id === activeFolderTabID;
+    }) || null;
+  }
+
+  function applyConversationFolderFilter() {
+    const folder = activeFolderTab();
+    const allowed = folder ? new Set((folder.conversation_ids || []).map(String)) : null;
+    document.dispatchEvent(new CustomEvent("twacc:conversation-filter-changed", {
+      detail: {
+        folderID: folder ? folder.id : "",
+        conversationIDs: folder ? Array.from(allowed) : []
+      }
+    }));
+  }
+
+  function conversationCount(folder) {
+    const count = Array.isArray(folder.conversation_ids) ? folder.conversation_ids.length : 0;
+    return count ? (count + " 個聊天") : "尚未加入聊天";
   }
 
   function renderFolderCards(folders) {
-    folderList.innerHTML = "";
-    folders.forEach(function (folder, index) {
-      folderList.appendChild(createFolderCard(index + 1, folder));
-    });
-    refreshFolderOrders();
-  }
-
-  function handleFolderChange() {
-    saveFolders(collectFoldersFromDOM());
-    renderFolderCards(readFolders());
+    const items = customFolders(folders);
+    folderList.innerHTML = items.length ? items.map(function (folder) {
+      return [
+        '<article class="settings-folder-item" data-folder-id="' + escapeHTML(folder.id) + '">',
+        '<button type="button" class="settings-folder-item-main" data-folder-open>',
+        "<strong>" + escapeHTML(folder.name) + "</strong>",
+        "<span>" + escapeHTML(conversationCount(folder)) + "</span>",
+        "</button>",
+        '<button type="button" class="settings-folder-more" data-folder-more aria-label="資料夾選單">⋮</button>',
+        '<div class="settings-folder-menu" data-folder-menu hidden>',
+        '<button type="button" data-folder-delete>刪除</button>',
+        "</div>",
+        "</article>"
+      ].join("");
+    }).join("") : [
+      '<div class="settings-folder-empty">',
+      "<strong>尚未建立資料夾</strong>",
+      "<span>按「建立新資料夾」開始分類聊天室。</span>",
+      "</div>"
+    ].join("");
   }
 
   function nextFolderName(folders) {
     const names = new Set(folders.map(function (folder) {
       return folder.name.toUpperCase();
     }));
-    let index = folders.length;
-    let name = "分類 " + index;
+    let index = customFolders(folders).length + 1;
+    let name = "資料夾 " + index;
     while (names.has(name.toUpperCase())) {
       index += 1;
-      name = "分類 " + index;
+      name = "資料夾 " + index;
     }
     return name;
   }
 
-  function setFolderEditing(card, isEditing) {
-    const input = card.querySelector("[data-folder-name]");
-    const editButton = card.querySelector("[data-folder-edit]");
-    if (!input || !editButton) {
-      return;
+  function readConversationsFromDOM() {
+    try {
+      const raw = localStorage.getItem(conversationCatalogStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length) {
+          return parsed.map(function (item) {
+            return {
+              id: String(item.id || ""),
+              title: String(item.title || ""),
+              preview: String(item.preview || "聊天室")
+            };
+          }).filter(function (item) {
+            return item.id !== "";
+          });
+        }
+      }
+    } catch (_) {
     }
-    card.classList.toggle("is-editing", isEditing);
-    input.readOnly = !isEditing;
-    editButton.textContent = isEditing ? "儲存" : "編輯";
-    if (isEditing) {
-      input.focus();
-      input.select();
-    }
+    return Array.from(document.querySelectorAll("[data-conversation-id]")).map(function (button) {
+      const id = String(button.dataset.conversationId || "");
+      const titleNode = button.querySelector(".conversation-card-header strong");
+      const previewNode = button.querySelector(".conversation-card-header + span");
+      return {
+        id: id,
+        title: titleNode ? titleNode.textContent.trim() : ("對話 " + id),
+        preview: previewNode ? previewNode.textContent.trim() : "聊天室"
+      };
+    }).filter(function (item) {
+      return item.id !== "";
+    });
   }
 
-  function deleteFolder(card) {
-    const index = Number(card.dataset.folderIndex || 0);
-    if (index === 0) {
+  function findFolder(folderIDValue) {
+    return readFolders().find(function (folder) {
+      return folder.id === folderIDValue;
+    });
+  }
+
+  function setFolderView(mode) {
+    const editing = mode === "edit";
+    folderListView.hidden = editing;
+    folderEditView.hidden = !editing;
+  }
+
+  function renderFolderChatList(folder) {
+    const conversations = readConversationsFromDOM();
+    const selected = new Set((folder.conversation_ids || []).map(String));
+    folderChatList.innerHTML = conversations.length ? conversations.map(function (conversation) {
+      const checked = selected.has(conversation.id) ? " checked" : "";
+      return [
+        '<label class="settings-folder-chat-item">',
+        '<input type="checkbox" value="' + escapeHTML(conversation.id) + '"' + checked + '>',
+        '<span class="settings-folder-chat-avatar">' + escapeHTML(conversation.title.slice(0, 1).toUpperCase()) + "</span>",
+        "<span>",
+        "<strong>" + escapeHTML(conversation.title) + "</strong>",
+        "<small>" + escapeHTML(conversation.preview) + "</small>",
+        "</span>",
+        "</label>"
+      ].join("");
+    }).join("") : [
+      '<div class="settings-folder-empty">',
+      "<strong>目前沒有可加入的聊天室</strong>",
+      "<span>請先載入或建立對話。</span>",
+      "</div>"
+    ].join("");
+  }
+
+  function openFolderEditor(folderIDValue) {
+    const folder = findFolder(folderIDValue);
+    if (!folder) {
       return;
     }
-    const folders = readFolders().filter(function (_, itemIndex) {
-      return itemIndex !== index;
+    activeFolderID = folder.id;
+    folderEditNameInput.value = folder.name;
+    if (folderEditMenuPanel) {
+      folderEditMenuPanel.hidden = true;
+    }
+    renderFolderChatList(folder);
+    setFolderView("edit");
+  }
+
+  function saveActiveFolder() {
+    if (!activeFolderID) {
+      return;
+    }
+    const folders = readFolders();
+    const target = folders.find(function (folder) {
+      return folder.id === activeFolderID;
     });
-    saveFolders(folders);
-    renderFolderCards(readFolders());
+    if (!target) {
+      return;
+    }
+    const selectedIDs = Array.from(folderChatList.querySelectorAll('input[type="checkbox"]:checked')).map(function (input) {
+      return String(input.value);
+    });
+    target.name = folderEditNameInput.value.trim() || target.name;
+    target.conversation_ids = selectedIDs;
+    const saved = saveFolders(folders);
+    renderFolderCards(saved);
+    const updated = saved.find(function (folder) {
+      return folder.id === activeFolderID;
+    });
+    if (updated) {
+      folderEditNameInput.value = updated.name;
+      renderFolderChatList(updated);
+    }
+    applyConversationFolderFilter();
+  }
+
+  function deleteFolder(folderIDValue) {
+    const saved = saveFolders(readFolders().filter(function (folder) {
+      return folder.id !== folderIDValue && folder.name.toUpperCase() !== "ALL";
+    }));
+    if (activeFolderTabID === folderIDValue) {
+      activeFolderTabID = "";
+      renderFolderTabs(saved);
+      applyConversationFolderFilter();
+    }
+    renderFolderCards(saved);
+    if (activeFolderID === folderIDValue) {
+      activeFolderID = "";
+      setFolderView("list");
+    }
   }
 
   if (avatarInput && avatarPreview) {
@@ -232,69 +380,136 @@
   if (addFolderButton && folderList) {
     addFolderButton.addEventListener("click", function () {
       const folders = readFolders();
-      folders.push({
-        name: nextFolderName(folders)
-      });
+      const folder = {
+        id: "folder_" + Date.now(),
+        name: nextFolderName(folders),
+        conversation_ids: []
+      };
+      folders.push(folder);
       saveFolders(folders);
       renderFolderCards(readFolders());
+      openFolderEditor(folder.id);
     });
   }
 
   if (folderList) {
     folderList.addEventListener("click", function (event) {
-      const editButton = event.target.closest("[data-folder-edit]");
-      const deleteButton = event.target.closest("[data-folder-delete]");
-
-      if (editButton) {
-        const card = editButton.closest(".settings-folder-card");
-        if (!card) {
-          return;
-        }
-        if (!card.classList.contains("is-editing")) {
-          setFolderEditing(card, true);
-          return;
-        }
-        handleFolderChange();
+      const card = event.target.closest("[data-folder-id]");
+      if (!card) {
         return;
       }
 
-      if (deleteButton) {
-        const card = deleteButton.closest(".settings-folder-card");
-        if (card) {
-          deleteFolder(card);
+      if (event.target.closest("[data-folder-more]")) {
+        const menu = card.querySelector("[data-folder-menu]");
+        if (menu) {
+          menu.hidden = !menu.hidden;
         }
+        return;
+      }
+
+      if (event.target.closest("[data-folder-delete]")) {
+        deleteFolder(card.dataset.folderId);
+        return;
+      }
+
+      if (event.target.closest("[data-folder-open]")) {
+        openFolderEditor(card.dataset.folderId);
       }
     });
+  }
 
-    folderList.addEventListener("keydown", function (event) {
-      if (!event.target.matches("[data-folder-name]")) {
-        return;
-      }
+  if (folderEditBackButton) {
+    folderEditBackButton.addEventListener("click", function () {
+      saveActiveFolder();
+      setFolderView("list");
+    });
+  }
+
+  if (folderEditSaveButton) {
+    folderEditSaveButton.addEventListener("click", saveActiveFolder);
+  }
+
+  if (folderEditNameInput) {
+    folderEditNameInput.addEventListener("keydown", function (event) {
       if (event.key === "Enter") {
         event.preventDefault();
-        handleFolderChange();
+        saveActiveFolder();
       }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        renderFolderCards(readFolders());
+    });
+  }
+
+  if (folderEditMenuButton && folderEditMenuPanel) {
+    folderEditMenuButton.addEventListener("click", function () {
+      folderEditMenuPanel.hidden = !folderEditMenuPanel.hidden;
+    });
+  }
+
+  if (folderEditDeleteButton) {
+    folderEditDeleteButton.addEventListener("click", function () {
+      deleteFolder(activeFolderID);
+    });
+  }
+
+  if (folderTabs) {
+    folderTabs.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-folder-tab-id]");
+      if (!button) {
+        return;
       }
+      const folderIDValue = button.dataset.folderTabId || "";
+      activeFolderTabID = activeFolderTabID === folderIDValue ? "" : folderIDValue;
+      if (activeFolderTabID) {
+        localStorage.setItem(activeFolderStorageKey, activeFolderTabID);
+      } else {
+        localStorage.removeItem(activeFolderStorageKey);
+      }
+      renderFolderTabs(readFolders());
+      applyConversationFolderFilter();
     });
   }
 
   openButtons.forEach(function (button) {
     button.addEventListener("click", function () {
       setSubview(button.dataset.settingsOpen);
+      if (button.dataset.settingsOpen === "folders") {
+        if (activeFolderTabID && findFolder(activeFolderTabID)) {
+          openFolderEditor(activeFolderTabID);
+          return;
+        }
+        setFolderView("list");
+      }
     });
   });
 
   if (backButton) {
     backButton.addEventListener("click", function () {
       setSubview("main");
+      setFolderView("list");
     });
   }
+
+  document.addEventListener("twacc:sidebar-view-changed", function (event) {
+    const view = event.detail && event.detail.view;
+    if (view !== "settings") {
+      return;
+    }
+    setSubview("main");
+    setFolderView("list");
+  });
+
+  document.addEventListener("twacc:sidebar-back", function (event) {
+    const detail = event.detail || {};
+    if (detail.action !== "settings-main") {
+      return;
+    }
+    setSubview("main");
+    setFolderView("list");
+  });
 
   const folders = readFolders();
   renderFolderCards(folders);
   renderFolderTabs(folders);
+  applyConversationFolderFilter();
+  setFolderView("list");
   setSubview("main");
 })();

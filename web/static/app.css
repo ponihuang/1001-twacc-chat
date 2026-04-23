@@ -207,6 +207,10 @@ strong {
   color: var(--text);
 }
 
+.sidebar-topbar-text strong {
+  color: var(--text);
+}
+
 .sidebar-entry-link {
   margin-left: auto;
   color: var(--accent-strong);
@@ -389,6 +393,34 @@ strong {
   gap: 14px;
 }
 
+.settings-folder-list-view,
+.settings-folder-edit-view {
+  display: grid;
+  gap: 20px;
+}
+
+.settings-folder-hero,
+.settings-folder-edit-art {
+  justify-self: center;
+  font-size: 5.2rem;
+  line-height: 1;
+  filter: drop-shadow(0 12px 18px rgba(36, 24, 16, 0.12));
+}
+
+.settings-folder-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.settings-folder-section-title {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
 .settings-subview-header {
   display: grid;
   gap: 10px;
@@ -409,8 +441,9 @@ strong {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  justify-self: center;
   min-height: 38px;
-  padding: 0 16px;
+  padding: 0 20px;
   border: 0;
   border-radius: 999px;
   background: #2a9df4;
@@ -461,69 +494,166 @@ strong {
 
 .settings-folder-list {
   display: grid;
-  gap: 12px;
+  gap: 4px;
 }
 
-.settings-folder-card {
+.settings-folder-item {
+  position: relative;
   display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
   gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.6);
+  min-height: 62px;
+  padding: 6px 0 6px 0;
+  border-radius: 14px;
 }
 
-.settings-folder-row {
+.settings-folder-item:hover {
+  background: rgba(165, 63, 43, 0.07);
+}
+
+.settings-folder-item-main {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-folder-item-main strong {
+  font-size: 1.08rem;
+}
+
+.settings-folder-item-main span {
+  color: var(--muted);
+}
+
+.settings-folder-more,
+.settings-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1.45rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-folder-more:hover,
+.settings-icon-button:hover {
+  background: rgba(165, 63, 43, 0.08);
+  color: var(--text);
+}
+
+.settings-folder-menu {
+  position: absolute;
+  top: 42px;
+  right: 8px;
+  z-index: 4;
+  min-width: 140px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 249, 241, 0.98);
+  box-shadow: 0 18px 44px rgba(36, 24, 16, 0.16);
+}
+
+.settings-folder-menu button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #b73b2e;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-folder-menu button:hover {
+  background: rgba(165, 63, 43, 0.08);
+}
+
+.settings-folder-empty {
+  display: grid;
+  gap: 4px;
+  padding: 18px 10px;
+  color: var(--muted);
+}
+
+.settings-folder-empty strong {
+  color: var(--text);
+}
+
+.settings-folder-edit-header {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-folder-edit-header strong {
+  font-size: 1.35rem;
+}
+
+.settings-folder-edit-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.settings-folder-actions {
-  display: inline-flex;
-  align-items: center;
+.settings-folder-chat-list {
+  display: grid;
   gap: 8px;
 }
 
-.settings-folder-action,
-.settings-folder-default {
-  display: inline-flex;
+.settings-folder-chat-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--accent-strong);
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.settings-folder-action {
+  gap: 12px;
+  padding: 10px 4px;
+  color: var(--text);
   cursor: pointer;
 }
 
-.settings-folder-action:hover {
-  border-color: rgba(165, 63, 43, 0.3);
-  background: rgba(165, 63, 43, 0.08);
+.settings-folder-chat-item input {
+  order: 3;
 }
 
-.settings-folder-action.is-danger {
-  color: #8d2d1f;
+.settings-folder-chat-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: rgba(42, 157, 244, 0.18);
+  color: var(--accent-strong);
+  font-weight: 800;
 }
 
-.settings-folder-card .text-input[readonly] {
-  background: rgba(255, 255, 255, 0.58);
-  cursor: default;
+.settings-folder-chat-item span:last-child {
+  display: grid;
+  gap: 2px;
 }
 
-.settings-folder-card.is-editing {
-  border-color: rgba(165, 63, 43, 0.36);
-  background: rgba(255, 255, 255, 0.76);
+.settings-folder-chat-item small {
+  color: var(--muted);
 }
 
 .settings-inline-field {

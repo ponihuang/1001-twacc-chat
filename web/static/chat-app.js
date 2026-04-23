@@ -7,7 +7,10 @@
   const storageKeys = {
     token: "twacc_chat_session_token",
     sourceSystem: "twacc_chat_source_system",
-    activeConversationID: "twacc_chat_active_conversation_id"
+    activeConversationID: "twacc_chat_active_conversation_id",
+    activeFolderID: "twacc_chat_active_folder_tab_id",
+    folderCategories: "twacc_chat_folder_categories",
+    conversationCatalog: "twacc_chat_conversation_catalog"
   };
 
   const conversationList = app.querySelector("[data-conversation-list]");
@@ -26,6 +29,7 @@
 
   let conversations = [];
   let activeConversationID = 0;
+  let activeFolderID = localStorage.getItem(storageKeys.activeFolderID) || "";
   let realtimeSocket = null;
   let reconnectTimer = 0;
   let reconnectAttempts = 0;
@@ -117,6 +121,41 @@
     return active ? active.title : "";
   }
 
+  function readFolderCategories() {
+    try {
+      const raw = localStorage.getItem(storageKeys.folderCategories);
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function filteredConversations(items) {
+    if (!activeFolderID) {
+      return items;
+    }
+    const folder = readFolderCategories().find(function (item) {
+      return String(item.id || "") === activeFolderID;
+    });
+    if (!folder || !Array.isArray(folder.conversation_ids)) {
+      return items;
+    }
+    const allowed = new Set(folder.conversation_ids.map(String));
+    return items.filter(function (item) {
+      return allowed.has(String(item.conversation_id));
+    });
+  }
+
+  function syncConversationCatalog(items) {
+    localStorage.setItem(storageKeys.conversationCatalog, JSON.stringify(items.map(function (item) {
+      return {
+        id: String(item.conversation_id),
+        title: item.title || "",
+        preview: conversationPreview(item)
+      };
+    })));
+  }
+
   function renderEmptyConversationState(title, detail) {
     const stateTitle = title || "請選擇對話對象，開始傳訊息";
     const stateDetail = detail || stateTitle;
@@ -150,20 +189,23 @@
 
   function renderConversationList(items) {
     conversations = items;
-    if (!items.length) {
+    syncConversationCatalog(items);
+
+    const visibleItems = filteredConversations(items);
+    if (!visibleItems.length) {
       conversationList.innerHTML = [
         '<article class="conversation-card is-placeholder">',
-        "<strong>目前沒有對話</strong>",
-        "<span>先建立一個一對一對話</span>",
-        "<small>等待建立</small>",
+        "<strong>" + (items.length ? "此分類尚無對話" : "目前沒有對話") + "</strong>",
+        "<span>" + (items.length ? "請到聊天室分類加入對話" : "先建立一個一對一對話") + "</span>",
+        "<small>" + (items.length ? "等待分類" : "等待建立") + "</small>",
         "</article>"
       ].join("");
-      conversationSummary.textContent = "目前尚無對話，請先建立一個一對一對話。";
+      conversationSummary.textContent = items.length ? "此聊天室分類目前沒有對應對話。" : "目前尚無對話，請先建立一個一對一對話。";
       renderEmptyConversationState("請選擇對話對象，開始傳訊息");
       return;
     }
 
-    conversationList.innerHTML = items.map(function (item) {
+    conversationList.innerHTML = visibleItems.map(function (item) {
       const active = item.conversation_id === activeConversationID ? " is-active" : "";
       const preview = conversationPreview(item);
       const meta = formatTime(item.last_message_at) || (item.member_count + " 位成員");
@@ -179,7 +221,7 @@
       ].join("");
     }).join("");
 
-    conversationSummary.textContent = "已載入 " + items.length + " 筆對話。";
+    conversationSummary.textContent = "已載入 " + visibleItems.length + " 筆對話。";
 
     conversationList.querySelectorAll("[data-conversation-id]").forEach(function (button) {
       button.addEventListener("click", function () {
@@ -561,9 +603,29 @@
     loadConversations();
   });
 
+  document.addEventListener("twacc:conversation-filter-changed", function (event) {
+    const detail = event.detail || {};
+    activeFolderID = detail.folderID || "";
+    if (activeFolderID) {
+      localStorage.setItem(storageKeys.activeFolderID, activeFolderID);
+    } else {
+      localStorage.removeItem(storageKeys.activeFolderID);
+    }
+    renderConversationList(conversations);
+    if (!activeConversationID) {
+      return;
+    }
+    if (!detail.folderID || !Array.isArray(detail.conversationIDs) || detail.conversationIDs.indexOf(String(activeConversationID)) < 0) {
+      closeActiveConversation();
+    }
+  });
+
   window.addEventListener("storage", function (event) {
     if (!event.key || event.key.indexOf("twacc_chat_") !== 0) {
       return;
+    }
+    if (event.key === storageKeys.activeFolderID) {
+      activeFolderID = localStorage.getItem(storageKeys.activeFolderID) || "";
     }
     loadConversations();
   });
