@@ -66,7 +66,8 @@
 1. 桌機版全畫面提供雙欄式工作區。
 2. 手機版全畫面提供單欄式頁面切換。
 3. 嵌入式小浮動視窗可放入其他系統頁面中，作為輕量聊天入口。
-4. 三種介面共用同一套聊天 API、登入狀態與權限邏輯。`r`n5. 目前建議路由為 `/chat`、`/m/chat`、`/embed/chat`。
+4. 三種介面共用同一套聊天 API、登入狀態與權限邏輯。
+5. 目前建議路由為 `/chat`、`/m/chat`、`/embed/chat`。
 
 ## 4. 前端結構
 
@@ -76,7 +77,9 @@ MVP 先採傳統模板加靜態資源方式，後續可視需要再拆成 SPA。
 - `web/static`：CSS、JavaScript、圖片素材
 - `web/templates/desktop`：桌機版全畫面頁面
 - `web/templates/mobile`：手機版全畫面頁面
-- `web/templates/embed`：嵌入式浮動視窗頁面`r`n- 目前程式已先以 `desktop.html`、`mobile.html`、`embed.html` 實作骨架模板
+- `web/templates/embed`：嵌入式浮動視窗頁面
+- 目前程式已先以 `desktop.html`、`mobile.html`、`embed.html` 實作骨架模板
+- 桌機版設定頁中的頭像與聊天室分類目前仍屬前端原型；聊天室分類資料暫存於瀏覽器 `localStorage`，正式版需改由後端設定 API 與資料表承接
 
 ## 5. 資料層方向
 

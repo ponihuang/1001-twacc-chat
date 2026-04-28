@@ -33,6 +33,7 @@
   let realtimeSocket = null;
   let reconnectTimer = 0;
   let reconnectAttempts = 0;
+  let messageLoadToken = 0;
 
   function readSessionToken() {
     return localStorage.getItem(storageKeys.token) || "";
@@ -169,6 +170,14 @@
     ].join("");
   }
 
+  function renderLoadingConversationState() {
+    messageBoard.innerHTML = [
+      '<div class="empty-chat-state">',
+      "<strong>載入中...</strong>",
+      "</div>"
+    ].join("");
+  }
+
   function closeActiveConversation() {
     if (!activeConversationID) {
       return;
@@ -207,7 +216,7 @@
 
     conversationList.innerHTML = visibleItems.map(function (item) {
       const active = item.conversation_id === activeConversationID ? " is-active" : "";
-      const preview = conversationPreview(item);
+      const preview = conversationPreviewExcerpt(item);
       const meta = formatTime(item.last_message_at) || (item.member_count + " 位成員");
       const unread = item.unread_count > 0
         ? ('<span class="conversation-unread-badge" aria-label="未讀訊息 ' + item.unread_count + ' 則">' + item.unread_count + "</span>")
@@ -244,6 +253,15 @@
       return "附件";
     }
     return item.last_message_preview || (item.type === "direct" ? "一對一對話" : "群組對話");
+  }
+
+  function conversationPreviewExcerpt(item) {
+    const preview = conversationPreview(item);
+    const limit = 15;
+    if (preview.length <= limit) {
+      return preview;
+    }
+    return preview.slice(0, limit) + "...";
   }
 
   function renderMessages(data) {
@@ -370,13 +388,18 @@
       return;
     }
 
+    const requestToken = ++messageLoadToken;
     setConversationUIActive(true);
     setMessageStatus("正在載入訊息...", false);
     setConversationTitle(activeConversationTitle());
+    renderLoadingConversationState();
     const response = await fetch("/api/conversations/" + conversationID + "/messages", {
       headers: { Authorization: headers.Authorization }
     });
     const result = await parseJSON(response);
+    if (requestToken !== messageLoadToken || conversationID !== activeConversationID) {
+      return;
+    }
     if (!response.ok || !result.success) {
       setMessageStatus(result.message || "訊息讀取失敗。", true);
       return;

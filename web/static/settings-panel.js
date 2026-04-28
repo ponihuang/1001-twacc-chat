@@ -21,6 +21,7 @@
   const folderEditNameInput = panel.querySelector("[data-folder-edit-name]");
   const folderChatList = panel.querySelector("[data-folder-chat-list]");
   const folderEditSaveButton = panel.querySelector("[data-folder-edit-save]");
+  const folderEditStatus = panel.querySelector("[data-folder-edit-status]");
   const folderEditMenuButton = panel.querySelector("[data-folder-edit-menu]");
   const folderEditMenuPanel = panel.querySelector("[data-folder-edit-menu-panel]");
   const folderEditDeleteButton = panel.querySelector("[data-folder-edit-delete]");
@@ -297,6 +298,12 @@
     if (folderEditMenuPanel) {
       folderEditMenuPanel.hidden = true;
     }
+    if (folderEditStatus) {
+      folderEditStatus.hidden = true;
+      folderEditStatus.textContent = "已儲存";
+      folderEditStatus.classList.remove("is-error");
+      folderEditStatus.classList.add("is-success");
+    }
     renderFolderChatList(folder);
     setFolderView("edit");
   }
@@ -325,6 +332,12 @@
     if (updated) {
       folderEditNameInput.value = updated.name;
       renderFolderChatList(updated);
+    }
+    if (folderEditStatus) {
+      folderEditStatus.hidden = false;
+      folderEditStatus.textContent = "已儲存";
+      folderEditStatus.classList.remove("is-error");
+      folderEditStatus.classList.add("is-success");
     }
     applyConversationFolderFilter();
   }
@@ -472,10 +485,6 @@
     button.addEventListener("click", function () {
       setSubview(button.dataset.settingsOpen);
       if (button.dataset.settingsOpen === "folders") {
-        if (activeFolderTabID && findFolder(activeFolderTabID)) {
-          openFolderEditor(activeFolderTabID);
-          return;
-        }
         setFolderView("list");
       }
     });
