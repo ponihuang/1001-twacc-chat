@@ -23,7 +23,7 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(filepath.Join("web", "uploads")))))
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		indexHandler(w, r, pages)
 	})
 	mux.HandleFunc("GET /chat", func(w http.ResponseWriter, r *http.Request) {
