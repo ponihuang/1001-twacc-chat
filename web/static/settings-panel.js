@@ -7,11 +7,18 @@
   const storageKey = "twacc_chat_folder_categories";
   const activeFolderStorageKey = "twacc_chat_active_folder_tab_id";
   const conversationCatalogStorageKey = "twacc_chat_conversation_catalog";
+  const sessionStorageKeys = {
+    token: "twacc_chat_session_token",
+    sourceSystem: "twacc_chat_source_system",
+    externalUserID: "twacc_chat_external_user_id"
+  };
 
   const avatarPreview = panel.querySelector("[data-avatar-preview]");
   const avatarInput = panel.querySelector("[data-avatar-input]");
   const avatarRemoveButton = panel.querySelector("[data-avatar-remove]");
   const avatarEditButton = panel.querySelector("[data-avatar-edit]");
+  const profileName = panel.querySelector("[data-settings-profile-name]");
+  const profileAccount = panel.querySelector("[data-settings-profile-account]");
   const folderList = panel.querySelector("[data-folder-list]");
   const folderTabs = document.querySelector("[data-folder-tabs]");
   const addFolderButton = panel.querySelector("[data-folder-add]");
@@ -31,7 +38,55 @@
   const conversationList = document.querySelector("[data-conversation-list]");
 
   let activeFolderID = "";
-  let activeFolderTabID = localStorage.getItem(activeFolderStorageKey) || "";
+  let activeFolderTabID = "";
+
+  function readSession() {
+    return {
+      token: localStorage.getItem(sessionStorageKeys.token) || "",
+      sourceSystem: localStorage.getItem(sessionStorageKeys.sourceSystem) || "",
+      externalUserID: localStorage.getItem(sessionStorageKeys.externalUserID) || ""
+    };
+  }
+
+  function isLoggedIn() {
+    return Boolean(readSession().token);
+  }
+
+  function accountStorageKey(base) {
+    const session = readSession();
+    if (!session.token || !session.sourceSystem || !session.externalUserID) {
+      return "";
+    }
+    return base + "::" + encodeURIComponent(session.sourceSystem + ":" + session.externalUserID);
+  }
+
+  function renderProfile() {
+    const session = readSession();
+    if (!session.token) {
+      if (profileName) {
+        profileName.textContent = "未登入";
+      }
+      if (profileAccount) {
+        profileAccount.textContent = "請先登入";
+      }
+      if (avatarPreview) {
+        avatarPreview.textContent = "";
+        avatarPreview.style.backgroundImage = "";
+        avatarPreview.classList.remove("has-image");
+      }
+      return;
+    }
+
+    if (profileName) {
+      profileName.textContent = session.externalUserID || "使用者";
+    }
+    if (profileAccount) {
+      profileAccount.textContent = [session.sourceSystem || "unknown", session.externalUserID || "unknown"].join(" / ");
+    }
+    if (avatarPreview && !avatarPreview.classList.contains("has-image")) {
+      avatarPreview.textContent = (session.externalUserID || "U").slice(0, 1).toUpperCase();
+    }
+  }
 
   function setSubview(name) {
     const target = name || "main";
@@ -117,8 +172,12 @@
   }
 
   function readFolders() {
+    const key = accountStorageKey(storageKey);
+    if (!key) {
+      return normalizeFolders([createDefaultFolder()]);
+    }
     try {
-      const raw = localStorage.getItem(storageKey);
+      const raw = localStorage.getItem(key);
       if (!raw) {
         return normalizeFolders([createDefaultFolder()]);
       }
@@ -129,8 +188,12 @@
   }
 
   function saveFolders(folders) {
+    const key = accountStorageKey(storageKey);
+    if (!key) {
+      return normalizeFolders([createDefaultFolder()]);
+    }
     const normalized = normalizeFolders(folders);
-    localStorage.setItem(storageKey, JSON.stringify(normalized));
+    localStorage.setItem(key, JSON.stringify(normalized));
     renderFolderTabs(normalized);
     return normalized;
   }
@@ -145,6 +208,12 @@
     if (!folderTabs) {
       return;
     }
+    if (!isLoggedIn()) {
+      folderTabs.hidden = true;
+      folderTabs.innerHTML = "";
+      return;
+    }
+    folderTabs.hidden = false;
     const items = customFolders(folders);
     const allActive = !activeFolderTabID ? " is-active" : "";
     folderTabs.innerHTML = [
@@ -222,7 +291,8 @@
 
   function readConversationsFromDOM() {
     try {
-      const raw = localStorage.getItem(conversationCatalogStorageKey);
+      const key = accountStorageKey(conversationCatalogStorageKey);
+      const raw = key ? localStorage.getItem(key) : "";
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length) {
@@ -358,6 +428,43 @@
     }
   }
 
+  function renderLoggedOutSettings() {
+    activeFolderID = "";
+    activeFolderTabID = "";
+    renderProfile();
+    if (folderTabs) {
+      folderTabs.hidden = true;
+      folderTabs.innerHTML = "";
+    }
+    if (folderList) {
+      folderList.innerHTML = "";
+    }
+    if (folderChatList) {
+      folderChatList.innerHTML = "";
+    }
+    setFolderView("list");
+    applyConversationFolderFilter();
+  }
+
+  function renderLoggedInSettings() {
+    const activeFolderKey = accountStorageKey(activeFolderStorageKey);
+    activeFolderTabID = activeFolderKey ? localStorage.getItem(activeFolderKey) || "" : "";
+    renderProfile();
+    const folders = readFolders();
+    renderFolderCards(folders);
+    renderFolderTabs(folders);
+    applyConversationFolderFilter();
+    setFolderView("list");
+  }
+
+  function renderSettingsForSession() {
+    if (!isLoggedIn()) {
+      renderLoggedOutSettings();
+      return;
+    }
+    renderLoggedInSettings();
+  }
+
   if (avatarInput && avatarPreview) {
     avatarInput.addEventListener("change", function () {
       const file = avatarInput.files && avatarInput.files[0];
@@ -471,10 +578,13 @@
       }
       const folderIDValue = button.dataset.folderTabId || "";
       activeFolderTabID = activeFolderTabID === folderIDValue ? "" : folderIDValue;
+      const key = accountStorageKey(activeFolderStorageKey);
       if (activeFolderTabID) {
-        localStorage.setItem(activeFolderStorageKey, activeFolderTabID);
-      } else {
-        localStorage.removeItem(activeFolderStorageKey);
+        if (key) {
+          localStorage.setItem(key, activeFolderTabID);
+        }
+      } else if (key) {
+        localStorage.removeItem(key);
       }
       renderFolderTabs(readFolders());
       applyConversationFolderFilter();
@@ -502,6 +612,7 @@
     if (view !== "settings") {
       return;
     }
+    renderSettingsForSession();
     setSubview("main");
     setFolderView("list");
   });
@@ -515,10 +626,8 @@
     setFolderView("list");
   });
 
-  const folders = readFolders();
-  renderFolderCards(folders);
-  renderFolderTabs(folders);
-  applyConversationFolderFilter();
-  setFolderView("list");
+  document.addEventListener("twacc:session-changed", renderSettingsForSession);
+
+  renderSettingsForSession();
   setSubview("main");
 })();

@@ -15,6 +15,7 @@
 
   const conversationList = app.querySelector("[data-conversation-list]");
   const conversationSummary = app.querySelector("[data-conversation-summary]");
+  const folderTabs = app.querySelector("[data-folder-tabs]");
   const directForm = app.querySelector("[data-direct-form]");
   const directStatus = app.querySelector("[data-direct-status]");
   const directExternalUserIDInput = app.querySelector("#direct-external-user-id");
@@ -29,7 +30,7 @@
 
   let conversations = [];
   let activeConversationID = 0;
-  let activeFolderID = localStorage.getItem(storageKeys.activeFolderID) || "";
+  let activeFolderID = "";
   let realtimeSocket = null;
   let reconnectTimer = 0;
   let reconnectAttempts = 0;
@@ -41,6 +42,27 @@
 
   function readSourceSystem() {
     return localStorage.getItem(storageKeys.sourceSystem) || "erp";
+  }
+
+  function readExternalUserID() {
+    return localStorage.getItem("twacc_chat_external_user_id") || "";
+  }
+
+  function accountStorageKey(base) {
+    const token = readSessionToken();
+    const sourceSystem = readSourceSystem();
+    const externalUserID = readExternalUserID();
+    if (!token || !sourceSystem || !externalUserID) {
+      return "";
+    }
+    return base + "::" + encodeURIComponent(sourceSystem + ":" + externalUserID);
+  }
+
+  function loadSessionScopedState() {
+    const activeConversationKey = accountStorageKey(storageKeys.activeConversationID);
+    const activeFolderKey = accountStorageKey(storageKeys.activeFolderID);
+    activeConversationID = activeConversationKey ? Number(localStorage.getItem(activeConversationKey) || 0) : 0;
+    activeFolderID = activeFolderKey ? localStorage.getItem(activeFolderKey) || "" : "";
   }
 
   function authHeaders() {
@@ -123,8 +145,12 @@
   }
 
   function readFolderCategories() {
+    const key = accountStorageKey(storageKeys.folderCategories);
+    if (!key) {
+      return [];
+    }
     try {
-      const raw = localStorage.getItem(storageKeys.folderCategories);
+      const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : [];
     } catch (_) {
       return [];
@@ -148,7 +174,11 @@
   }
 
   function syncConversationCatalog(items) {
-    localStorage.setItem(storageKeys.conversationCatalog, JSON.stringify(items.map(function (item) {
+    const key = accountStorageKey(storageKeys.conversationCatalog);
+    if (!key) {
+      return;
+    }
+    localStorage.setItem(key, JSON.stringify(items.map(function (item) {
       return {
         id: String(item.conversation_id),
         title: item.title || "",
@@ -183,7 +213,10 @@
       return;
     }
     activeConversationID = 0;
-    localStorage.removeItem(storageKeys.activeConversationID);
+    const key = accountStorageKey(storageKeys.activeConversationID);
+    if (key) {
+      localStorage.removeItem(key);
+    }
     renderConversationList(conversations);
     renderEmptyConversationState();
   }
@@ -238,7 +271,10 @@
         if (!activeConversationID) {
           return;
         }
-        localStorage.setItem(storageKeys.activeConversationID, String(activeConversationID));
+        const key = accountStorageKey(storageKeys.activeConversationID);
+        if (key) {
+          localStorage.setItem(key, String(activeConversationID));
+        }
         renderConversationList(conversations);
         loadMessages(activeConversationID);
       });
@@ -338,6 +374,7 @@
   }
 
   async function loadConversations() {
+    loadSessionScopedState();
     const items = await fetchConversationItems();
     if (!items) {
       return;
@@ -355,10 +392,19 @@
   async function fetchConversationItems() {
     const headers = authHeaders();
     if (!headers) {
+      activeConversationID = 0;
+      activeFolderID = "";
+      if (folderTabs) {
+        folderTabs.hidden = true;
+      }
       renderConversationList([]);
       conversationSummary.textContent = "請先登入，再載入對話列表。";
       renderEmptyConversationState("請選擇對話對象，開始傳訊息");
       return null;
+    }
+
+    if (folderTabs) {
+      folderTabs.hidden = false;
     }
 
     const response = await fetch("/api/conversations", {
@@ -470,7 +516,10 @@
       loadConversations();
       if (event.conversation_id) {
         activeConversationID = Number(event.conversation_id);
-        localStorage.setItem(storageKeys.activeConversationID, String(activeConversationID));
+        const key = accountStorageKey(storageKeys.activeConversationID);
+        if (key) {
+          localStorage.setItem(key, String(activeConversationID));
+        }
         loadMessages(activeConversationID);
       }
       return;
@@ -554,7 +603,10 @@
     }
 
     activeConversationID = result.data.conversation_id;
-    localStorage.setItem(storageKeys.activeConversationID, String(activeConversationID));
+    const key = accountStorageKey(storageKeys.activeConversationID);
+    if (key) {
+      localStorage.setItem(key, String(activeConversationID));
+    }
     directStatus.textContent = "對話已準備完成：" + (result.data.title || directExternalUserIDInput.value.trim());
     directStatus.classList.add("is-success");
     await loadConversations();
@@ -629,10 +681,13 @@
   document.addEventListener("twacc:conversation-filter-changed", function (event) {
     const detail = event.detail || {};
     activeFolderID = detail.folderID || "";
+    const key = accountStorageKey(storageKeys.activeFolderID);
     if (activeFolderID) {
-      localStorage.setItem(storageKeys.activeFolderID, activeFolderID);
-    } else {
-      localStorage.removeItem(storageKeys.activeFolderID);
+      if (key) {
+        localStorage.setItem(key, activeFolderID);
+      }
+    } else if (key) {
+      localStorage.removeItem(key);
     }
     renderConversationList(conversations);
     if (!activeConversationID) {
@@ -647,8 +702,9 @@
     if (!event.key || event.key.indexOf("twacc_chat_") !== 0) {
       return;
     }
-    if (event.key === storageKeys.activeFolderID) {
-      activeFolderID = localStorage.getItem(storageKeys.activeFolderID) || "";
+    const activeFolderKey = accountStorageKey(storageKeys.activeFolderID);
+    if (event.key === activeFolderKey) {
+      activeFolderID = activeFolderKey ? localStorage.getItem(activeFolderKey) || "" : "";
     }
     loadConversations();
   });

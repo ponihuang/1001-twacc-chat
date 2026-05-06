@@ -73,6 +73,17 @@
     };
   }
 
+  function sessionEventDetail(session) {
+    return {
+      loggedIn: Boolean(session.token),
+      token: session.token || "",
+      role: session.role || "",
+      sourceSystem: session.sourceSystem || "",
+      externalUserID: session.externalUserID || "",
+      actor: session.sourceSystem && session.externalUserID ? [session.sourceSystem, session.externalUserID].join(" / ") : ""
+    };
+  }
+
   function renderSessionState() {
     const session = readSession();
     deviceIDInput.value = session.deviceID || generateDeviceID();
@@ -84,8 +95,9 @@
     externalUserIDInput.value = session.externalUserID || externalUserIDInput.value;
 
     if (session.token) {
-      loginStateNode.textContent = "已登入";
-      tokenStateNode.textContent = "登入憑證有效";
+      const accountLabel = session.sourceSystem && session.externalUserID ? [session.sourceSystem, session.externalUserID].join(" / ") : "未知帳號";
+      loginStateNode.textContent = "已登入：" + (session.externalUserID || "使用者");
+      tokenStateNode.textContent = accountLabel + "，登入憑證有效";
       statusNode.textContent = session.expiresAt
         ? "已保存 session token，過期時間：" + formatDateTime(session.expiresAt)
         : "已保存 session token";
@@ -93,8 +105,10 @@
       statusNode.classList.add("is-success");
       app.dataset.sessionToken = session.token;
       app.dataset.userRole = session.role || "";
+      app.dataset.sourceSystem = session.sourceSystem || "";
+      app.dataset.externalUserId = session.externalUserID || "";
       app.dataset.actor = [session.sourceSystem || "unknown", session.externalUserID || "unknown"].join(" / ");
-      document.dispatchEvent(new CustomEvent("twacc:session-changed"));
+      document.dispatchEvent(new CustomEvent("twacc:session-changed", { detail: sessionEventDetail(session) }));
       return;
     }
 
@@ -104,8 +118,10 @@
     statusNode.classList.remove("is-error", "is-success");
     delete app.dataset.sessionToken;
     delete app.dataset.userRole;
+    delete app.dataset.sourceSystem;
+    delete app.dataset.externalUserId;
     delete app.dataset.actor;
-    document.dispatchEvent(new CustomEvent("twacc:session-changed"));
+    document.dispatchEvent(new CustomEvent("twacc:session-changed", { detail: sessionEventDetail(session) }));
   }
 
   async function parseJSON(response) {

@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=desktop-login-password-20260506a">
-  <script defer src="/static/sidebar-nav.js?v=desktop-login-password-20260506a"></script>
-  <script defer src="/static/settings-panel.js?v=desktop-login-password-20260506a"></script>
-  <script defer src="/static/auth.js?v=desktop-login-password-20260506a"></script>
-  <script defer src="/static/chat-app.js?v=desktop-login-password-20260506a"></script>
+  <link rel="stylesheet" href="/static/app.css?v=desktop-auth-gated-20260506a">
+  <script defer src="/static/sidebar-nav.js?v=desktop-auth-gated-20260506a"></script>
+  <script defer src="/static/settings-panel.js?v=desktop-auth-gated-20260506a"></script>
+  <script defer src="/static/auth.js?v=desktop-auth-gated-20260506a"></script>
+  <script defer src="/static/chat-app.js?v=desktop-auth-gated-20260506a"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app>
@@ -39,14 +39,14 @@
             <small>查看目前 session token 與連線狀態</small>
           </span>
         </button>
-        <button type="button" class="sidebar-menu-item" data-sidebar-open="direct">
+        <button type="button" class="sidebar-menu-item" data-sidebar-open="direct" data-auth-required hidden>
           <span class="sidebar-menu-kicker">3</span>
           <span class="sidebar-menu-text">
             <strong>建立一對一對話</strong>
             <small>輸入目標外部使用者編號後自動切到該對話</small>
           </span>
         </button>
-        <button type="button" class="sidebar-menu-item" data-sidebar-open="settings">
+        <button type="button" class="sidebar-menu-item" data-sidebar-open="settings" data-auth-required hidden>
           <span class="sidebar-menu-kicker">4</span>
           <span class="sidebar-menu-text">
             <strong>設定</strong>
@@ -115,7 +115,7 @@
         </article>
       </section>
 
-      <section class="sidebar-view" data-sidebar-view="direct">
+      <section class="sidebar-view" data-sidebar-view="direct" data-auth-required>
         <section class="sidebar-panel panel-surface sidebar-detail-panel">
           <div class="sidebar-view-header">
             <span class="eyebrow">建立一對一對話</span>
@@ -132,7 +132,7 @@
         </section>
       </section>
 
-      <section class="sidebar-view" data-sidebar-view="settings">
+      <section class="sidebar-view" data-sidebar-view="settings" data-auth-required>
         <section class="sidebar-panel panel-surface sidebar-detail-panel settings-panel" data-settings-panel>
           <section class="settings-subview is-active" data-settings-view="main">
             <div class="sidebar-view-header">
@@ -144,8 +144,8 @@
             <section class="settings-profile-card">
               <div class="settings-avatar" data-avatar-preview>E</div>
               <div class="settings-profile-meta">
-                <strong>Elva</strong>
-                <span>頭像與顯示資訊</span>
+                <strong data-settings-profile-name>未登入</strong>
+                <span data-settings-profile-account>請先登入</span>
               </div>
               <div class="settings-avatar-actions">
                 <label class="secondary-button settings-avatar-upload" for="settings-avatar-input">新增</label>

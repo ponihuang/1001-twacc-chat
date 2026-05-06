@@ -777,6 +777,11 @@ strong {
   cursor: pointer;
 }
 
+.sidebar-menu-item[hidden],
+[data-auth-required][hidden] {
+  display: none !important;
+}
+
 .sidebar-menu-item:hover {
   background: rgba(165, 63, 43, 0.08);
 }

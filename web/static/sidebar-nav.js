@@ -6,6 +6,7 @@
 
   const views = Array.from(shell.querySelectorAll("[data-sidebar-view]"));
   const openButtons = Array.from(shell.querySelectorAll("[data-sidebar-open]"));
+  const authRequiredButtons = Array.from(shell.querySelectorAll("[data-auth-required]"));
   const toggleButton = shell.querySelector("[data-sidebar-toggle]");
   const dropdown = shell.querySelector("[data-sidebar-dropdown]");
   const titleNode = shell.querySelector("[data-sidebar-title]");
@@ -24,6 +25,26 @@
     return shell.dataset.sidebarView || "home";
   }
 
+  function isLoggedIn() {
+    return Boolean(localStorage.getItem("twacc_chat_session_token"));
+  }
+
+  function viewRequiresAuth(name) {
+    return name === "direct" || name === "settings";
+  }
+
+  function applyAuthVisibility() {
+    const loggedIn = isLoggedIn();
+    shell.classList.toggle("is-authenticated", loggedIn);
+    authRequiredButtons.forEach(function (button) {
+      button.hidden = !loggedIn;
+    });
+
+    if (!loggedIn && viewRequiresAuth(currentView())) {
+      setView("login");
+    }
+  }
+
   function applyHeaderState(target) {
     if (titleNode) {
       titleNode.textContent = titleOverride || viewTitles[target] || viewTitles.home;
@@ -36,6 +57,10 @@
 
   function setView(name) {
     const target = name || "home";
+    if (viewRequiresAuth(target) && !isLoggedIn()) {
+      setView("login");
+      return;
+    }
     titleOverride = "";
     backAction = "";
     shell.dataset.sidebarView = target;
@@ -51,6 +76,9 @@
 
   openButtons.forEach(function (button) {
     button.addEventListener("click", function () {
+      if (button.hidden) {
+        return;
+      }
       setView(button.dataset.sidebarOpen);
     });
   });
@@ -81,6 +109,8 @@
     applyHeaderState(currentView());
   });
 
+  document.addEventListener("twacc:session-changed", applyAuthVisibility);
+
   document.addEventListener("click", function (event) {
     if (!dropdown || !shell.classList.contains("is-menu-open")) {
       return;
@@ -92,4 +122,5 @@
   });
 
   setView("home");
+  applyAuthVisibility();
 })();
