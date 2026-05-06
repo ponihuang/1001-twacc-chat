@@ -36,7 +36,7 @@ func (m *mockRepository) CreateUser(params RegisterParams) (User, error) {
 	if _, ok := m.usersByExternal[key]; ok {
 		return User{}, ErrUserAlreadyExists
 	}
-	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, Language: params.Language}
+	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, PasswordHash: params.PasswordHash, Language: params.Language}
 	if m.usersByID == nil {
 		m.usersByID = map[int64]User{}
 	}
@@ -179,7 +179,7 @@ func TestIPAllowed(t *testing.T) {
 }
 
 func TestValidateRegisterRequest(t *testing.T) {
-	params, err := validateRegisterRequest(RegisterRequest{SourceSystem: "erp", ExternalUserID: "A12345", DisplayName: "测试用户"})
+	params, err := validateRegisterRequest(RegisterRequest{SourceSystem: "erp", ExternalUserID: "A12345", Password: "pass123!", DisplayName: "测试用户"})
 	if err != nil {
 		t.Fatalf("validateRegisterRequest returned error: %v", err)
 	}
@@ -189,12 +189,12 @@ func TestValidateRegisterRequest(t *testing.T) {
 }
 
 func TestValidateLoginRequest(t *testing.T) {
-	_, _, _, err := validateLoginRequest(LoginRequest{SourceSystem: "erp", ExternalUserID: "A12345", DeviceID: "device-1"})
+	_, _, _, _, err := validateLoginRequest(LoginRequest{SourceSystem: "erp", ExternalUserID: "A12345", Password: "pass123!", DeviceID: "device-1"})
 	if err != nil {
 		t.Fatalf("validateLoginRequest returned error: %v", err)
 	}
 
-	_, _, _, err = validateLoginRequest(LoginRequest{SourceSystem: "ERP", ExternalUserID: "A12345", DeviceID: "device-1"})
+	_, _, _, _, err = validateLoginRequest(LoginRequest{SourceSystem: "ERP", ExternalUserID: "A12345", Password: "pass123!", DeviceID: "device-1"})
 	if err != ErrInvalidSourceSystem {
 		t.Fatalf("unexpected error for invalid source system: %v", err)
 	}
@@ -202,14 +202,14 @@ func TestValidateLoginRequest(t *testing.T) {
 
 func TestLoginIssuesSessionToken(t *testing.T) {
 	repo := &mockRepository{
-		usersByExternal:    map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1"}},
+		usersByExternal:    map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", PasswordHash: mustHashPassword(t, "pass123!")}},
 		settingsByUserID:   map[int64]UserSecuritySettings{1: {UserID: 1, AllowAllIPs: true}},
 		trustedDeviceCount: map[int64]int{1: 0},
 	}
 	sessions := &mockSessions{token: "session-token", expiresAt: time.Now().UTC().Add(time.Hour)}
 	service := NewService(repo, sessions)
 
-	resp, status, err := service.Login(LoginRequest{SourceSystem: "erp", ExternalUserID: "user-1", DeviceID: "device-1"}, "192.168.1.10", "ua")
+	resp, status, err := service.Login(LoginRequest{SourceSystem: "erp", ExternalUserID: "user-1", Password: "pass123!", DeviceID: "device-1"}, "192.168.1.10", "ua")
 	if err != nil {
 		t.Fatalf("Login returned error: %v", err)
 	}
@@ -222,6 +222,61 @@ func TestLoginIssuesSessionToken(t *testing.T) {
 	if sessions.issuedUserID != 1 || sessions.issuedDeviceID != "device-1" {
 		t.Fatalf("unexpected session issue payload: %+v", sessions)
 	}
+}
+
+func TestLoginRejectsWrongPassword(t *testing.T) {
+	repo := &mockRepository{
+		usersByExternal: map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", PasswordHash: mustHashPassword(t, "pass123!")}},
+		settingsByUserID: map[int64]UserSecuritySettings{
+			1: {UserID: 1, AllowAllIPs: true},
+		},
+		trustedDeviceCount: map[int64]int{1: 0},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, status, err := service.Login(LoginRequest{SourceSystem: "erp", ExternalUserID: "user-1", Password: "wrong123!", DeviceID: "device-1"}, "192.168.1.10", "ua")
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
+	}
+	if status != 401 {
+		t.Fatalf("status = %d, want 401", status)
+	}
+}
+
+func TestValidatePassword(t *testing.T) {
+	tests := []struct {
+		name     string
+		password string
+		wantErr  bool
+	}{
+		{name: "min length", password: "a1!b", wantErr: false},
+		{name: "max length", password: "Abcdef1234567890!@#$", wantErr: false},
+		{name: "too short", password: "a1!", wantErr: true},
+		{name: "too long", password: "Abcdef1234567890!@#$x", wantErr: true},
+		{name: "space rejected", password: "abc 123", wantErr: true},
+		{name: "unicode rejected", password: "密碼1234", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validatePassword(tc.password)
+			if tc.wantErr && !errors.Is(err, ErrInvalidPassword) {
+				t.Fatalf("expected ErrInvalidPassword, got %v", err)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("validatePassword returned error: %v", err)
+			}
+		})
+	}
+}
+
+func mustHashPassword(t *testing.T, password string) string {
+	t.Helper()
+	hash, err := hashPassword(password)
+	if err != nil {
+		t.Fatalf("hashPassword returned error: %v", err)
+	}
+	return hash
 }
 
 func TestUpdateIPWhitelistRejectsInvalidRule(t *testing.T) {

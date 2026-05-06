@@ -12,6 +12,7 @@ type User struct {
 	SourceSystem    string
 	ExternalUserID  string
 	DisplayName     string
+	PasswordHash    string
 	Email           string
 	Language        string
 	WhatsAppAccount string
@@ -72,6 +73,7 @@ type SessionAuthenticator interface {
 type RegisterRequest struct {
 	SourceSystem    string `json:"source_system"`
 	ExternalUserID  string `json:"external_user_id"`
+	Password        string `json:"password"`
 	DisplayName     string `json:"display_name"`
 	Email           string `json:"email"`
 	Language        string `json:"language"`
@@ -83,6 +85,7 @@ type RegisterRequest struct {
 type LoginRequest struct {
 	SourceSystem   string `json:"source_system"`
 	ExternalUserID string `json:"external_user_id"`
+	Password       string `json:"password"`
 	DeviceID       string `json:"device_id"`
 }
 
@@ -106,6 +109,7 @@ type Response struct {
 type RegisterParams struct {
 	SourceSystem    string
 	ExternalUserID  string
+	PasswordHash    string
 	DisplayName     string
 	Email           string
 	Language        string

@@ -24,6 +24,7 @@ X-TWACC-Signature: <hex-hmac-sha256>
 {
   "source_system": "erp",
   "external_user_id": "A12345",
+  "password": "pass123!",
   "display_name": "王小明"
 }
 ```
@@ -32,7 +33,7 @@ X-TWACC-Signature: <hex-hmac-sha256>
 
 ```bash
 TIMESTAMP=$(date +%s)
-BODY='{"source_system":"erp","external_user_id":"A12345","display_name":"王小明"}'
+BODY='{"source_system":"erp","external_user_id":"A12345","password":"pass123!","display_name":"王小明"}'
 SIGNATURE=$(printf "POST\n/api/erp/register\n%s\n%s" "$TIMESTAMP" "$BODY" \
   | openssl dgst -sha256 -hmac "your-signature-secret" -binary \
   | xxd -p -c 256)
@@ -61,6 +62,7 @@ X-TWACC-Signature: <hex-hmac-sha256>
 {
   "source_system": "erp",
   "external_user_id": "A12345",
+  "password": "pass123!",
   "device_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
@@ -69,7 +71,7 @@ X-TWACC-Signature: <hex-hmac-sha256>
 
 ```bash
 TIMESTAMP=$(date +%s)
-BODY='{"source_system":"erp","external_user_id":"A12345","device_id":"550e8400-e29b-41d4-a716-446655440000"}'
+BODY='{"source_system":"erp","external_user_id":"A12345","password":"pass123!","device_id":"550e8400-e29b-41d4-a716-446655440000"}'
 SIGNATURE=$(printf "POST\n/api/erp/login\n%s\n%s" "$TIMESTAMP" "$BODY" \
   | openssl dgst -sha256 -hmac "your-signature-secret" -binary \
   | xxd -p -c 256)
@@ -138,7 +140,7 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 POST
 /api/erp/register
 1776384000
-{"source_system":"erp","external_user_id":"A12345","display_name":"王小明"}
+{"source_system":"erp","external_user_id":"A12345","password":"pass123!","display_name":"王小明"}
 ```
 
 規則說明：

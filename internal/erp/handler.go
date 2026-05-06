@@ -320,6 +320,10 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "INVALID_EXTERNAL_USER_ID", Message: "external_user_id 不可为空"}
 	case errors.Is(err, ErrInvalidDisplayName):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "display_name 不可为空"}
+	case errors.Is(err, ErrInvalidPassword):
+		return Response{Success: false, Code: "INVALID_PASSWORD", Message: "密码需为 4 到 20 码，且只能包含英文、数字或特殊符号"}
+	case errors.Is(err, ErrInvalidCredentials):
+		return Response{Success: false, Code: "INVALID_CREDENTIALS", Message: "帐号或密码错误"}
 	case errors.Is(err, ErrInvalidUserID):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "user_id 格式错误"}
 	case errors.Is(err, ErrDeviceIDRequired):

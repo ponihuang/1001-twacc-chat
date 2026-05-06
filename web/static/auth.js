@@ -11,6 +11,7 @@
   const tokenStateNode = app.querySelector("[data-token-state]");
   const sourceSystemInput = app.querySelector("#source-system");
   const externalUserIDInput = app.querySelector("#external-user-id");
+  const passwordInput = app.querySelector("#login-password");
   const deviceIDInput = app.querySelector("#device-id");
   const integrationTokenInput = app.querySelector("#integration-token");
 
@@ -134,6 +135,7 @@
       body: JSON.stringify({
         source_system: payload.source_system,
         external_user_id: payload.external_user_id,
+        password: payload.password,
         display_name: payload.external_user_id
       })
     });
@@ -161,6 +163,7 @@
     const payload = {
       source_system: sourceSystemInput.value.trim(),
       external_user_id: externalUserIDInput.value.trim(),
+      password: passwordInput.value.trim(),
       device_id: deviceIDInput.value.trim() || generateDeviceID()
     };
     const integrationToken = integrationTokenInput.value.trim();
@@ -197,7 +200,7 @@
     }
   }
 
-  function clearSession() {
+  function logout() {
     localStorage.removeItem(storageKeys.token);
     localStorage.removeItem(storageKeys.expiresAt);
     localStorage.removeItem(storageKeys.role);
@@ -205,10 +208,12 @@
     localStorage.removeItem(storageKeys.externalUserID);
     sourceSystemInput.value = "erp";
     externalUserIDInput.value = "";
+    passwordInput.value = "";
     renderSessionState();
+    statusNode.textContent = "已登出，可重新登入";
   }
 
   loginForm.addEventListener("submit", submitLogin);
-  logoutButton.addEventListener("click", clearSession);
+  logoutButton.addEventListener("click", logout);
   renderSessionState();
 })();

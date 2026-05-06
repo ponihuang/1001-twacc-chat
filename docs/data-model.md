@@ -10,6 +10,7 @@
 - `source_system`
 - `external_user_id`
 - `display_name`
+- `password_hash`
 - `email`
 - `language`
 - `whatsapp_account`

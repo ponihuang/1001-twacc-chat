@@ -30,11 +30,12 @@ func NewERPRepository(db *sql.DB) *IntegrationRepository {
 // CreateUser inserts a new externally-sourced user and default security settings.
 func (r *IntegrationRepository) CreateUser(params erp.RegisterParams) (erp.User, error) {
 	result, err := r.db.Exec(
-		`INSERT INTO users (source_system, external_user_id, display_name, email, language, whatsapp_account, telegram_account, status)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+		`INSERT INTO users (source_system, external_user_id, display_name, password_hash, email, language, whatsapp_account, telegram_account, status)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
 		params.SourceSystem,
 		params.ExternalUserID,
 		params.DisplayName,
+		params.PasswordHash,
 		nullableString(params.Email),
 		params.Language,
 		nullableString(params.WhatsAppAccount),
@@ -63,7 +64,7 @@ func (r *IntegrationRepository) CreateUser(params erp.RegisterParams) (erp.User,
 func (r *IntegrationRepository) FindUserByID(userID int64) (erp.User, error) {
 	var user erp.User
 	row := r.db.QueryRow(
-		`SELECT id, source_system, external_user_id, display_name, COALESCE(email, ''), language,
+		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
 		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
 		   FROM users
 		  WHERE id = ?
@@ -75,6 +76,7 @@ func (r *IntegrationRepository) FindUserByID(userID int64) (erp.User, error) {
 		&user.SourceSystem,
 		&user.ExternalUserID,
 		&user.DisplayName,
+		&user.PasswordHash,
 		&user.Email,
 		&user.Language,
 		&user.WhatsAppAccount,
@@ -96,7 +98,7 @@ func (r *IntegrationRepository) FindUserByID(userID int64) (erp.User, error) {
 func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID string) (erp.User, error) {
 	var user erp.User
 	row := r.db.QueryRow(
-		`SELECT id, source_system, external_user_id, display_name, COALESCE(email, ''), language,
+		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
 		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
 		   FROM users
 		  WHERE source_system = ? AND external_user_id = ?
@@ -109,6 +111,7 @@ func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID 
 		&user.SourceSystem,
 		&user.ExternalUserID,
 		&user.DisplayName,
+		&user.PasswordHash,
 		&user.Email,
 		&user.Language,
 		&user.WhatsAppAccount,

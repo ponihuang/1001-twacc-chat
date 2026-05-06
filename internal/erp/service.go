@@ -1,22 +1,31 @@
 package erp
 
 import (
+	"crypto/pbkdf2"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var sourceSystemPattern = regexp.MustCompile(`^[a-z0-9_-]{2,50}$`)
+var passwordPattern = regexp.MustCompile(`^[A-Za-z0-9[:punct:]]{4,20}$`)
+
+const passwordHashIterations = 120000
 
 var (
 	ErrInvalidSourceSystem       = errors.New("invalid source system")
 	ErrInvalidExternalUserID     = errors.New("invalid external user id")
 	ErrInvalidDisplayName        = errors.New("invalid display name")
+	ErrInvalidPassword           = errors.New("invalid password")
+	ErrInvalidCredentials        = errors.New("invalid credentials")
 	ErrInvalidUserID             = errors.New("invalid user id")
 	ErrDeviceIDRequired          = errors.New("device id required")
 	ErrInvalidIPWhitelistRule    = errors.New("invalid ip whitelist rule")
@@ -52,6 +61,10 @@ func (s *Service) Register(req RegisterRequest) (Response, int, error) {
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
+	params.PasswordHash, err = hashPassword(req.Password)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
 
 	_, err = s.repo.FindUserByExternal(params.SourceSystem, params.ExternalUserID)
 	if err == nil {
@@ -77,7 +90,7 @@ func (s *Service) Login(req LoginRequest, clientIP, userAgent string) (Response,
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
 
-	sourceSystem, externalUserID, deviceID, err := validateLoginRequest(req)
+	sourceSystem, externalUserID, password, deviceID, err := validateLoginRequest(req)
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
@@ -85,6 +98,9 @@ func (s *Service) Login(req LoginRequest, clientIP, userAgent string) (Response,
 	user, err := s.repo.FindUserByExternal(sourceSystem, externalUserID)
 	if err != nil {
 		return Response{}, statusCode(err), err
+	}
+	if !passwordMatches(password, user.PasswordHash) {
+		return Response{}, statusCode(ErrInvalidCredentials), ErrInvalidCredentials
 	}
 
 	settings, err := s.repo.GetUserSecuritySettings(user.ID)
@@ -283,6 +299,9 @@ func validateRegisterRequest(req RegisterRequest) (RegisterParams, error) {
 	if params.DisplayName == "" {
 		return RegisterParams{}, ErrInvalidDisplayName
 	}
+	if err := validatePassword(req.Password); err != nil {
+		return RegisterParams{}, err
+	}
 	if params.Language == "" {
 		params.Language = "zh-Hans"
 	}
@@ -290,22 +309,76 @@ func validateRegisterRequest(req RegisterRequest) (RegisterParams, error) {
 	return params, nil
 }
 
-func validateLoginRequest(req LoginRequest) (string, string, string, error) {
+func validateLoginRequest(req LoginRequest) (string, string, string, string, error) {
 	sourceSystem := strings.TrimSpace(req.SourceSystem)
 	externalUserID := strings.TrimSpace(req.ExternalUserID)
+	password := strings.TrimSpace(req.Password)
 	deviceID := strings.TrimSpace(req.DeviceID)
 
 	if !sourceSystemPattern.MatchString(sourceSystem) {
-		return "", "", "", ErrInvalidSourceSystem
+		return "", "", "", "", ErrInvalidSourceSystem
 	}
 	if externalUserID == "" {
-		return "", "", "", ErrInvalidExternalUserID
+		return "", "", "", "", ErrInvalidExternalUserID
+	}
+	if err := validatePassword(password); err != nil {
+		return "", "", "", "", err
 	}
 	if deviceID == "" {
-		return "", "", "", ErrDeviceIDRequired
+		return "", "", "", "", ErrDeviceIDRequired
 	}
 
-	return sourceSystem, externalUserID, deviceID, nil
+	return sourceSystem, externalUserID, password, deviceID, nil
+}
+
+func validatePassword(password string) error {
+	if !passwordPattern.MatchString(strings.TrimSpace(password)) {
+		return ErrInvalidPassword
+	}
+	return nil
+}
+
+func hashPassword(password string) (string, error) {
+	password = strings.TrimSpace(password)
+	if err := validatePassword(password); err != nil {
+		return "", err
+	}
+
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return "", err
+	}
+
+	derived, err := pbkdf2.Key(sha256.New, password, salt, passwordHashIterations, 32)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("pbkdf2-sha256:%d:%s:%s", passwordHashIterations, base64.RawURLEncoding.EncodeToString(salt), hex.EncodeToString(derived)), nil
+}
+
+func passwordMatches(password, stored string) bool {
+	password = strings.TrimSpace(password)
+	parts := strings.Split(strings.TrimSpace(stored), ":")
+	if len(parts) != 4 || parts[0] != "pbkdf2-sha256" {
+		return false
+	}
+
+	iterations, err := strconv.Atoi(parts[1])
+	if err != nil || iterations <= 0 {
+		return false
+	}
+
+	salt, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return false
+	}
+
+	derived, err := pbkdf2.Key(sha256.New, password, salt, iterations, 32)
+	if err != nil {
+		return false
+	}
+	return hex.EncodeToString(derived) == parts[3]
 }
 
 func validateWhitelistRules(allowAll bool, rules []string) ([]string, error) {
@@ -401,11 +474,14 @@ func statusCode(err error) int {
 	case errors.Is(err, ErrInvalidSourceSystem),
 		errors.Is(err, ErrInvalidExternalUserID),
 		errors.Is(err, ErrInvalidDisplayName),
+		errors.Is(err, ErrInvalidPassword),
 		errors.Is(err, ErrInvalidUserID),
 		errors.Is(err, ErrDeviceIDRequired),
 		errors.Is(err, ErrInvalidIPWhitelistRule),
 		errors.Is(err, ErrWhitelistRulesRequired):
 		return 400
+	case errors.Is(err, ErrInvalidCredentials):
+		return 401
 	case errors.Is(err, ErrSystemAdminCannotChat),
 		errors.Is(err, ErrInsufficientRole),
 		errors.Is(err, ErrDeviceNotTrusted),

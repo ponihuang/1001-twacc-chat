@@ -29,7 +29,7 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 POST
 /api/erp/register
 1776384000
-{"source_system":"erp","external_user_id":"A12345","display_name":"王小明"}
+{"source_system":"erp","external_user_id":"A12345","password":"pass123!","display_name":"王小明"}
 ```
 
 注意：
@@ -62,6 +62,7 @@ Request body：
 {
   "source_system": "erp",
   "external_user_id": "A12345",
+  "password": "pass123!",
   "display_name": "王小明"
 }
 ```
@@ -83,6 +84,7 @@ Request body：
 {
   "source_system": "erp",
   "external_user_id": "A12345",
+  "password": "pass123!",
   "device_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
@@ -99,7 +101,7 @@ Content-Type: application/json
 ## 7. Go 範例
 
 ```go
-payload := []byte(`{"source_system":"erp","external_user_id":"A12345","display_name":"王小明"}`)
+payload := []byte(`{"source_system":"erp","external_user_id":"A12345","password":"pass123!","display_name":"王小明"}`)
 timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
 message := strings.Join([]string{
 	"POST",
@@ -119,6 +121,7 @@ signature := hex.EncodeToString(mac.Sum(nil))
 const payload = JSON.stringify({
   source_system: "erp",
   external_user_id: "A12345",
+  password: "pass123!",
   display_name: "王小明",
 });
 

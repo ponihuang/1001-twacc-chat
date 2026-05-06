@@ -39,6 +39,7 @@
 
 - `source_system`
 - `external_user_id`
+- `password`
 - `display_name`
 
 非強制欄位：
@@ -54,6 +55,7 @@
 | --- | --- | --- | --- |
 | `source_system` | `string` | 是 | 2-50 字元，僅允許英數字、底線、連字號，建議小寫 |
 | `external_user_id` | `string` | 是 | 1-100 字元，不可為空白字串；由外部系統保證唯一 |
+| `password` | `string` | 是 | 4-20 字元；只允許英文、數字、特殊符號；不可包含空白 |
 | `display_name` | `string` | 是 | 1-100 字元，去除前後空白後不可為空 |
 | `email` | `string` | 否 | 最長 255 字元 |
 | `language` | `string` | 否 | 建議值：`zh-Hant`、`zh-Hans`、`en` |
@@ -66,6 +68,7 @@
 {
   "source_system": "erp",
   "external_user_id": "A12345",
+  "password": "pass123!",
   "display_name": "王小明",
   "email": "user@example.com",
   "language": "zh-Hant",
@@ -94,6 +97,7 @@
 
 - `source_system`
 - `external_user_id`
+- `password`
 - `device_id`
 
 說明：
@@ -108,6 +112,7 @@
 | --- | --- | --- | --- |
 | `source_system` | `string` | 是 | 規則同註冊 API |
 | `external_user_id` | `string` | 是 | 規則同註冊 API |
+| `password` | `string` | 是 | 規則同註冊 API |
 | `device_id` | `string` | 是 | 1-128 字元，建議使用 UUID；不可為空白字串 |
 
 請求草案：
@@ -116,6 +121,7 @@
 {
   "source_system": "erp",
   "external_user_id": "A12345",
+  "password": "pass123!",
   "device_id": "uuid-value"
 }
 ```

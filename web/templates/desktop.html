@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=desktop-sidebar-20260427g">
-  <script defer src="/static/sidebar-nav.js?v=desktop-sidebar-20260427g"></script>
-  <script defer src="/static/settings-panel.js?v=desktop-sidebar-20260427g"></script>
-  <script defer src="/static/auth.js?v=desktop-sidebar-20260427g"></script>
-  <script defer src="/static/chat-app.js?v=desktop-sidebar-20260427g"></script>
+  <link rel="stylesheet" href="/static/app.css?v=desktop-login-password-20260506a">
+  <script defer src="/static/sidebar-nav.js?v=desktop-login-password-20260506a"></script>
+  <script defer src="/static/settings-panel.js?v=desktop-login-password-20260506a"></script>
+  <script defer src="/static/auth.js?v=desktop-login-password-20260506a"></script>
+  <script defer src="/static/chat-app.js?v=desktop-login-password-20260506a"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app>
@@ -82,12 +82,14 @@
           <form class="auth-panel" data-login-form>
             <label class="field-label" for="external-user-id">帳號</label>
             <input id="external-user-id" class="text-input" name="external_user_id" placeholder="例如：asq" required>
+            <label class="field-label" for="login-password">密碼</label>
+            <input id="login-password" class="text-input" name="password" type="password" minlength="4" maxlength="20" pattern="[A-Za-z0-9!-/:-@\[-`{-~]{4,20}" autocomplete="current-password" title="密碼需為 4 到 20 碼，只能包含英文、數字或特殊符號" required>
             <input id="source-system" type="hidden" name="source_system" value="erp">
             <input id="device-id" type="hidden" name="device_id">
             <input id="integration-token" type="hidden" name="integration_token" value="{{.IntegrationSharedToken}}">
             <div class="auth-actions">
               <button type="submit" class="primary-button">登入並保存</button>
-              <button type="button" class="secondary-button" data-logout-button>清除登入</button>
+              <button type="button" class="secondary-button" data-logout-button>登出</button>
             </div>
             <div class="auth-status" data-auth-status>尚未登入</div>
           </form>

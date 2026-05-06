@@ -72,7 +72,7 @@ func TestRegisterRejectsMissingSignatureWhenSecretConfigured(t *testing.T) {
 		5*time.Minute,
 	)
 
-	request := httptest.NewRequest(http.MethodPost, "/api/erp/register", bytes.NewBufferString(`{"source_system":"erp","external_user_id":"user_a","display_name":"User A"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/erp/register", bytes.NewBufferString(`{"source_system":"erp","external_user_id":"user_a","password":"pass123!","display_name":"User A"}`))
 	request.Header.Set("Authorization", "Bearer shared-token")
 	request.Header.Set("X-TWACC-Timestamp", strconvFormatInt(time.Now().UTC().Unix()))
 
@@ -101,7 +101,7 @@ func TestRegisterRejectsExpiredTimestamp(t *testing.T) {
 		5*time.Minute,
 	)
 
-	body := []byte(`{"source_system":"erp","external_user_id":"user_a","display_name":"User A"}`)
+	body := []byte(`{"source_system":"erp","external_user_id":"user_a","password":"pass123!","display_name":"User A"}`)
 	timestamp := time.Now().UTC().Add(-10 * time.Minute).Unix()
 	request := httptest.NewRequest(http.MethodPost, "/api/erp/register", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer shared-token")
@@ -133,7 +133,7 @@ func TestRegisterAcceptsValidSignedRequest(t *testing.T) {
 		5*time.Minute,
 	)
 
-	body := []byte(`{"source_system":"erp","external_user_id":"user_a","display_name":"User A"}`)
+	body := []byte(`{"source_system":"erp","external_user_id":"user_a","password":"pass123!","display_name":"User A"}`)
 	timestamp := strconvFormatInt(time.Now().UTC().Unix())
 	request := httptest.NewRequest(http.MethodPost, "/api/erp/register", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer shared-token")
