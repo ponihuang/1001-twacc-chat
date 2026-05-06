@@ -514,14 +514,6 @@
 
     if (event.event_type === "conversation.ready") {
       loadConversations();
-      if (event.conversation_id) {
-        activeConversationID = Number(event.conversation_id);
-        const key = accountStorageKey(storageKeys.activeConversationID);
-        if (key) {
-          localStorage.setItem(key, String(activeConversationID));
-        }
-        loadMessages(activeConversationID);
-      }
       return;
     }
 
