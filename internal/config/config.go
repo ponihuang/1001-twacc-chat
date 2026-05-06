@@ -11,6 +11,7 @@ import (
 )
 
 const (
+	defaultListenHost      = "0.0.0.0"
 	defaultPort            = "8080"
 	defaultMySQLPort       = "3306"
 	defaultMaxOpenConns    = 10
@@ -23,6 +24,7 @@ const (
 
 // Config holds application runtime settings.
 type Config struct {
+	ListenHost                    string
 	Port                          string
 	Server                        ServerConfig
 	MySQL                         MySQLConfig
@@ -62,7 +64,8 @@ func Load() Config {
 	loadDotEnv(".env")
 
 	return Config{
-		Port: envOrDefault("PORT", defaultPort),
+		ListenHost: envOrDefault("LISTEN_HOST", defaultListenHost),
+		Port:       envOrDefault("PORT", defaultPort),
 		Server: ServerConfig{
 			ReadTimeout:  durationEnv("HTTP_READ_TIMEOUT", defaultReadTimeout),
 			WriteTimeout: durationEnv("HTTP_WRITE_TIMEOUT", defaultWriteTimeout),

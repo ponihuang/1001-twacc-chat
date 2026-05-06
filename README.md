@@ -67,7 +67,7 @@ go run .
 
 程式啟動時會先嘗試讀取專案根目錄的 `.env`，再載入系統環境變數；若兩邊都有同名變數，系統環境變數優先。
 
-目前服務固定監聽 `http://192.168.200.224:8080`。
+目前服務預設監聽 `http://0.0.0.0:8080`，可透過 `.env` 的 `LISTEN_HOST` 與 `PORT` 調整。
 
 開發時若想要自動重啟 server，可使用 `air`：
 
@@ -86,6 +86,8 @@ make dev
 若要啟用 MySQL 與外部系統接入 / 管理 API：
 
 ```bash
+LISTEN_HOST=0.0.0.0
+PORT=8080
 ENABLE_MYSQL=true
 AUTO_MIGRATE=true
 MIGRATIONS_DIR=db/migrations

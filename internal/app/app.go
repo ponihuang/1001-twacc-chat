@@ -15,8 +15,6 @@ import (
 	storemysql "1001-twacc-chat/internal/store/mysql"
 )
 
-const listenHost = "192.168.200.224"
-
 // Run starts the HTTP server for the chat system scaffold.
 func Run() error {
 	cfg := config.Load()
@@ -74,7 +72,7 @@ func Run() error {
 	}
 
 	server := &http.Server{
-		Addr: listenHost + ":" + cfg.Port,
+		Addr: cfg.ListenHost + ":" + cfg.Port,
 		Handler: httpx.NewRouter(integrationHandler, chatHandler, httpx.UIConfig{
 			IntegrationSharedToken: cfg.IntegrationSharedToken,
 		}),
@@ -83,6 +81,6 @@ func Run() error {
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
-	fmt.Printf("server listening on http://%s:%s\n", listenHost, cfg.Port)
+	fmt.Printf("server listening on http://%s:%s\n", cfg.ListenHost, cfg.Port)
 	return server.ListenAndServe()
 }
