@@ -97,9 +97,12 @@ MYSQL_PASSWORD=secret
 INTEGRATION_SHARED_TOKEN=your-shared-token
 INTEGRATION_SIGNATURE_SECRET=your-signature-secret
 INTEGRATION_TIMESTAMP_TOLERANCE=5m
+REQUIRE_TRUSTED_DEVICE=false
 ```
 
 建議把以上內容放進根目錄 `.env` 後直接執行 `go run .`。
+
+`REQUIRE_TRUSTED_DEVICE=false` 會關閉新瀏覽器 / 新裝置登入核准，方便 MVP 測試；若要恢復「新裝置需由既有信任裝置或 system_admin 核准」流程，改成 `true`。
 
 若未設定 `INTEGRATION_SHARED_TOKEN` 與 `INTEGRATION_SIGNATURE_SECRET`，目前程式會以開發模式允許未帶整合驗證 header 的外部系統 register / login 請求。文件語意已改為統一外部整合能力；路由命名後續建議由 `/api/erp/*` 收斂為更中性的 `/api/integrations/*` 或 `/api/external/*`。
 

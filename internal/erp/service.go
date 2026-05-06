@@ -42,13 +42,22 @@ var (
 
 // Service implements external-system identity and login rules for chat access.
 type Service struct {
-	repo     Repository
-	sessions SessionIssuer
+	repo                 Repository
+	sessions             SessionIssuer
+	requireTrustedDevice bool
 }
 
 // NewService builds an integration-backed identity service.
 func NewService(repo Repository, sessions SessionIssuer) *Service {
 	return &Service{repo: repo, sessions: sessions}
+}
+
+// SetRequireTrustedDevice controls whether non-trusted devices must be approved before login.
+func (s *Service) SetRequireTrustedDevice(require bool) {
+	if s == nil {
+		return
+	}
+	s.requireTrustedDevice = require
 }
 
 // Register creates a user if it does not exist yet.
@@ -129,6 +138,9 @@ func (s *Service) Login(req LoginRequest, clientIP, userAgent string) (Response,
 
 	now := time.Now().UTC()
 	trusted := trustedDevices == 0 || device.IsTrustedDevice
+	if !s.requireTrustedDevice {
+		trusted = true
+	}
 	if err := s.repo.UpsertDeviceLogin(user.ID, deviceID, userAgent, clientIP, trusted, now); err != nil {
 		return Response{}, 500, err
 	}

@@ -33,6 +33,7 @@ type Config struct {
 	IntegrationSignatureSecret    string
 	IntegrationTimestampTolerance time.Duration
 	LoginTokenTTL                 time.Duration
+	RequireTrustedDevice          bool
 }
 
 // ServerConfig groups HTTP server settings.
@@ -86,6 +87,7 @@ func Load() Config {
 		IntegrationSignatureSecret:    strings.TrimSpace(os.Getenv("INTEGRATION_SIGNATURE_SECRET")),
 		IntegrationTimestampTolerance: durationEnv("INTEGRATION_TIMESTAMP_TOLERANCE", 5*time.Minute),
 		LoginTokenTTL:                 durationEnv("LOGIN_TOKEN_TTL", 24*time.Hour),
+		RequireTrustedDevice:          boolEnv("REQUIRE_TRUSTED_DEVICE", false),
 	}
 }
 

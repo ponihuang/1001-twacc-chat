@@ -48,6 +48,7 @@ func Run() error {
 		sessionService := auth.NewService(storemysql.NewSessionRepository(dbStore.DB()), cfg.LoginTokenTTL)
 		integrationRepo := storemysql.NewIntegrationRepository(dbStore.DB())
 		integrationService := erp.NewService(integrationRepo, sessionService)
+		integrationService.SetRequireTrustedDevice(cfg.RequireTrustedDevice)
 		integrationHandler = erp.NewHandler(
 			integrationService,
 			sessionService,

@@ -243,6 +243,54 @@ func TestLoginRejectsWrongPassword(t *testing.T) {
 	}
 }
 
+func TestLoginAllowsNewDeviceWhenTrustedDeviceRequirementDisabled(t *testing.T) {
+	repo := &mockRepository{
+		usersByExternal: map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", PasswordHash: mustHashPassword(t, "pass123!")}},
+		settingsByUserID: map[int64]UserSecuritySettings{
+			1: {UserID: 1, AllowAllIPs: true},
+		},
+		trustedDeviceCount: map[int64]int{1: 1},
+		devicesByKey: map[string]Device{
+			deviceKey(1, "trusted-device"): {UserID: 1, DeviceID: "trusted-device", IsTrustedDevice: true},
+		},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, status, err := service.Login(LoginRequest{SourceSystem: "erp", ExternalUserID: "user-1", Password: "pass123!", DeviceID: "new-device"}, "192.168.1.10", "ua")
+	if err != nil {
+		t.Fatalf("Login returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if device := repo.devicesByKey[deviceKey(1, "new-device")]; !device.IsTrustedDevice {
+		t.Fatalf("new device should be trusted when requirement is disabled: %+v", device)
+	}
+}
+
+func TestLoginRejectsNewDeviceWhenTrustedDeviceRequirementEnabled(t *testing.T) {
+	repo := &mockRepository{
+		usersByExternal: map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", PasswordHash: mustHashPassword(t, "pass123!")}},
+		settingsByUserID: map[int64]UserSecuritySettings{
+			1: {UserID: 1, AllowAllIPs: true},
+		},
+		trustedDeviceCount: map[int64]int{1: 1},
+		devicesByKey: map[string]Device{
+			deviceKey(1, "trusted-device"): {UserID: 1, DeviceID: "trusted-device", IsTrustedDevice: true},
+		},
+	}
+	service := NewService(repo, &mockSessions{})
+	service.SetRequireTrustedDevice(true)
+
+	_, status, err := service.Login(LoginRequest{SourceSystem: "erp", ExternalUserID: "user-1", Password: "pass123!", DeviceID: "new-device"}, "192.168.1.10", "ua")
+	if !errors.Is(err, ErrNewDeviceApprovalRequired) {
+		t.Fatalf("expected ErrNewDeviceApprovalRequired, got %v", err)
+	}
+	if status != 403 {
+		t.Fatalf("status = %d, want 403", status)
+	}
+}
+
 func TestValidatePassword(t *testing.T) {
 	tests := []struct {
 		name     string
