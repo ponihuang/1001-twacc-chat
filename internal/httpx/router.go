@@ -24,7 +24,13 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(filepath.Join("web", "uploads")))))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		rootHandler(w, r, pages)
+	})
+	mux.HandleFunc("GET /home", func(w http.ResponseWriter, r *http.Request) {
 		indexHandler(w, r, pages)
+	})
+	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
+		loginHandler(w, r, pages)
 	})
 	mux.HandleFunc("GET /chat", func(w http.ResponseWriter, r *http.Request) {
 		desktopHandler(w, r, pages)
@@ -54,14 +60,29 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 	return mux
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request, data pageData) {
+func rootHandler(w http.ResponseWriter, r *http.Request, data pageData) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 
 	data.Title = "1001 TWACC Chat"
+	renderTemplate(w, "root.html", data)
+}
+
+func indexHandler(w http.ResponseWriter, r *http.Request, data pageData) {
+	if r.URL.Path != "/home" {
+		http.NotFound(w, r)
+		return
+	}
+
+	data.Title = "1001 TWACC Chat"
 	renderTemplate(w, "index.html", data)
+}
+
+func loginHandler(w http.ResponseWriter, _ *http.Request, data pageData) {
+	data.Title = "TWACC Chat Login"
+	renderTemplate(w, "login.html", data)
 }
 
 func desktopHandler(w http.ResponseWriter, _ *http.Request, data pageData) {

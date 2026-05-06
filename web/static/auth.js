@@ -62,15 +62,46 @@
   }
 
   function readSession() {
+    const token = localStorage.getItem(storageKeys.token) || "";
+    const expiresAt = localStorage.getItem(storageKeys.expiresAt) || "";
+    if (token && sessionExpired(expiresAt)) {
+      clearSession();
+      return {
+        token: "",
+        expiresAt: "",
+        role: "",
+        sourceSystem: "",
+        externalUserID: "",
+        deviceID: localStorage.getItem(storageKeys.deviceID) || "",
+        integrationToken: localStorage.getItem(storageKeys.integrationToken) || ""
+      };
+    }
+
     return {
-      token: localStorage.getItem(storageKeys.token) || "",
-      expiresAt: localStorage.getItem(storageKeys.expiresAt) || "",
+      token: token,
+      expiresAt: expiresAt,
       role: localStorage.getItem(storageKeys.role) || "",
       sourceSystem: localStorage.getItem(storageKeys.sourceSystem) || "",
       externalUserID: localStorage.getItem(storageKeys.externalUserID) || "",
       deviceID: localStorage.getItem(storageKeys.deviceID) || "",
       integrationToken: localStorage.getItem(storageKeys.integrationToken) || ""
     };
+  }
+
+  function sessionExpired(expiresAt) {
+    if (!expiresAt) {
+      return false;
+    }
+    const expiresAtTime = new Date(expiresAt).getTime();
+    return !Number.isNaN(expiresAtTime) && expiresAtTime <= Date.now();
+  }
+
+  function clearSession() {
+    localStorage.removeItem(storageKeys.token);
+    localStorage.removeItem(storageKeys.expiresAt);
+    localStorage.removeItem(storageKeys.role);
+    localStorage.removeItem(storageKeys.sourceSystem);
+    localStorage.removeItem(storageKeys.externalUserID);
   }
 
   function sessionEventDetail(session) {
@@ -109,6 +140,9 @@
       app.dataset.externalUserId = session.externalUserID || "";
       app.dataset.actor = [session.sourceSystem || "unknown", session.externalUserID || "unknown"].join(" / ");
       document.dispatchEvent(new CustomEvent("twacc:session-changed", { detail: sessionEventDetail(session) }));
+      if (app.dataset.redirectWhenAuthenticated) {
+        window.location.replace(app.dataset.redirectWhenAuthenticated);
+      }
       return;
     }
 
@@ -209,6 +243,9 @@
       localStorage.setItem(storageKeys.externalUserID, payload.external_user_id);
 
       renderSessionState();
+      if (app.dataset.loginRedirect) {
+        window.location.assign(app.dataset.loginRedirect);
+      }
     } catch (error) {
       statusNode.textContent = error.message || "登入失敗";
       statusNode.classList.remove("is-success");
@@ -217,19 +254,20 @@
   }
 
   function logout() {
-    localStorage.removeItem(storageKeys.token);
-    localStorage.removeItem(storageKeys.expiresAt);
-    localStorage.removeItem(storageKeys.role);
-    localStorage.removeItem(storageKeys.sourceSystem);
-    localStorage.removeItem(storageKeys.externalUserID);
+    clearSession();
     sourceSystemInput.value = "erp";
     externalUserIDInput.value = "";
     passwordInput.value = "";
     renderSessionState();
     statusNode.textContent = "已登出，可重新登入";
+    if (app.dataset.logoutRedirect) {
+      window.location.assign(app.dataset.logoutRedirect);
+    }
   }
 
   loginForm.addEventListener("submit", submitLogin);
-  logoutButton.addEventListener("click", logout);
+  if (logoutButton) {
+    logoutButton.addEventListener("click", logout);
+  }
   renderSessionState();
 })();

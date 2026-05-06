@@ -99,6 +99,63 @@ strong {
   color: var(--accent-strong);
 }
 
+.redirect-page,
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+}
+
+.redirect-shell,
+.login-panel {
+  width: min(460px, 100%);
+  padding: 32px;
+}
+
+.redirect-shell {
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+
+.redirect-shell h1,
+.login-header h1 {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3rem);
+}
+
+.login-shell {
+  width: min(480px, 100%);
+}
+
+.login-panel {
+  display: grid;
+  gap: 24px;
+}
+
+.login-header {
+  display: grid;
+  gap: 8px;
+}
+
+.login-header p,
+.redirect-shell p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.login-form {
+  gap: 12px;
+}
+
+.login-session-summary {
+  display: grid;
+  gap: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
 .overview-page {
   min-height: 100vh;
   padding: 32px;

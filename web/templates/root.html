@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/static/app.css?v=root-login-20260506b">
+  <script>
+    (function () {
+      const tokenKey = "twacc_chat_session_token";
+      const expiresAtKey = "twacc_chat_session_expires_at";
+
+      function clearSession() {
+        localStorage.removeItem(tokenKey);
+        localStorage.removeItem(expiresAtKey);
+        localStorage.removeItem("twacc_chat_role");
+        localStorage.removeItem("twacc_chat_source_system");
+        localStorage.removeItem("twacc_chat_external_user_id");
+      }
+
+      function hasValidSession() {
+        const token = localStorage.getItem(tokenKey) || "";
+        const expiresAt = localStorage.getItem(expiresAtKey) || "";
+        if (!token) {
+          return false;
+        }
+        if (!expiresAt) {
+          return true;
+        }
+
+        const expiresAtTime = new Date(expiresAt).getTime();
+        if (Number.isNaN(expiresAtTime) || expiresAtTime > Date.now()) {
+          return true;
+        }
+
+        clearSession();
+        return false;
+      }
+
+      window.location.replace(hasValidSession() ? "/chat" : "/login");
+    })();
+  </script>
+</head>
+<body class="redirect-page">
+  <main class="redirect-shell panel-surface">
+    <span class="eyebrow">1001 TWACC Chat</span>
+    <h1>正在進入聊天系統</h1>
+    <p>系統正在檢查登入狀態並導向正確頁面。</p>
+    <noscript>
+      <p>此入口需要瀏覽器啟用 JavaScript。未登入請前往 <a class="ghost-link" href="/login">登入頁</a>，或前往 <a class="ghost-link" href="/home">導覽頁</a>。</p>
+    </noscript>
+  </main>
+</body>
+</html>
