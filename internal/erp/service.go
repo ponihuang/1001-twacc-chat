@@ -161,15 +161,38 @@ func (s *Service) Login(req LoginRequest, clientIP, userAgent string) (Response,
 		ExpiresAt: expiresAt.Format(time.RFC3339),
 	}
 
-	if isAdmin, err := s.repo.IsSystemAdmin(user.ID); err == nil {
-		if isAdmin {
-			response.Data = map[string]any{"role": "system_admin"}
-		} else {
-			response.Data = map[string]any{"role": "user"}
-		}
+	if data, err := s.profileResponseData(user); err == nil {
+		response.Data = data
 	}
 
 	return response, 200, nil
+}
+
+// UpdateProfile updates the authenticated user's profile fields.
+func (s *Service) UpdateProfile(actor SessionPrincipal, req ProfileUpdateRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if actor.UserID <= 0 {
+		return Response{}, statusCode(ErrInsufficientRole), ErrInsufficientRole
+	}
+
+	displayName := strings.TrimSpace(req.DisplayName)
+	if displayName == "" || len([]rune(displayName)) > 100 {
+		return Response{}, statusCode(ErrInvalidDisplayName), ErrInvalidDisplayName
+	}
+
+	user, err := s.repo.UpdateUserProfile(actor.UserID, displayName)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	data, err := s.profileResponseData(user)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{Success: true, Code: "PROFILE_UPDATED", Message: "个人资料更新成功", Data: data}, 200, nil
 }
 
 // ListDevices returns the recent devices for a target user. Only system_admin is allowed.
@@ -431,6 +454,25 @@ func (s *Service) requireSystemAdmin(userID int64) error {
 	}
 
 	return nil
+}
+
+func (s *Service) profileResponseData(user User) (map[string]any, error) {
+	role := "user"
+	isAdmin, err := s.repo.IsSystemAdmin(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if isAdmin {
+		role = "system_admin"
+	}
+
+	return map[string]any{
+		"role":             role,
+		"user_id":          user.ID,
+		"source_system":    user.SourceSystem,
+		"external_user_id": user.ExternalUserID,
+		"display_name":     user.DisplayName,
+	}, nil
 }
 
 func ipAllowed(clientIP string, rules []string) bool {

@@ -21,6 +21,7 @@
     role: "twacc_chat_role",
     sourceSystem: "twacc_chat_source_system",
     externalUserID: "twacc_chat_external_user_id",
+    displayName: "twacc_chat_display_name",
     deviceID: "twacc_chat_device_id",
     integrationToken: "twacc_chat_integration_token"
   };
@@ -72,6 +73,7 @@
         role: "",
         sourceSystem: "",
         externalUserID: "",
+        displayName: "",
         deviceID: localStorage.getItem(storageKeys.deviceID) || "",
         integrationToken: localStorage.getItem(storageKeys.integrationToken) || ""
       };
@@ -83,6 +85,7 @@
       role: localStorage.getItem(storageKeys.role) || "",
       sourceSystem: localStorage.getItem(storageKeys.sourceSystem) || "",
       externalUserID: localStorage.getItem(storageKeys.externalUserID) || "",
+      displayName: localStorage.getItem(storageKeys.displayName) || "",
       deviceID: localStorage.getItem(storageKeys.deviceID) || "",
       integrationToken: localStorage.getItem(storageKeys.integrationToken) || ""
     };
@@ -102,6 +105,7 @@
     localStorage.removeItem(storageKeys.role);
     localStorage.removeItem(storageKeys.sourceSystem);
     localStorage.removeItem(storageKeys.externalUserID);
+    localStorage.removeItem(storageKeys.displayName);
   }
 
   function sessionEventDetail(session) {
@@ -111,6 +115,7 @@
       role: session.role || "",
       sourceSystem: session.sourceSystem || "",
       externalUserID: session.externalUserID || "",
+      displayName: session.displayName || "",
       actor: session.sourceSystem && session.externalUserID ? [session.sourceSystem, session.externalUserID].join(" / ") : ""
     };
   }
@@ -127,7 +132,7 @@
 
     if (session.token) {
       const accountLabel = session.sourceSystem && session.externalUserID ? [session.sourceSystem, session.externalUserID].join(" / ") : "未知帳號";
-      loginStateNode.textContent = "已登入：" + (session.externalUserID || "使用者");
+      loginStateNode.textContent = "已登入：" + (session.displayName || session.externalUserID || "使用者");
       tokenStateNode.textContent = accountLabel + "，登入憑證有效";
       statusNode.textContent = session.expiresAt
         ? "已保存 session token，過期時間：" + formatDateTime(session.expiresAt)
@@ -239,6 +244,7 @@
       localStorage.setItem(storageKeys.token, responseData.result.token);
       localStorage.setItem(storageKeys.expiresAt, responseData.result.expires_at || "");
       localStorage.setItem(storageKeys.role, responseData.result.data && responseData.result.data.role ? responseData.result.data.role : "");
+      localStorage.setItem(storageKeys.displayName, responseData.result.data && responseData.result.data.display_name ? responseData.result.data.display_name : payload.external_user_id);
       localStorage.setItem(storageKeys.sourceSystem, payload.source_system);
       localStorage.setItem(storageKeys.externalUserID, payload.external_user_id);
 

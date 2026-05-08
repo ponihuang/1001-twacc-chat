@@ -64,6 +64,17 @@ func (m *mockRepository) FindUserByExternal(sourceSystem, externalUserID string)
 	return user, nil
 }
 
+func (m *mockRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
+	user, ok := m.usersByID[userID]
+	if !ok {
+		return User{}, ErrUserNotFound
+	}
+	user.DisplayName = displayName
+	m.usersByID[userID] = user
+	m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
+	return user, nil
+}
+
 func (m *mockRepository) IsSystemAdmin(userID int64) (bool, error) {
 	return m.systemAdmins[userID], nil
 }
@@ -202,7 +213,7 @@ func TestValidateLoginRequest(t *testing.T) {
 
 func TestLoginIssuesSessionToken(t *testing.T) {
 	repo := &mockRepository{
-		usersByExternal:    map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", PasswordHash: mustHashPassword(t, "pass123!")}},
+		usersByExternal:    map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "User One", PasswordHash: mustHashPassword(t, "pass123!")}},
 		settingsByUserID:   map[int64]UserSecuritySettings{1: {UserID: 1, AllowAllIPs: true}},
 		trustedDeviceCount: map[int64]int{1: 0},
 	}
@@ -221,6 +232,39 @@ func TestLoginIssuesSessionToken(t *testing.T) {
 	}
 	if sessions.issuedUserID != 1 || sessions.issuedDeviceID != "device-1" {
 		t.Fatalf("unexpected session issue payload: %+v", sessions)
+	}
+	data, ok := resp.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("login data type = %T, want map", resp.Data)
+	}
+	if data["display_name"] != "User One" {
+		t.Fatalf("display_name = %v, want User One", data["display_name"])
+	}
+}
+
+func TestUpdateProfileUpdatesDisplayName(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{1: {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "Old Name"}},
+		usersByExternal: map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "Old Name"}},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	resp, status, err := service.UpdateProfile(SessionPrincipal{UserID: 1, DeviceID: "device-1"}, ProfileUpdateRequest{DisplayName: "New Name"})
+	if err != nil {
+		t.Fatalf("UpdateProfile returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if repo.usersByID[1].DisplayName != "New Name" {
+		t.Fatalf("stored display name = %q, want New Name", repo.usersByID[1].DisplayName)
+	}
+	data, ok := resp.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("response data type = %T, want map", resp.Data)
+	}
+	if data["display_name"] != "New Name" {
+		t.Fatalf("display_name = %v, want New Name", data["display_name"])
 	}
 }
 

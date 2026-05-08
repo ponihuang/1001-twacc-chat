@@ -89,6 +89,33 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// UpdateProfile handles PATCH /api/users/me/profile.
+func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req ProfileUpdateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.UpdateProfile(principal, req)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // ListDevices handles GET /api/system-admin/users/{user_id}/devices.
 func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {

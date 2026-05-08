@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=desktop-profile-edit-20260508a">
-  <script defer src="/static/sidebar-nav.js?v=desktop-profile-edit-20260508a"></script>
-  <script defer src="/static/settings-panel.js?v=desktop-profile-edit-20260508a"></script>
-  <script defer src="/static/auth.js?v=desktop-profile-edit-20260508a"></script>
-  <script defer src="/static/chat-app.js?v=desktop-profile-edit-20260508a"></script>
+  <link rel="stylesheet" href="/static/app.css?v=profile-save-20260508d">
+  <script defer src="/static/sidebar-nav.js?v=profile-save-20260508d"></script>
+  <script defer src="/static/settings-panel.js?v=profile-save-20260508d"></script>
+  <script defer src="/static/auth.js?v=profile-save-20260508d"></script>
+  <script defer src="/static/chat-app.js?v=profile-save-20260508d"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -38,6 +38,7 @@
 
       <nav class="sidebar-dropdown panel-surface" data-sidebar-dropdown>
         <button type="button" class="sidebar-menu-item" data-sidebar-open="settings" data-auth-required hidden>
+          <span class="sidebar-account-avatar" data-sidebar-account-avatar>U</span>
           <span class="sidebar-menu-text">
             <strong data-sidebar-account-name>使用者</strong>
           </span>
@@ -168,10 +169,10 @@
 
           <section class="settings-subview" data-settings-view="profile-edit">
             <section class="settings-edit-profile">
-              <label class="settings-edit-avatar" for="settings-avatar-input">
+              <button type="button" class="settings-edit-avatar" data-avatar-edit-trigger data-avatar-disabled="true" data-tooltip="大頭貼功能開發中" aria-disabled="true" aria-label="大頭貼功能開發中">
                 <span data-avatar-preview-edit>E</span>
                 <span class="settings-edit-camera" aria-hidden="true"></span>
-              </label>
+              </button>
 
               <div class="settings-edit-fields">
                 <label class="settings-edit-field">
@@ -188,6 +189,11 @@
                 </label>
               </div>
             </section>
+            <button type="button" class="settings-profile-save-button" data-profile-edit-save aria-label="儲存個人資料">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 6 9 17l-5-5"></path>
+              </svg>
+            </button>
           </section>
 
           <section class="settings-subview" data-settings-view="folders">

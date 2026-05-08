@@ -14,6 +14,7 @@
   const settingsMenu = shell.querySelector("[data-settings-menu]");
   const titleNode = shell.querySelector("[data-sidebar-title]");
   const accountNameNode = shell.querySelector("[data-sidebar-account-name]");
+  const accountAvatarNode = shell.querySelector("[data-sidebar-account-avatar]");
   let titleOverride = "";
   let backAction = "";
 
@@ -38,14 +39,38 @@
   }
 
   function accountName() {
-    return localStorage.getItem("twacc_chat_external_user_id") || "使用者";
+    return localStorage.getItem("twacc_chat_display_name") || localStorage.getItem("twacc_chat_external_user_id") || "使用者";
+  }
+
+  function accountAvatarStorageKey() {
+    const sourceSystem = localStorage.getItem("twacc_chat_source_system") || "";
+    const externalUserID = localStorage.getItem("twacc_chat_external_user_id") || "";
+    if (!sourceSystem || !externalUserID) {
+      return "";
+    }
+    return "twacc_chat_avatar_data_url::" + encodeURIComponent(sourceSystem + ":" + externalUserID);
   }
 
   function applyAccountMenuLabel() {
     if (!accountNameNode) {
       return;
     }
-    accountNameNode.textContent = accountName();
+    const name = accountName();
+    accountNameNode.textContent = name;
+    if (!accountAvatarNode) {
+      return;
+    }
+    const avatarKey = accountAvatarStorageKey();
+    const avatarDataURL = avatarKey ? localStorage.getItem(avatarKey) || "" : "";
+    if (avatarDataURL) {
+      accountAvatarNode.textContent = "";
+      accountAvatarNode.style.backgroundImage = "url('" + avatarDataURL + "')";
+      accountAvatarNode.classList.add("has-image");
+      return;
+    }
+    accountAvatarNode.style.backgroundImage = "";
+    accountAvatarNode.textContent = name.slice(0, 1).toUpperCase();
+    accountAvatarNode.classList.remove("has-image");
   }
 
   function applyAuthVisibility() {
@@ -140,6 +165,7 @@
   });
 
   document.addEventListener("twacc:session-changed", applyAuthVisibility);
+  document.addEventListener("twacc:avatar-changed", applyAccountMenuLabel);
 
   document.addEventListener("click", function (event) {
     if (settingsMenu && settingsMenuToggle && !settingsMenu.hidden && !settingsMenu.contains(event.target) && !settingsMenuToggle.contains(event.target)) {

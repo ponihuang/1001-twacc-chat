@@ -89,6 +89,11 @@ type LoginRequest struct {
 	DeviceID       string `json:"device_id"`
 }
 
+// ProfileUpdateRequest is the current-user profile update payload.
+type ProfileUpdateRequest struct {
+	DisplayName string `json:"display_name"`
+}
+
 // IPWhitelistUpdateRequest is the system-admin whitelist payload.
 type IPWhitelistUpdateRequest struct {
 	AllowAll bool     `json:"allow_all"`
@@ -122,6 +127,7 @@ type Repository interface {
 	CreateUser(params RegisterParams) (User, error)
 	FindUserByID(userID int64) (User, error)
 	FindUserByExternal(sourceSystem, externalUserID string) (User, error)
+	UpdateUserProfile(userID int64, displayName string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)
 	GetUserSecuritySettings(userID int64) (UserSecuritySettings, error)
 	ListActiveIPWhitelistRules(userID int64) ([]string, error)

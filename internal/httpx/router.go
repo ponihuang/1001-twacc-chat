@@ -47,6 +47,7 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 		mux.HandleFunc("POST /api/erp/login", integrationHandler.Login)
 		mux.HandleFunc("GET /api/system-admin/users/{user_id}/devices", integrationHandler.ListDevices)
 		mux.HandleFunc("PUT /api/system-admin/users/{user_id}/ip-whitelist", integrationHandler.UpdateIPWhitelist)
+		mux.HandleFunc("PATCH /api/users/me/profile", integrationHandler.UpdateProfile)
 		mux.HandleFunc("POST /api/users/{user_id}/devices/{device_id}/approve", integrationHandler.ApproveDevice)
 	}
 	if chatHandler != nil {

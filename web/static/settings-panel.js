@@ -10,13 +10,15 @@
   const sessionStorageKeys = {
     token: "twacc_chat_session_token",
     sourceSystem: "twacc_chat_source_system",
-    externalUserID: "twacc_chat_external_user_id"
+    externalUserID: "twacc_chat_external_user_id",
+    displayName: "twacc_chat_display_name"
   };
 
   const avatarPreview = panel.querySelector("[data-avatar-preview]");
   const avatarInput = panel.querySelector("[data-avatar-input]");
   const avatarRemoveButton = panel.querySelector("[data-avatar-remove]");
   const avatarEditButton = panel.querySelector("[data-avatar-edit]");
+  const avatarEditTrigger = panel.querySelector("[data-avatar-edit-trigger]");
   const profileName = panel.querySelector("[data-settings-profile-name]");
   const profileSource = panel.querySelector("[data-settings-profile-source]");
   const profileAccount = panel.querySelector("[data-settings-profile-account]");
@@ -24,6 +26,7 @@
   const profileEditName = panel.querySelector("[data-profile-edit-name]");
   const profileEditSource = panel.querySelector("[data-profile-edit-source]");
   const profileEditAccount = panel.querySelector("[data-profile-edit-account]");
+  const profileEditSaveButton = panel.querySelector("[data-profile-edit-save]");
   const folderList = panel.querySelector("[data-folder-list]");
   const folderTabs = document.querySelector("[data-folder-tabs]");
   const addFolderButton = panel.querySelector("[data-folder-add]");
@@ -45,12 +48,25 @@
 
   let activeFolderID = "";
   let activeFolderTabID = "";
+  let profileEditOriginalName = "";
 
   function readSession() {
     return {
       token: localStorage.getItem(sessionStorageKeys.token) || "",
       sourceSystem: localStorage.getItem(sessionStorageKeys.sourceSystem) || "",
-      externalUserID: localStorage.getItem(sessionStorageKeys.externalUserID) || ""
+      externalUserID: localStorage.getItem(sessionStorageKeys.externalUserID) || "",
+      displayName: localStorage.getItem(sessionStorageKeys.displayName) || ""
+    };
+  }
+
+  function authHeaders() {
+    const session = readSession();
+    if (!session.token) {
+      return null;
+    }
+    return {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + session.token
     };
   }
 
@@ -64,6 +80,33 @@
       return "";
     }
     return base + "::" + encodeURIComponent(session.sourceSystem + ":" + session.externalUserID);
+  }
+
+  function avatarStorageKey() {
+    return accountStorageKey("twacc_chat_avatar_data_url");
+  }
+
+  function applyAvatarImage(dataURL) {
+    if (avatarPreview) {
+      if (dataURL) {
+        avatarPreview.textContent = "";
+        avatarPreview.style.backgroundImage = "url('" + dataURL + "')";
+        avatarPreview.classList.add("has-image");
+      } else {
+        avatarPreview.style.backgroundImage = "";
+        avatarPreview.classList.remove("has-image");
+      }
+    }
+    if (avatarPreviewEdit && avatarPreviewEdit.parentElement) {
+      if (dataURL) {
+        avatarPreviewEdit.textContent = "";
+        avatarPreviewEdit.parentElement.style.backgroundImage = "url('" + dataURL + "')";
+        avatarPreviewEdit.parentElement.classList.add("has-image");
+      } else {
+        avatarPreviewEdit.parentElement.style.backgroundImage = "";
+        avatarPreviewEdit.parentElement.classList.remove("has-image");
+      }
+    }
   }
 
   function renderProfile() {
@@ -85,6 +128,10 @@
       }
       if (avatarPreviewEdit) {
         avatarPreviewEdit.textContent = "";
+        if (avatarPreviewEdit.parentElement) {
+          avatarPreviewEdit.parentElement.style.backgroundImage = "";
+          avatarPreviewEdit.parentElement.classList.remove("has-image");
+        }
       }
       if (profileEditName) {
         profileEditName.value = "";
@@ -99,7 +146,7 @@
     }
 
     if (profileName) {
-      profileName.textContent = session.externalUserID || "使用者";
+      profileName.textContent = session.displayName || session.externalUserID || "使用者";
     }
     if (profileSource) {
       profileSource.textContent = session.sourceSystem || "unknown";
@@ -107,14 +154,19 @@
     if (profileAccount) {
       profileAccount.textContent = session.externalUserID || "unknown";
     }
+    const avatarKey = avatarStorageKey();
+    const avatarDataURL = avatarKey ? localStorage.getItem(avatarKey) || "" : "";
+    applyAvatarImage(avatarDataURL);
+    const avatarInitial = (session.displayName || session.externalUserID || "U").slice(0, 1).toUpperCase();
     if (avatarPreview && !avatarPreview.classList.contains("has-image")) {
-      avatarPreview.textContent = (session.externalUserID || "U").slice(0, 1).toUpperCase();
+      avatarPreview.textContent = avatarInitial;
     }
-    if (avatarPreviewEdit) {
-      avatarPreviewEdit.textContent = (session.externalUserID || "U").slice(0, 1).toUpperCase();
+    if (avatarPreviewEdit && avatarPreviewEdit.parentElement && !avatarPreviewEdit.parentElement.classList.contains("has-image")) {
+      avatarPreviewEdit.textContent = avatarInitial;
     }
     if (profileEditName) {
-      profileEditName.value = session.externalUserID || "";
+      profileEditOriginalName = session.displayName || session.externalUserID || "";
+      profileEditName.value = profileEditOriginalName;
     }
     if (profileEditSource) {
       profileEditSource.value = session.sourceSystem || "";
@@ -131,6 +183,62 @@
       view.classList.toggle("is-active", view.dataset.settingsView === target);
     });
     syncSidebarState();
+  }
+
+  async function parseJSON(response) {
+    const text = await response.text();
+    if (!text) {
+      return {};
+    }
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  async function saveProfileName() {
+    if (!profileEditName) {
+      return false;
+    }
+    const displayName = profileEditName.value.trim();
+    if (!displayName) {
+      profileEditName.focus();
+      return false;
+    }
+    if (displayName === profileEditOriginalName) {
+      return true;
+    }
+    const headers = authHeaders();
+    if (!headers) {
+      return false;
+    }
+
+    const response = await fetch("/api/users/me/profile", {
+      method: "PATCH",
+      headers: headers,
+      body: JSON.stringify({ display_name: displayName })
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || "個人資料更新失敗");
+    }
+
+    const data = result.data || {};
+    const savedName = data.display_name || displayName;
+    localStorage.setItem(sessionStorageKeys.displayName, savedName);
+    profileEditOriginalName = savedName;
+    renderProfile();
+    document.dispatchEvent(new CustomEvent("twacc:session-changed", {
+      detail: {
+        loggedIn: true,
+        token: readSession().token,
+        sourceSystem: data.source_system || readSession().sourceSystem,
+        externalUserID: data.external_user_id || readSession().externalUserID,
+        displayName: savedName
+      }
+    }));
+    return true;
   }
 
   function syncSidebarState() {
@@ -511,11 +619,25 @@
 
       const reader = new FileReader();
       reader.onload = function () {
-        avatarPreview.textContent = "";
-        avatarPreview.style.backgroundImage = "url('" + reader.result + "')";
-        avatarPreview.classList.add("has-image");
+        const dataURL = String(reader.result || "");
+        const key = avatarStorageKey();
+        if (key) {
+          localStorage.setItem(key, dataURL);
+        }
+        applyAvatarImage(dataURL);
+        document.dispatchEvent(new CustomEvent("twacc:avatar-changed"));
       };
       reader.readAsDataURL(file);
+    });
+  }
+
+  if (avatarEditTrigger && avatarInput) {
+    avatarEditTrigger.addEventListener("click", function (event) {
+      if (avatarEditTrigger.dataset.avatarDisabled === "true") {
+        event.preventDefault();
+        return;
+      }
+      avatarInput.click();
     });
   }
 
@@ -644,6 +766,15 @@
     });
   }
 
+  if (profileEditName) {
+    profileEditName.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+    });
+  }
+
   if (backButton) {
     backButton.addEventListener("click", function () {
       setSubview("main");
@@ -669,6 +800,21 @@
     setSubview("main");
     setFolderView("list");
   });
+
+  if (profileEditSaveButton) {
+    profileEditSaveButton.addEventListener("click", async function () {
+      profileEditSaveButton.disabled = true;
+      try {
+        const saved = await saveProfileName();
+        if (saved) {
+          setSubview("main");
+        }
+      } catch (_) {
+      } finally {
+        profileEditSaveButton.disabled = false;
+      }
+    });
+  }
 
   document.addEventListener("twacc:session-changed", renderSettingsForSession);
 

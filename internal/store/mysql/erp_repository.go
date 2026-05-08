@@ -129,6 +129,24 @@ func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID 
 	return user, nil
 }
 
+// UpdateUserProfile updates mutable profile fields for a user.
+func (r *IntegrationRepository) UpdateUserProfile(userID int64, displayName string) (erp.User, error) {
+	result, err := r.db.Exec(`UPDATE users SET display_name = ? WHERE id = ?`, strings.TrimSpace(displayName), userID)
+	if err != nil {
+		return erp.User{}, fmt.Errorf("update user profile: %w", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return erp.User{}, fmt.Errorf("update user profile rows affected: %w", err)
+	}
+	if affected == 0 {
+		return erp.User{}, erp.ErrUserNotFound
+	}
+
+	return r.FindUserByID(userID)
+}
+
 // IsSystemAdmin checks whether the user belongs to system_admin_users.
 func (r *IntegrationRepository) IsSystemAdmin(userID int64) (bool, error) {
 	var exists int
