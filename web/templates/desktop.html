@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=profile-save-20260508e">
-  <script defer src="/static/sidebar-nav.js?v=profile-save-20260508e"></script>
-  <script defer src="/static/settings-panel.js?v=profile-save-20260508e"></script>
-  <script defer src="/static/auth.js?v=profile-save-20260508e"></script>
-  <script defer src="/static/chat-app.js?v=profile-save-20260508e"></script>
+  <link rel="stylesheet" href="/static/app.css?v=global-search-20260508g">
+  <script defer src="/static/sidebar-nav.js?v=global-search-20260508g"></script>
+  <script defer src="/static/settings-panel.js?v=global-search-20260508g"></script>
+  <script defer src="/static/auth.js?v=global-search-20260508g"></script>
+  <script defer src="/static/chat-app.js?v=global-search-20260508g"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -21,7 +21,10 @@
         <div class="sidebar-topbar-text">
           <strong data-sidebar-title>聊天系統</strong>
         </div>
-        <a class="sidebar-entry-link" href="/home">回到入口</a>
+        <label class="sidebar-search" aria-label="搜尋對話">
+          <span aria-hidden="true"></span>
+          <input type="search" data-conversation-search placeholder="搜尋" autocomplete="off">
+        </label>
         <div class="sidebar-settings-actions" data-settings-actions>
           <button type="button" class="sidebar-edit-button" data-settings-edit-open aria-label="編輯個人資料">
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -43,12 +46,6 @@
             <strong data-sidebar-account-name>使用者</strong>
           </span>
         </button>
-        <button type="button" class="sidebar-menu-item" data-sidebar-open="direct" data-auth-required hidden>
-          <span class="sidebar-menu-text">
-            <strong>建立一對一對話</strong>
-            <small>輸入目標外部使用者編號後自動切到該對話</small>
-          </span>
-        </button>
       </nav>
 
       <section class="sidebar-view is-active" data-sidebar-view="home">
@@ -64,6 +61,22 @@
               <small>等待中</small>
             </article>
           </div>
+          <section class="conversation-search-panel" data-conversation-search-panel hidden>
+            <nav class="conversation-search-tabs" aria-label="搜尋類型">
+              <button type="button" class="is-active">聊天</button>
+            </nav>
+            <div class="conversation-search-section" data-search-direct-section hidden>
+              <h3>搜尋建立對話</h3>
+              <div data-search-direct-results></div>
+            </div>
+            <div class="conversation-search-section" data-search-message-section hidden>
+              <h3>
+                <span>訊息</span>
+                <button type="button" data-search-all-messages>所有聊天記錄</button>
+              </h3>
+              <div data-search-message-results></div>
+            </div>
+          </section>
         </section>
       </section>
 
@@ -109,23 +122,6 @@
             <span class="badge muted"><span>Group</span><span>Ready</span></span>
           </div>
         </article>
-      </section>
-
-      <section class="sidebar-view" data-sidebar-view="direct" data-auth-required>
-        <section class="sidebar-panel panel-surface sidebar-detail-panel">
-          <div class="sidebar-view-header">
-            <span class="eyebrow">建立一對一對話</span>
-            <strong>快速建立 / 載入</strong>
-            <p>輸入目標外部使用者編號後，會自動切到該對話。</p>
-          </div>
-
-          <form class="auth-panel" data-direct-form>
-            <label class="field-label" for="direct-external-user-id">目標外部使用者編號</label>
-            <input id="direct-external-user-id" class="text-input" name="external_user_id" required>
-            <button type="submit" class="primary-button full-width">建立 / 載入對話</button>
-            <div class="auth-status" data-direct-status>尚未建立對話</div>
-          </form>
-        </section>
       </section>
 
       <section class="sidebar-view" data-sidebar-view="settings" data-auth-required>

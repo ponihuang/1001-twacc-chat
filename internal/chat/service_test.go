@@ -11,6 +11,12 @@ type mockRepository struct {
 	conversations       map[int64][]ConversationSummary
 	headers             map[string]Conversation
 	messages            map[int64][]Message
+	searchUsers         []UserSearchResult
+	searchMessages      []Message
+	searchUserID        int64
+	searchSourceSystem  string
+	searchQuery         string
+	searchLimit         int
 	memberIDs           map[int64][]int64
 	markedReads         []readMarker
 	createdMessages     []CreateMessageInput
@@ -34,6 +40,14 @@ func (m *mockRepository) ListConversations(userID int64) ([]ConversationSummary,
 	return append([]ConversationSummary(nil), m.conversations[userID]...), nil
 }
 
+func (m *mockRepository) SearchUsers(actorUserID int64, sourceSystem, query string, limit int) ([]UserSearchResult, error) {
+	m.searchUserID = actorUserID
+	m.searchSourceSystem = sourceSystem
+	m.searchQuery = query
+	m.searchLimit = limit
+	return append([]UserSearchResult(nil), m.searchUsers...), nil
+}
+
 func (m *mockRepository) GetConversationForUser(userID, conversationID int64) (Conversation, error) {
 	key := conversationKey(userID, conversationID)
 	conversation, ok := m.headers[key]
@@ -49,6 +63,13 @@ func (m *mockRepository) ListMessages(conversationID int64, limit int) ([]Messag
 		messages = messages[len(messages)-limit:]
 	}
 	return messages, nil
+}
+
+func (m *mockRepository) SearchMessages(userID int64, query string, limit int) ([]Message, error) {
+	m.searchUserID = userID
+	m.searchQuery = query
+	m.searchLimit = limit
+	return append([]Message(nil), m.searchMessages...), nil
 }
 
 func (m *mockRepository) MarkConversationRead(userID, conversationID int64) error {
@@ -168,6 +189,34 @@ func TestListConversationsRejectsSystemAdmin(t *testing.T) {
 	}
 }
 
+func TestSearchUsers(t *testing.T) {
+	repo := &mockRepository{
+		admins: map[int64]bool{},
+		searchUsers: []UserSearchResult{
+			{SourceSystem: "erp", ExternalUserID: "test01", DisplayName: "Test One"},
+		},
+	}
+	service := NewService(repo, nil)
+
+	resp, status, err := service.SearchUsers(SessionPrincipal{UserID: 7}, "erp", "@test")
+	if err != nil {
+		t.Fatalf("SearchUsers returned error: %v", err)
+	}
+	if status != 200 || !resp.Success {
+		t.Fatalf("unexpected response status=%d resp=%+v", status, resp)
+	}
+	if repo.searchUserID != 7 || repo.searchSourceSystem != "erp" || repo.searchQuery != "test" || repo.searchLimit != userSearchLimit {
+		t.Fatalf("unexpected search call: user=%d source=%q query=%q limit=%d", repo.searchUserID, repo.searchSourceSystem, repo.searchQuery, repo.searchLimit)
+	}
+	data, ok := resp.Data.(UserSearchData)
+	if !ok {
+		t.Fatalf("response data type = %T, want UserSearchData", resp.Data)
+	}
+	if len(data.Users) != 1 || data.Users[0].ExternalUserID != "test01" || data.Users[0].DisplayName != "Test One" {
+		t.Fatalf("unexpected search data: %+v", data)
+	}
+}
+
 func TestListMessages(t *testing.T) {
 	repo := &mockRepository{
 		headers: map[string]Conversation{
@@ -211,6 +260,43 @@ func TestListMessagesRejectsMissingConversation(t *testing.T) {
 	_, _, err := service.ListMessages(9, SessionPrincipal{UserID: 7})
 	if !errors.Is(err, ErrConversationNotFound) {
 		t.Fatalf("expected ErrConversationNotFound, got %v", err)
+	}
+}
+
+func TestSearchMessages(t *testing.T) {
+	repo := &mockRepository{
+		admins: map[int64]bool{},
+		searchMessages: []Message{
+			{
+				ID:                3,
+				ConversationID:    9,
+				ConversationTitle: "開發",
+				SenderID:          8,
+				SenderName:        "王小明",
+				MessageType:       "text",
+				Content:           "hello search",
+				CreatedAt:         time.Date(2026, 4, 7, 1, 2, 0, 0, time.UTC),
+			},
+		},
+	}
+	service := NewService(repo, nil)
+
+	resp, status, err := service.SearchMessages(SessionPrincipal{UserID: 7}, " search ")
+	if err != nil {
+		t.Fatalf("SearchMessages returned error: %v", err)
+	}
+	if status != 200 || !resp.Success {
+		t.Fatalf("unexpected response status=%d resp=%+v", status, resp)
+	}
+	if repo.searchUserID != 7 || repo.searchQuery != "search" || repo.searchLimit != messageSearchLimit {
+		t.Fatalf("unexpected search call: user=%d query=%q limit=%d", repo.searchUserID, repo.searchQuery, repo.searchLimit)
+	}
+	data, ok := resp.Data.(MessageSearchData)
+	if !ok {
+		t.Fatalf("response data type = %T, want MessageSearchData", resp.Data)
+	}
+	if len(data.Messages) != 1 || data.Messages[0].ConversationTitle != "開發" || data.Messages[0].Content != "hello search" {
+		t.Fatalf("unexpected search data: %+v", data)
 	}
 }
 

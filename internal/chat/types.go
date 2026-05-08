@@ -35,14 +35,15 @@ type Conversation struct {
 
 // Message stores the chat message payload returned from persistence.
 type Message struct {
-	ID             int64
-	ConversationID int64
-	SenderID       int64
-	SenderName     string
-	MessageType    string
-	Content        string
-	CreatedAt      time.Time
-	Attachment     *Attachment
+	ID                int64
+	ConversationID    int64
+	ConversationTitle string
+	SenderID          int64
+	SenderName        string
+	MessageType       string
+	Content           string
+	CreatedAt         time.Time
+	Attachment        *Attachment
 }
 
 // CreateMessageInput is the normalized payload stored for a new message.
@@ -90,6 +91,26 @@ type DirectConversationData struct {
 	Title          string `json:"title"`
 }
 
+// UserSearchResult stores a searchable chat user.
+type UserSearchResult struct {
+	SourceSystem   string
+	ExternalUserID string
+	DisplayName    string
+}
+
+// UserSearchItem is the API-facing search result for creating direct conversations.
+type UserSearchItem struct {
+	SourceSystem   string `json:"source_system"`
+	ExternalUserID string `json:"external_user_id"`
+	DisplayName    string `json:"display_name"`
+}
+
+// UserSearchData is the API-facing user search payload.
+type UserSearchData struct {
+	Query string           `json:"query"`
+	Users []UserSearchItem `json:"users"`
+}
+
 // RealtimeEvent is the WebSocket payload pushed to chat clients.
 type RealtimeEvent struct {
 	EventType      string                  `json:"event_type"`
@@ -123,6 +144,24 @@ type MessageListData struct {
 	Type           string        `json:"type"`
 	Title          string        `json:"title"`
 	Messages       []MessageItem `json:"messages"`
+}
+
+// MessageSearchItem is the API-facing result for global message search.
+type MessageSearchItem struct {
+	ConversationID    int64  `json:"conversation_id"`
+	ConversationTitle string `json:"conversation_title"`
+	MessageID         int64  `json:"message_id"`
+	SenderID          int64  `json:"sender_id"`
+	SenderName        string `json:"sender_name"`
+	MessageType       string `json:"message_type"`
+	Content           string `json:"content"`
+	CreatedAt         string `json:"created_at"`
+}
+
+// MessageSearchData is the API-facing global message search payload.
+type MessageSearchData struct {
+	Query    string              `json:"query"`
+	Messages []MessageSearchItem `json:"messages"`
 }
 
 // CreateMessageRequest is the HTTP payload for sending a chat message.
@@ -162,10 +201,12 @@ type Broker interface {
 type Repository interface {
 	IsSystemAdmin(userID int64) (bool, error)
 	ListConversations(userID int64) ([]ConversationSummary, error)
+	SearchUsers(actorUserID int64, sourceSystem, query string, limit int) ([]UserSearchResult, error)
 	CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error)
 	ListConversationMemberIDs(conversationID int64) ([]int64, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
 	ListMessages(conversationID int64, limit int) ([]Message, error)
+	SearchMessages(userID int64, query string, limit int) ([]Message, error)
 	MarkConversationRead(userID, conversationID int64) error
 	CreateMessage(input CreateMessageInput) (Message, error)
 }

@@ -8,10 +8,12 @@ import (
 )
 
 const (
-	messageListLimit = 100
-	textMessageType  = "text"
-	imageMessageType = "image"
-	fileMessageType  = "file"
+	messageListLimit   = 100
+	messageSearchLimit = 30
+	userSearchLimit    = 10
+	textMessageType    = "text"
+	imageMessageType   = "image"
+	fileMessageType    = "file"
 )
 
 var (
@@ -70,6 +72,51 @@ func (s *Service) ListConversations(actor SessionPrincipal) (Response, int, erro
 	}
 
 	return Response{Success: true, Code: "CONVERSATIONS_OK", Message: "对话列表读取成功", Data: items}, 200, nil
+}
+
+// SearchUsers returns active users matching the query for direct conversation creation.
+func (s *Service) SearchUsers(actor SessionPrincipal, sourceSystem, query string) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	source := strings.TrimSpace(sourceSystem)
+	trimmed := strings.TrimSpace(strings.TrimPrefix(query, "@"))
+	if source == "" || trimmed == "" {
+		return Response{
+			Success: true,
+			Code:    "USER_SEARCH_OK",
+			Message: "使用者搜寻完成",
+			Data:    UserSearchData{Query: trimmed, Users: []UserSearchItem{}},
+		}, 200, nil
+	}
+
+	users, err := s.repo.SearchUsers(actor.UserID, source, trimmed, userSearchLimit)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	items := make([]UserSearchItem, 0, len(users))
+	for _, user := range users {
+		items = append(items, UserSearchItem{
+			SourceSystem:   user.SourceSystem,
+			ExternalUserID: user.ExternalUserID,
+			DisplayName:    user.DisplayName,
+		})
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_SEARCH_OK",
+		Message: "使用者搜寻完成",
+		Data: UserSearchData{
+			Query: trimmed,
+			Users: items,
+		},
+	}, 200, nil
 }
 
 // CreateDirectConversation creates or loads a direct conversation with another externally-identified user.
@@ -174,6 +221,55 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 			Type:           conversation.Type,
 			Title:          conversation.Title,
 			Messages:       items,
+		},
+	}, 200, nil
+}
+
+// SearchMessages returns text messages visible to the current user that match the query.
+func (s *Service) SearchMessages(actor SessionPrincipal, query string) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return Response{
+			Success: true,
+			Code:    "MESSAGE_SEARCH_OK",
+			Message: "讯息搜寻完成",
+			Data:    MessageSearchData{Query: trimmed, Messages: []MessageSearchItem{}},
+		}, 200, nil
+	}
+
+	messages, err := s.repo.SearchMessages(actor.UserID, trimmed, messageSearchLimit)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	items := make([]MessageSearchItem, 0, len(messages))
+	for _, message := range messages {
+		items = append(items, MessageSearchItem{
+			ConversationID:    message.ConversationID,
+			ConversationTitle: message.ConversationTitle,
+			MessageID:         message.ID,
+			SenderID:          message.SenderID,
+			SenderName:        message.SenderName,
+			MessageType:       message.MessageType,
+			Content:           message.Content,
+			CreatedAt:         message.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	return Response{
+		Success: true,
+		Code:    "MESSAGE_SEARCH_OK",
+		Message: "讯息搜寻完成",
+		Data: MessageSearchData{
+			Query:    trimmed,
+			Messages: items,
 		},
 	}, 200, nil
 }

@@ -22,7 +22,6 @@
     home: "聊天系統",
     login: "登入",
     status: "登入狀態",
-    direct: "建立一對一對話",
     settings: "設定"
   };
 
@@ -35,7 +34,7 @@
   }
 
   function viewRequiresAuth(name) {
-    return name === "direct" || name === "settings";
+    return name === "settings";
   }
 
   function accountName() {
@@ -131,6 +130,10 @@
   if (toggleButton) {
     toggleButton.addEventListener("click", function () {
       if (currentView() === "home") {
+        if (shell.classList.contains("is-searching")) {
+          document.dispatchEvent(new CustomEvent("twacc:search-close"));
+          return;
+        }
         shell.classList.toggle("is-menu-open");
         return;
       }

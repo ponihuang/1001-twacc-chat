@@ -15,10 +15,15 @@
 
   const conversationList = app.querySelector("[data-conversation-list]");
   const conversationSummary = app.querySelector("[data-conversation-summary]");
+  const conversationSearchInput = app.querySelector("[data-conversation-search]");
+  const sidebarShell = app.querySelector("[data-sidebar-shell]");
+  const conversationSearchPanel = app.querySelector("[data-conversation-search-panel]");
+  const searchDirectSection = app.querySelector("[data-search-direct-section]");
+  const searchDirectResults = app.querySelector("[data-search-direct-results]");
+  const searchMessageSection = app.querySelector("[data-search-message-section]");
+  const searchMessageResults = app.querySelector("[data-search-message-results]");
+  const searchAllMessagesButton = app.querySelector("[data-search-all-messages]");
   const folderTabs = app.querySelector("[data-folder-tabs]");
-  const directForm = app.querySelector("[data-direct-form]");
-  const directStatus = app.querySelector("[data-direct-status]");
-  const directExternalUserIDInput = app.querySelector("#direct-external-user-id");
   const messageBoard = app.querySelector("[data-message-board]");
   const messageForm = app.querySelector("[data-message-form]");
   const conversationTitle = app.querySelector("[data-conversation-title]");
@@ -31,6 +36,9 @@
   let conversations = [];
   let activeConversationID = 0;
   let activeFolderID = "";
+  let conversationSearchQuery = "";
+  let userSearchRequestToken = 0;
+  let messageSearchRequestToken = 0;
   let realtimeSocket = null;
   let reconnectTimer = 0;
   let reconnectAttempts = 0;
@@ -158,18 +166,29 @@
   }
 
   function filteredConversations(items) {
-    if (!activeFolderID) {
-      return items;
+    let visibleItems = items;
+    if (activeFolderID) {
+      const folder = readFolderCategories().find(function (item) {
+        return String(item.id || "") === activeFolderID;
+      });
+      if (folder && Array.isArray(folder.conversation_ids)) {
+        const allowed = new Set(folder.conversation_ids.map(String));
+        visibleItems = visibleItems.filter(function (item) {
+          return allowed.has(String(item.conversation_id));
+        });
+      }
     }
-    const folder = readFolderCategories().find(function (item) {
-      return String(item.id || "") === activeFolderID;
-    });
-    if (!folder || !Array.isArray(folder.conversation_ids)) {
-      return items;
+    if (!conversationSearchQuery) {
+      return visibleItems;
     }
-    const allowed = new Set(folder.conversation_ids.map(String));
-    return items.filter(function (item) {
-      return allowed.has(String(item.conversation_id));
+    const query = conversationSearchQuery.toLowerCase();
+    return visibleItems.filter(function (item) {
+      const text = [
+        item.title || "",
+        conversationPreview(item),
+        item.last_message_type || ""
+      ].join(" ").toLowerCase();
+      return text.indexOf(query) >= 0;
     });
   }
 
@@ -235,14 +254,15 @@
 
     const visibleItems = filteredConversations(items);
     if (!visibleItems.length) {
+      const isSearching = Boolean(conversationSearchQuery);
       conversationList.innerHTML = [
         '<article class="conversation-card is-placeholder">',
-        "<strong>" + (items.length ? "此分類尚無對話" : "目前沒有對話") + "</strong>",
-        "<span>" + (items.length ? "請到聊天室分類加入對話" : "先建立一個一對一對話") + "</span>",
-        "<small>" + (items.length ? "等待分類" : "等待建立") + "</small>",
+        "<strong>" + (isSearching ? "找不到對話" : (items.length ? "此分類尚無對話" : "目前沒有對話")) + "</strong>",
+        "<span>" + (isSearching ? "請嘗試其他關鍵字" : (items.length ? "請到聊天室分類加入對話" : "先建立一個一對一對話")) + "</span>",
+        "<small>" + (isSearching ? "搜尋中" : (items.length ? "等待分類" : "等待建立")) + "</small>",
         "</article>"
       ].join("");
-      conversationSummary.textContent = items.length ? "此聊天室分類目前沒有對應對話。" : "目前尚無對話，請先建立一個一對一對話。";
+      conversationSummary.textContent = isSearching ? "沒有符合搜尋條件的對話。" : (items.length ? "此聊天室分類目前沒有對應對話。" : "目前尚無對話，請先建立一個一對一對話。");
       renderEmptyConversationState("請選擇對話對象，開始傳訊息");
       return;
     }
@@ -279,6 +299,186 @@
         loadMessages(activeConversationID);
       });
     });
+  }
+
+  function normalizedSearchExternalID() {
+    return conversationSearchQuery.replace(/^@+/, "").trim();
+  }
+
+  function setSearchMode(active) {
+    if (sidebarShell) {
+      sidebarShell.classList.toggle("is-searching", Boolean(active));
+    }
+    if (conversationSearchPanel) {
+      conversationSearchPanel.hidden = !active;
+    }
+    if (folderTabs) {
+      folderTabs.hidden = Boolean(active);
+    }
+    if (conversationList) {
+      conversationList.hidden = Boolean(active);
+    }
+  }
+
+  function renderDirectSearchResults(items, loading) {
+    if (!searchDirectSection || !searchDirectResults) {
+      return;
+    }
+    if (!conversationSearchQuery) {
+      searchDirectSection.hidden = true;
+      searchDirectResults.innerHTML = "";
+      return;
+    }
+    searchDirectSection.hidden = false;
+    if (loading) {
+      searchDirectSection.hidden = true;
+      searchDirectResults.innerHTML = "";
+      return;
+    }
+    if (!items.length) {
+      searchDirectSection.hidden = true;
+      searchDirectResults.innerHTML = "";
+      return;
+    }
+    searchDirectSection.hidden = false;
+    searchDirectResults.innerHTML = items.map(function (item) {
+      const title = item.display_name || item.external_user_id || "使用者";
+      const externalID = item.external_user_id || "";
+      const initial = title.slice(0, 1).toUpperCase();
+      return [
+        '<button type="button" class="conversation-search-result" data-search-direct-id="' + escapeHTML(externalID) + '">',
+        '<span class="conversation-search-avatar">' + escapeHTML(initial) + '</span>',
+        '<span class="conversation-search-text">',
+        '<strong>' + escapeHTML(title) + '</strong>',
+        '<small>@' + escapeHTML(externalID) + '</small>',
+        '</span>',
+        '</button>'
+      ].join("");
+    }).join("");
+    searchDirectResults.querySelectorAll("[data-search-direct-id]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        createDirectConversationByExternalID(button.dataset.searchDirectId || "");
+      });
+    });
+  }
+
+  async function searchUsers() {
+    const headers = authHeaders();
+    const externalID = normalizedSearchExternalID();
+    if (!headers || !externalID) {
+      renderDirectSearchResults([], false);
+      return;
+    }
+    const requestToken = ++userSearchRequestToken;
+    renderDirectSearchResults([], true);
+    const response = await fetch("/api/users/search?source_system=" + encodeURIComponent(readSourceSystem()) + "&q=" + encodeURIComponent(externalID), {
+      headers: { Authorization: headers.Authorization }
+    });
+    const result = await parseJSON(response);
+    if (requestToken !== userSearchRequestToken) {
+      return;
+    }
+    if (!response.ok || !result.success) {
+      renderDirectSearchResults([], false);
+      return;
+    }
+    const data = result.data || {};
+    renderDirectSearchResults(data.users || [], false);
+  }
+
+  function renderMessageSearchResults(items, loading) {
+    if (!searchMessageSection || !searchMessageResults) {
+      return;
+    }
+    searchMessageSection.hidden = !conversationSearchQuery;
+    if (!conversationSearchQuery) {
+      searchMessageResults.innerHTML = "";
+      return;
+    }
+    if (loading) {
+      searchMessageResults.innerHTML = '<div class="conversation-search-empty">搜尋聊天記錄中...</div>';
+      return;
+    }
+    if (!items.length) {
+      searchMessageResults.innerHTML = '<div class="conversation-search-empty">沒有符合的聊天記錄</div>';
+      return;
+    }
+    searchMessageResults.innerHTML = items.map(function (item) {
+      const title = item.conversation_title || "聊天記錄";
+      const initial = title.slice(0, 1).toUpperCase();
+      const sender = item.sender_name ? item.sender_name + "：" : "";
+      return [
+        '<button type="button" class="conversation-search-result" data-search-message-conversation-id="' + item.conversation_id + '">',
+        '<span class="conversation-search-avatar is-muted">' + escapeHTML(initial) + '</span>',
+        '<span class="conversation-search-text">',
+        '<strong>' + escapeHTML(title) + '</strong>',
+        '<small>' + escapeHTML(sender + (item.content || "")) + '</small>',
+        '</span>',
+        '<span class="conversation-search-date">' + escapeHTML(formatTime(item.created_at)) + '</span>',
+        '</button>'
+      ].join("");
+    }).join("");
+    searchMessageResults.querySelectorAll("[data-search-message-conversation-id]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        const conversationID = Number(button.dataset.searchMessageConversationId || 0);
+        if (!conversationID) {
+          return;
+        }
+        activeConversationID = conversationID;
+        const key = accountStorageKey(storageKeys.activeConversationID);
+        if (key) {
+          localStorage.setItem(key, String(activeConversationID));
+        }
+        closeSearchMode();
+        renderConversationList(conversations);
+        loadMessages(activeConversationID);
+      });
+    });
+  }
+
+  async function searchMessages() {
+    const headers = authHeaders();
+    if (!headers || !conversationSearchQuery) {
+      renderMessageSearchResults([], false);
+      return;
+    }
+    const requestToken = ++messageSearchRequestToken;
+    renderMessageSearchResults([], true);
+    const response = await fetch("/api/messages/search?q=" + encodeURIComponent(conversationSearchQuery), {
+      headers: { Authorization: headers.Authorization }
+    });
+    const result = await parseJSON(response);
+    if (requestToken !== messageSearchRequestToken) {
+      return;
+    }
+    if (!response.ok || !result.success) {
+      renderMessageSearchResults([], false);
+      return;
+    }
+    const data = result.data || {};
+    renderMessageSearchResults(data.messages || [], false);
+  }
+
+  function renderSearchMode() {
+    const searching = Boolean(conversationSearchQuery);
+    setSearchMode(searching);
+    if (!searching) {
+      renderDirectSearchResults([], false);
+      renderMessageSearchResults([], false);
+      return;
+    }
+    searchUsers();
+    searchMessages();
+  }
+
+  function closeSearchMode() {
+    conversationSearchQuery = "";
+    if (conversationSearchInput) {
+      conversationSearchInput.value = "";
+    }
+    setSearchMode(false);
+    renderDirectSearchResults([], false);
+    renderMessageSearchResults([], false);
   }
 
   function conversationPreview(item) {
@@ -566,31 +766,26 @@
     };
   }
 
-  async function createDirectConversation(event) {
-    event.preventDefault();
+  async function createDirectConversationByExternalID(externalUserID) {
     const headers = authHeaders();
     if (!headers) {
-      directStatus.textContent = "請先登入。";
-      directStatus.classList.add("is-error");
+      setMessageStatus("請先登入。", true);
       return;
     }
 
-    directStatus.textContent = "建立對話中...";
-    directStatus.classList.remove("is-error");
-    directStatus.classList.remove("is-success");
+    setMessageStatus("建立對話中...", false);
 
     const response = await fetch("/api/conversations/direct", {
       method: "POST",
       headers: headers,
       body: JSON.stringify({
         source_system: readSourceSystem(),
-        external_user_id: directExternalUserIDInput.value.trim()
+        external_user_id: externalUserID.trim()
       })
     });
     const result = await parseJSON(response);
     if (!response.ok || !result.success) {
-      directStatus.textContent = result.message || "建立對話失敗";
-      directStatus.classList.add("is-error");
+      setMessageStatus(result.message || "建立對話失敗", true);
       return;
     }
 
@@ -599,9 +794,10 @@
     if (key) {
       localStorage.setItem(key, String(activeConversationID));
     }
-    directStatus.textContent = "對話已準備完成：" + (result.data.title || directExternalUserIDInput.value.trim());
-    directStatus.classList.add("is-success");
+    setMessageStatus("對話已準備完成：" + (result.data.title || externalUserID.trim()), false);
+    closeSearchMode();
     await loadConversations();
+    await loadMessages(activeConversationID);
   }
 
   async function sendMessage(event) {
@@ -690,6 +886,25 @@
     }
   });
 
+  if (conversationSearchInput) {
+    conversationSearchInput.addEventListener("focus", function () {
+      conversationSearchQuery = conversationSearchInput.value.trim();
+      renderSearchMode();
+    });
+    conversationSearchInput.addEventListener("input", function () {
+      conversationSearchQuery = conversationSearchInput.value.trim();
+      renderSearchMode();
+    });
+  }
+
+  if (searchAllMessagesButton && conversationSearchInput) {
+    searchAllMessagesButton.addEventListener("click", function () {
+      conversationSearchInput.focus();
+    });
+  }
+
+  document.addEventListener("twacc:search-close", closeSearchMode);
+
   window.addEventListener("storage", function (event) {
     if (!event.key || event.key.indexOf("twacc_chat_") !== 0) {
       return;
@@ -701,9 +916,6 @@
     loadConversations();
   });
 
-  if (directForm) {
-    directForm.addEventListener("submit", createDirectConversation);
-  }
   messageForm.addEventListener("submit", sendMessage);
   composerInput.addEventListener("keydown", handleComposerKeydown);
   document.addEventListener("keydown", function (event) {

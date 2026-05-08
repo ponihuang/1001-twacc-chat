@@ -51,6 +51,27 @@ func (h *Handler) ListConversations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// SearchUsers handles GET /api/users/search?q=...
+func (h *Handler) SearchUsers(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	actor, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, svcErr := h.service.SearchUsers(actor, r.URL.Query().Get("source_system"), r.URL.Query().Get("q"))
+	if svcErr != nil {
+		writeJSON(w, status, errorResponse(svcErr))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // ListMessages handles GET /api/conversations/{conversation_id}/messages.
 func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {
@@ -70,6 +91,27 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, status, svcErr := h.service.ListMessages(conversationID, actor)
+	if svcErr != nil {
+		writeJSON(w, status, errorResponse(svcErr))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// SearchMessages handles GET /api/messages/search?q=...
+func (h *Handler) SearchMessages(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	actor, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, svcErr := h.service.SearchMessages(actor, r.URL.Query().Get("q"))
 	if svcErr != nil {
 		writeJSON(w, status, errorResponse(svcErr))
 		return

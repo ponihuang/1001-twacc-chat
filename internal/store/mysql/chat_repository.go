@@ -126,6 +126,51 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 	return items, rows.Err()
 }
 
+// SearchUsers returns active users matching display name or external user id.
+func (r *ChatRepository) SearchUsers(actorUserID int64, sourceSystem, query string, limit int) ([]chat.UserSearchResult, error) {
+	rows, err := r.db.Query(`
+		SELECT source_system, external_user_id, display_name
+		  FROM users
+		 WHERE id <> ?
+		   AND source_system = ?
+		   AND status = 'active'
+		   AND (external_user_id LIKE ? OR display_name LIKE ?)
+		 ORDER BY
+		   CASE
+		     WHEN external_user_id = ? THEN 0
+		     WHEN external_user_id LIKE ? THEN 1
+		     WHEN display_name LIKE ? THEN 2
+		     ELSE 3
+		   END,
+		   display_name ASC,
+		   external_user_id ASC
+		 LIMIT ?`,
+		actorUserID,
+		sourceSystem,
+		"%"+query+"%",
+		"%"+query+"%",
+		query,
+		query+"%",
+		query+"%",
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search users: %w", err)
+	}
+	defer rows.Close()
+
+	var items []chat.UserSearchResult
+	for rows.Next() {
+		var item chat.UserSearchResult
+		if err := rows.Scan(&item.SourceSystem, &item.ExternalUserID, &item.DisplayName); err != nil {
+			return nil, fmt.Errorf("scan user search result: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	return items, rows.Err()
+}
+
 // CreateOrGetDirectConversation creates a direct conversation with the target user, or returns the existing one.
 func (r *ChatRepository) CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (chat.Conversation, bool, error) {
 	var targetUserID int64
@@ -322,6 +367,66 @@ func (r *ChatRepository) ListMessages(conversationID int64, limit int) ([]chat.M
 				MIMEType:     attachmentMIMEType.String,
 				SizeBytes:    attachmentSizeBytes.Int64,
 			}
+		}
+		items = append(items, item)
+	}
+
+	return items, rows.Err()
+}
+
+// SearchMessages returns text messages in conversations visible to the user.
+func (r *ChatRepository) SearchMessages(userID int64, query string, limit int) ([]chat.Message, error) {
+	rows, err := r.db.Query(`
+		SELECT
+			m.id,
+			m.conversation_id,
+			CASE
+				WHEN c.type = 'direct' THEN COALESCE(
+					(
+						SELECT u2.display_name
+						  FROM conversation_members cm2
+						  JOIN users u2 ON u2.id = cm2.user_id
+						 WHERE cm2.conversation_id = c.id
+						   AND cm2.user_id <> ?
+						 ORDER BY cm2.id ASC
+						 LIMIT 1
+					),
+					COALESCE(NULLIF(c.name, ''), 'Direct Conversation')
+				)
+				ELSE COALESCE(NULLIF(c.name, ''), 'Unnamed Group')
+			END AS conversation_title,
+			m.sender_id,
+			u.display_name AS sender_name,
+			m.message_type,
+			m.content,
+			m.created_at
+		  FROM messages m
+		  JOIN conversations c ON c.id = m.conversation_id
+		  JOIN conversation_members cm ON cm.conversation_id = c.id AND cm.user_id = ?
+		  JOIN users u ON u.id = m.sender_id
+		 WHERE m.message_type = 'text'
+		   AND m.content LIKE ?
+		 ORDER BY m.created_at DESC, m.id DESC
+		 LIMIT ?`, userID, userID, "%"+query+"%", limit)
+	if err != nil {
+		return nil, fmt.Errorf("search messages: %w", err)
+	}
+	defer rows.Close()
+
+	var items []chat.Message
+	for rows.Next() {
+		var item chat.Message
+		if err := rows.Scan(
+			&item.ID,
+			&item.ConversationID,
+			&item.ConversationTitle,
+			&item.SenderID,
+			&item.SenderName,
+			&item.MessageType,
+			&item.Content,
+			&item.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan message search result: %w", err)
 		}
 		items = append(items, item)
 	}
