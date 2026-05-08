@@ -37,6 +37,7 @@
   let activeConversationID = 0;
   let activeFolderID = "";
   let conversationSearchQuery = "";
+  let pendingDirectTarget = null;
   let userSearchRequestToken = 0;
   let messageSearchRequestToken = 0;
   let realtimeSocket = null;
@@ -146,6 +147,9 @@
   }
 
   function activeConversationTitle() {
+    if (pendingDirectTarget) {
+      return pendingDirectTarget.title || pendingDirectTarget.externalUserID || "";
+    }
     const active = conversations.find(function (item) {
       return item.conversation_id === activeConversationID;
     });
@@ -209,14 +213,11 @@
   function renderEmptyConversationState(title, detail) {
     const stateTitle = title || "請選擇對話對象，開始傳訊息";
     const stateDetail = detail || stateTitle;
+    pendingDirectTarget = null;
     setConversationUIActive(false);
     setConversationTitle(stateTitle);
     setMessageStatus(stateDetail, false);
-    messageBoard.innerHTML = [
-      '<div class="empty-chat-state">',
-      "<strong>" + escapeHTML(stateTitle) + "</strong>",
-      "</div>"
-    ].join("");
+    messageBoard.innerHTML = "";
   }
 
   function renderLoadingConversationState() {
@@ -228,9 +229,10 @@
   }
 
   function closeActiveConversation() {
-    if (!activeConversationID) {
+    if (!activeConversationID && !pendingDirectTarget) {
       return;
     }
+    pendingDirectTarget = null;
     activeConversationID = 0;
     const key = accountStorageKey(storageKeys.activeConversationID);
     if (key) {
@@ -263,7 +265,9 @@
         "</article>"
       ].join("");
       conversationSummary.textContent = isSearching ? "沒有符合搜尋條件的對話。" : (items.length ? "此聊天室分類目前沒有對應對話。" : "目前尚無對話，請先建立一個一對一對話。");
-      renderEmptyConversationState("請選擇對話對象，開始傳訊息");
+      if (!pendingDirectTarget) {
+        renderEmptyConversationState("請選擇對話對象，開始傳訊息");
+      }
       return;
     }
 
@@ -287,6 +291,7 @@
 
     conversationList.querySelectorAll("[data-conversation-id]").forEach(function (button) {
       button.addEventListener("click", function () {
+        pendingDirectTarget = null;
         activeConversationID = Number(button.dataset.conversationId || 0);
         if (!activeConversationID) {
           return;
@@ -346,7 +351,7 @@
       const externalID = item.external_user_id || "";
       const initial = title.slice(0, 1).toUpperCase();
       return [
-        '<button type="button" class="conversation-search-result" data-search-direct-id="' + escapeHTML(externalID) + '">',
+        '<button type="button" class="conversation-search-result" data-search-direct-id="' + escapeHTML(externalID) + '" data-search-direct-title="' + escapeHTML(title) + '">',
         '<span class="conversation-search-avatar">' + escapeHTML(initial) + '</span>',
         '<span class="conversation-search-text">',
         '<strong>' + escapeHTML(title) + '</strong>',
@@ -357,7 +362,10 @@
     }).join("");
     searchDirectResults.querySelectorAll("[data-search-direct-id]").forEach(function (button) {
       button.addEventListener("click", function () {
-        createDirectConversationByExternalID(button.dataset.searchDirectId || "");
+        openPendingDirectConversation({
+          externalUserID: button.dataset.searchDirectId || "",
+          title: button.dataset.searchDirectTitle || ""
+        });
       });
     });
   }
@@ -424,6 +432,7 @@
         if (!conversationID) {
           return;
         }
+        pendingDirectTarget = null;
         activeConversationID = conversationID;
         const key = accountStorageKey(storageKeys.activeConversationID);
         if (key) {
@@ -586,7 +595,9 @@
       return;
     }
 
-    renderEmptyConversationState();
+    if (!pendingDirectTarget) {
+      renderEmptyConversationState();
+    }
   }
 
   async function fetchConversationItems() {
@@ -766,38 +777,63 @@
     };
   }
 
-  async function createDirectConversationByExternalID(externalUserID) {
-    const headers = authHeaders();
-    if (!headers) {
-      setMessageStatus("請先登入。", true);
+  function openPendingDirectConversation(target) {
+    const externalUserID = String(target.externalUserID || "").trim();
+    if (!externalUserID) {
       return;
     }
 
-    setMessageStatus("建立對話中...", false);
+    activeConversationID = 0;
+    pendingDirectTarget = {
+      sourceSystem: readSourceSystem(),
+      externalUserID: externalUserID,
+      title: target.title || externalUserID
+    };
+    const key = accountStorageKey(storageKeys.activeConversationID);
+    if (key) {
+      localStorage.removeItem(key);
+    }
+    closeSearchMode();
+    renderConversationList(conversations);
+    messageLoadToken += 1;
+    setConversationUIActive(true);
+    setConversationTitle(activeConversationTitle());
+    setMessageStatus("尚未建立對話，送出第一則訊息後會建立。", false);
+    messageBoard.innerHTML = "";
+    scrollMessageBoardToLatest();
+    composerInput.focus();
+  }
 
+  async function ensureActiveConversationForSend(headers) {
+    if (activeConversationID) {
+      return activeConversationID;
+    }
+    if (!pendingDirectTarget) {
+      return 0;
+    }
+
+    setMessageStatus("建立對話中...", false);
     const response = await fetch("/api/conversations/direct", {
       method: "POST",
       headers: headers,
       body: JSON.stringify({
-        source_system: readSourceSystem(),
-        external_user_id: externalUserID.trim()
+        source_system: pendingDirectTarget.sourceSystem,
+        external_user_id: pendingDirectTarget.externalUserID
       })
     });
     const result = await parseJSON(response);
     if (!response.ok || !result.success) {
       setMessageStatus(result.message || "建立對話失敗", true);
-      return;
+      return 0;
     }
 
     activeConversationID = result.data.conversation_id;
+    pendingDirectTarget = null;
     const key = accountStorageKey(storageKeys.activeConversationID);
     if (key) {
       localStorage.setItem(key, String(activeConversationID));
     }
-    setMessageStatus("對話已準備完成：" + (result.data.title || externalUserID.trim()), false);
-    closeSearchMode();
-    await loadConversations();
-    await loadMessages(activeConversationID);
+    return activeConversationID;
   }
 
   async function sendMessage(event) {
@@ -809,7 +845,7 @@
       setMessageStatus("請先登入。", true);
       return;
     }
-    if (!activeConversationID) {
+    if (!activeConversationID && !pendingDirectTarget) {
       setMessageStatus("請先建立或選擇對話。", true);
       return;
     }
@@ -819,18 +855,23 @@
     }
 
     setMessageStatus("訊息送出中...", false);
+    const conversationID = await ensureActiveConversationForSend(headers);
+    if (!conversationID) {
+      return;
+    }
+
     let response;
     if (file) {
       const formData = new FormData();
       formData.set("content", content);
       formData.set("file", file);
-      response = await fetch("/api/conversations/" + activeConversationID + "/messages", {
+      response = await fetch("/api/conversations/" + conversationID + "/messages", {
         method: "POST",
         headers: { Authorization: headers.Authorization },
         body: formData
       });
     } else {
-      response = await fetch("/api/conversations/" + activeConversationID + "/messages", {
+      response = await fetch("/api/conversations/" + conversationID + "/messages", {
         method: "POST",
         headers: headers,
         body: JSON.stringify({ type: "text", content: content })
