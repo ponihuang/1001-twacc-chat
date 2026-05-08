@@ -142,6 +142,7 @@
       if (profileEditAccount) {
         profileEditAccount.value = "";
       }
+      updateProfileSaveVisibility();
       return;
     }
 
@@ -174,6 +175,16 @@
     if (profileEditAccount) {
       profileEditAccount.value = session.externalUserID || "";
     }
+    updateProfileSaveVisibility();
+  }
+
+  function updateProfileSaveVisibility() {
+    if (!profileEditSaveButton || !profileEditName) {
+      return;
+    }
+    const displayName = profileEditName.value.trim();
+    const changed = Boolean(displayName) && displayName !== profileEditOriginalName;
+    profileEditSaveButton.hidden = !changed;
   }
 
   function setSubview(name) {
@@ -229,6 +240,7 @@
     localStorage.setItem(sessionStorageKeys.displayName, savedName);
     profileEditOriginalName = savedName;
     renderProfile();
+    updateProfileSaveVisibility();
     document.dispatchEvent(new CustomEvent("twacc:session-changed", {
       detail: {
         loggedIn: true,
@@ -763,10 +775,12 @@
     editProfileButton.addEventListener("click", function () {
       renderProfile();
       setSubview("profile-edit");
+      updateProfileSaveVisibility();
     });
   }
 
   if (profileEditName) {
+    profileEditName.addEventListener("input", updateProfileSaveVisibility);
     profileEditName.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") {
         return;

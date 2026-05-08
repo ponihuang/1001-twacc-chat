@@ -749,6 +749,10 @@ strong {
   cursor: pointer;
 }
 
+.settings-profile-save-button[hidden] {
+  display: none;
+}
+
 .settings-profile-save-button svg {
   width: 24px;
   height: 24px;
