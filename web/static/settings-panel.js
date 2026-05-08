@@ -20,6 +20,10 @@
   const profileName = panel.querySelector("[data-settings-profile-name]");
   const profileSource = panel.querySelector("[data-settings-profile-source]");
   const profileAccount = panel.querySelector("[data-settings-profile-account]");
+  const avatarPreviewEdit = panel.querySelector("[data-avatar-preview-edit]");
+  const profileEditName = panel.querySelector("[data-profile-edit-name]");
+  const profileEditSource = panel.querySelector("[data-profile-edit-source]");
+  const profileEditAccount = panel.querySelector("[data-profile-edit-account]");
   const folderList = panel.querySelector("[data-folder-list]");
   const folderTabs = document.querySelector("[data-folder-tabs]");
   const addFolderButton = panel.querySelector("[data-folder-add]");
@@ -35,6 +39,7 @@
   const folderEditDeleteButton = panel.querySelector("[data-folder-edit-delete]");
   const subviews = Array.from(panel.querySelectorAll("[data-settings-view]"));
   const openButtons = Array.from(panel.querySelectorAll("[data-settings-open]"));
+  const editProfileButton = document.querySelector("[data-settings-edit-open]");
   const backButton = panel.querySelector("[data-settings-back]");
   const conversationList = document.querySelector("[data-conversation-list]");
 
@@ -78,6 +83,18 @@
         avatarPreview.style.backgroundImage = "";
         avatarPreview.classList.remove("has-image");
       }
+      if (avatarPreviewEdit) {
+        avatarPreviewEdit.textContent = "";
+      }
+      if (profileEditName) {
+        profileEditName.value = "";
+      }
+      if (profileEditSource) {
+        profileEditSource.value = "";
+      }
+      if (profileEditAccount) {
+        profileEditAccount.value = "";
+      }
       return;
     }
 
@@ -92,6 +109,18 @@
     }
     if (avatarPreview && !avatarPreview.classList.contains("has-image")) {
       avatarPreview.textContent = (session.externalUserID || "U").slice(0, 1).toUpperCase();
+    }
+    if (avatarPreviewEdit) {
+      avatarPreviewEdit.textContent = (session.externalUserID || "U").slice(0, 1).toUpperCase();
+    }
+    if (profileEditName) {
+      profileEditName.value = session.externalUserID || "";
+    }
+    if (profileEditSource) {
+      profileEditSource.value = session.sourceSystem || "";
+    }
+    if (profileEditAccount) {
+      profileEditAccount.value = session.externalUserID || "";
     }
   }
 
@@ -112,8 +141,9 @@
     const target = panel.dataset.settingsView || "main";
     document.dispatchEvent(new CustomEvent("twacc:sidebar-state", {
       detail: {
-        title: target === "folders" ? "聊天室分類" : "設定",
-        backAction: target === "folders" ? "settings-main" : ""
+        title: target === "folders" ? "聊天室分類" : (target === "profile-edit" ? "編輯個人資料" : "設定"),
+        backAction: target === "folders" || target === "profile-edit" ? "settings-main" : "",
+        settingsView: target
       }
     }));
   }
@@ -606,6 +636,13 @@
       }
     });
   });
+
+  if (editProfileButton) {
+    editProfileButton.addEventListener("click", function () {
+      renderProfile();
+      setSubview("profile-edit");
+    });
+  }
 
   if (backButton) {
     backButton.addEventListener("click", function () {

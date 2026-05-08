@@ -5,7 +5,7 @@
   }
 
   const loginForm = app.querySelector("[data-login-form]");
-  const logoutButton = app.querySelector("[data-logout-button]");
+  const logoutButtons = Array.from(app.querySelectorAll("[data-logout-button]"));
   const statusNode = app.querySelector("[data-auth-status]");
   const loginStateNode = app.querySelector("[data-login-state]");
   const tokenStateNode = app.querySelector("[data-token-state]");
@@ -266,8 +266,8 @@
   }
 
   loginForm.addEventListener("submit", submitLogin);
-  if (logoutButton) {
-    logoutButton.addEventListener("click", logout);
-  }
+  logoutButtons.forEach(function (button) {
+    button.addEventListener("click", logout);
+  });
   renderSessionState();
 })();

@@ -9,6 +9,9 @@
   const authRequiredButtons = Array.from(shell.querySelectorAll("[data-auth-required]"));
   const toggleButton = shell.querySelector("[data-sidebar-toggle]");
   const dropdown = shell.querySelector("[data-sidebar-dropdown]");
+  const settingsActions = shell.querySelector("[data-settings-actions]");
+  const settingsMenuToggle = shell.querySelector("[data-settings-menu-toggle]");
+  const settingsMenu = shell.querySelector("[data-settings-menu]");
   const titleNode = shell.querySelector("[data-sidebar-title]");
   const accountNameNode = shell.querySelector("[data-sidebar-account-name]");
   let titleOverride = "";
@@ -77,6 +80,10 @@
     titleOverride = "";
     backAction = "";
     shell.dataset.sidebarView = target;
+    shell.dataset.settingsView = "";
+    if (settingsMenu) {
+      settingsMenu.hidden = true;
+    }
     views.forEach(function (view) {
       view.classList.toggle("is-active", view.dataset.sidebarView === target);
     });
@@ -112,6 +119,15 @@
     });
   }
 
+  if (settingsMenuToggle && settingsMenu) {
+    settingsMenuToggle.addEventListener("click", function () {
+      if (settingsActions && settingsActions.hidden) {
+        return;
+      }
+      settingsMenu.hidden = !settingsMenu.hidden;
+    });
+  }
+
   document.addEventListener("twacc:sidebar-state", function (event) {
     if (currentView() !== "settings") {
       return;
@@ -119,12 +135,16 @@
     const detail = event.detail || {};
     titleOverride = detail.title || "";
     backAction = detail.backAction || "";
+    shell.dataset.settingsView = detail.settingsView || "main";
     applyHeaderState(currentView());
   });
 
   document.addEventListener("twacc:session-changed", applyAuthVisibility);
 
   document.addEventListener("click", function (event) {
+    if (settingsMenu && settingsMenuToggle && !settingsMenu.hidden && !settingsMenu.contains(event.target) && !settingsMenuToggle.contains(event.target)) {
+      settingsMenu.hidden = true;
+    }
     if (!dropdown || !shell.classList.contains("is-menu-open")) {
       return;
     }

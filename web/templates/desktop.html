@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=desktop-settings-layout-20260508a">
-  <script defer src="/static/sidebar-nav.js?v=desktop-settings-layout-20260508a"></script>
-  <script defer src="/static/settings-panel.js?v=desktop-settings-layout-20260508a"></script>
-  <script defer src="/static/auth.js?v=desktop-settings-layout-20260508a"></script>
-  <script defer src="/static/chat-app.js?v=desktop-settings-layout-20260508a"></script>
+  <link rel="stylesheet" href="/static/app.css?v=desktop-profile-edit-20260508a">
+  <script defer src="/static/sidebar-nav.js?v=desktop-profile-edit-20260508a"></script>
+  <script defer src="/static/settings-panel.js?v=desktop-profile-edit-20260508a"></script>
+  <script defer src="/static/auth.js?v=desktop-profile-edit-20260508a"></script>
+  <script defer src="/static/chat-app.js?v=desktop-profile-edit-20260508a"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -22,6 +22,18 @@
           <strong data-sidebar-title>聊天系統</strong>
         </div>
         <a class="sidebar-entry-link" href="/home">回到入口</a>
+        <div class="sidebar-settings-actions" data-settings-actions>
+          <button type="button" class="sidebar-edit-button" data-settings-edit-open aria-label="編輯個人資料">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path>
+              <path d="m15 5 4 4"></path>
+            </svg>
+          </button>
+          <button type="button" class="sidebar-more-button" data-settings-menu-toggle aria-label="打開設定選單">⋮</button>
+          <div class="sidebar-settings-menu panel-surface" data-settings-menu hidden>
+            <button type="button" data-logout-button>登出</button>
+          </div>
+        </div>
       </div>
 
       <nav class="sidebar-dropdown panel-surface" data-sidebar-dropdown>
@@ -152,6 +164,30 @@
                 <strong>聊天室分類</strong>
               </button>
             </div>
+          </section>
+
+          <section class="settings-subview" data-settings-view="profile-edit">
+            <section class="settings-edit-profile">
+              <label class="settings-edit-avatar" for="settings-avatar-input">
+                <span data-avatar-preview-edit>E</span>
+                <span class="settings-edit-camera" aria-hidden="true"></span>
+              </label>
+
+              <div class="settings-edit-fields">
+                <label class="settings-edit-field">
+                  <span>名稱</span>
+                  <input class="text-input" data-profile-edit-name>
+                </label>
+                <label class="settings-edit-field">
+                  <span>來源</span>
+                  <input class="text-input" data-profile-edit-source readonly>
+                </label>
+                <label class="settings-edit-field">
+                  <span>帳號</span>
+                  <input class="text-input" data-profile-edit-account readonly>
+                </label>
+              </div>
+            </section>
           </section>
 
           <section class="settings-subview" data-settings-view="folders">
