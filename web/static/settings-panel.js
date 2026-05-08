@@ -18,6 +18,7 @@
   const avatarRemoveButton = panel.querySelector("[data-avatar-remove]");
   const avatarEditButton = panel.querySelector("[data-avatar-edit]");
   const profileName = panel.querySelector("[data-settings-profile-name]");
+  const profileSource = panel.querySelector("[data-settings-profile-source]");
   const profileAccount = panel.querySelector("[data-settings-profile-account]");
   const folderList = panel.querySelector("[data-folder-list]");
   const folderTabs = document.querySelector("[data-folder-tabs]");
@@ -69,6 +70,9 @@
       if (profileAccount) {
         profileAccount.textContent = "請先登入";
       }
+      if (profileSource) {
+        profileSource.textContent = "尚未登入";
+      }
       if (avatarPreview) {
         avatarPreview.textContent = "";
         avatarPreview.style.backgroundImage = "";
@@ -80,8 +84,11 @@
     if (profileName) {
       profileName.textContent = session.externalUserID || "使用者";
     }
+    if (profileSource) {
+      profileSource.textContent = session.sourceSystem || "unknown";
+    }
     if (profileAccount) {
-      profileAccount.textContent = [session.sourceSystem || "unknown", session.externalUserID || "unknown"].join(" / ");
+      profileAccount.textContent = session.externalUserID || "unknown";
     }
     if (avatarPreview && !avatarPreview.classList.contains("has-image")) {
       avatarPreview.textContent = (session.externalUserID || "U").slice(0, 1).toUpperCase();

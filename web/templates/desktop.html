@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=desktop-menu-20260508a">
-  <script defer src="/static/sidebar-nav.js?v=desktop-menu-20260508a"></script>
-  <script defer src="/static/settings-panel.js?v=desktop-menu-20260508a"></script>
-  <script defer src="/static/auth.js?v=desktop-menu-20260508a"></script>
-  <script defer src="/static/chat-app.js?v=desktop-menu-20260508a"></script>
+  <link rel="stylesheet" href="/static/app.css?v=desktop-settings-layout-20260508a">
+  <script defer src="/static/sidebar-nav.js?v=desktop-settings-layout-20260508a"></script>
+  <script defer src="/static/settings-panel.js?v=desktop-settings-layout-20260508a"></script>
+  <script defer src="/static/auth.js?v=desktop-settings-layout-20260508a"></script>
+  <script defer src="/static/chat-app.js?v=desktop-settings-layout-20260508a"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -118,28 +118,39 @@
       <section class="sidebar-view" data-sidebar-view="settings" data-auth-required>
         <section class="sidebar-panel panel-surface sidebar-detail-panel settings-panel" data-settings-panel>
           <section class="settings-subview is-active" data-settings-view="main">
-            <div class="sidebar-view-header">
-              <span class="eyebrow">設定</span>
-              <strong>個人與分類設定</strong>
-              <p>先以前端骨架管理頭像與聊天室分類，之後再接正式設定 API。</p>
-            </div>
-
             <section class="settings-profile-card">
-              <div class="settings-avatar" data-avatar-preview>E</div>
-              <div class="settings-profile-meta">
-                <strong data-settings-profile-name>未登入</strong>
-                <span data-settings-profile-account>請先登入</span>
+              <div class="settings-profile-hero">
+                <div class="settings-avatar" data-avatar-preview>E</div>
+                <div class="settings-profile-meta">
+                  <strong data-settings-profile-name>未登入</strong>
+                  <span>online</span>
+                </div>
               </div>
-              <div class="settings-avatar-actions">
-                <label class="secondary-button settings-avatar-upload" for="settings-avatar-input">新增</label>
-                <button type="button" class="secondary-button" data-avatar-edit>編輯</button>
-                <button type="button" class="secondary-button" data-avatar-remove>刪除</button>
-                <input id="settings-avatar-input" type="file" accept=".jpg,.jpeg,.png" hidden data-avatar-input>
+
+              <div class="settings-profile-info">
+                <div class="settings-profile-row">
+                  <span class="settings-profile-row-icon" aria-hidden="true">S</span>
+                  <span class="settings-profile-row-text">
+                    <strong data-settings-profile-source>尚未登入</strong>
+                    <small>來源</small>
+                  </span>
+                </div>
+                <div class="settings-profile-row">
+                  <span class="settings-profile-row-icon" aria-hidden="true">@</span>
+                  <span class="settings-profile-row-text">
+                    <strong data-settings-profile-account>請先登入</strong>
+                    <small>帳號</small>
+                  </span>
+                </div>
               </div>
+              <input id="settings-avatar-input" type="file" accept=".jpg,.jpeg,.png" hidden data-avatar-input>
             </section>
 
-            <div class="settings-tabs">
-              <button type="button" class="settings-tab is-active" data-settings-open="folders">聊天室分類</button>
+            <div class="settings-list">
+              <button type="button" class="settings-list-item" data-settings-open="folders">
+                <span class="settings-list-icon" aria-hidden="true"></span>
+                <strong>聊天室分類</strong>
+              </button>
             </div>
           </section>
 
