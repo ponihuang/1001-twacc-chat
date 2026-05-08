@@ -10,6 +10,7 @@
   const toggleButton = shell.querySelector("[data-sidebar-toggle]");
   const dropdown = shell.querySelector("[data-sidebar-dropdown]");
   const titleNode = shell.querySelector("[data-sidebar-title]");
+  const accountNameNode = shell.querySelector("[data-sidebar-account-name]");
   let titleOverride = "";
   let backAction = "";
 
@@ -33,9 +34,21 @@
     return name === "direct" || name === "settings";
   }
 
+  function accountName() {
+    return localStorage.getItem("twacc_chat_external_user_id") || "使用者";
+  }
+
+  function applyAccountMenuLabel() {
+    if (!accountNameNode) {
+      return;
+    }
+    accountNameNode.textContent = accountName();
+  }
+
   function applyAuthVisibility() {
     const loggedIn = isLoggedIn();
     shell.classList.toggle("is-authenticated", loggedIn);
+    applyAccountMenuLabel();
     authRequiredButtons.forEach(function (button) {
       button.hidden = !loggedIn;
     });

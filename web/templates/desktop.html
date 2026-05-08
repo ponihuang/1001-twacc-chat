@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=desktop-auth-gated-20260506a">
-  <script defer src="/static/sidebar-nav.js?v=desktop-auth-gated-20260506a"></script>
-  <script defer src="/static/settings-panel.js?v=desktop-auth-gated-20260506a"></script>
-  <script defer src="/static/auth.js?v=desktop-auth-gated-20260506a"></script>
-  <script defer src="/static/chat-app.js?v=desktop-auth-gated-20260506a"></script>
+  <link rel="stylesheet" href="/static/app.css?v=desktop-menu-20260508a">
+  <script defer src="/static/sidebar-nav.js?v=desktop-menu-20260508a"></script>
+  <script defer src="/static/settings-panel.js?v=desktop-menu-20260508a"></script>
+  <script defer src="/static/auth.js?v=desktop-menu-20260508a"></script>
+  <script defer src="/static/chat-app.js?v=desktop-menu-20260508a"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -21,36 +21,19 @@
         <div class="sidebar-topbar-text">
           <strong data-sidebar-title>聊天系統</strong>
         </div>
-        <a class="sidebar-entry-link" href="/">回到入口</a>
+        <a class="sidebar-entry-link" href="/home">回到入口</a>
       </div>
 
       <nav class="sidebar-dropdown panel-surface" data-sidebar-dropdown>
-        <button type="button" class="sidebar-menu-item" data-sidebar-open="login">
-          <span class="sidebar-menu-kicker">1</span>
+        <button type="button" class="sidebar-menu-item" data-sidebar-open="settings" data-auth-required hidden>
           <span class="sidebar-menu-text">
-            <strong>登入</strong>
-            <small>輸入帳號後由既有 API 自動註冊 / 登入</small>
-          </span>
-        </button>
-        <button type="button" class="sidebar-menu-item" data-sidebar-open="status">
-          <span class="sidebar-menu-kicker">2</span>
-          <span class="sidebar-menu-text">
-            <strong>登入狀態</strong>
-            <small>查看目前 session token 與連線狀態</small>
+            <strong data-sidebar-account-name>使用者</strong>
           </span>
         </button>
         <button type="button" class="sidebar-menu-item" data-sidebar-open="direct" data-auth-required hidden>
-          <span class="sidebar-menu-kicker">3</span>
           <span class="sidebar-menu-text">
             <strong>建立一對一對話</strong>
             <small>輸入目標外部使用者編號後自動切到該對話</small>
-          </span>
-        </button>
-        <button type="button" class="sidebar-menu-item" data-sidebar-open="settings" data-auth-required hidden>
-          <span class="sidebar-menu-kicker">4</span>
-          <span class="sidebar-menu-text">
-            <strong>設定</strong>
-            <small>管理頭像、聊天室分類與顯示順序</small>
           </span>
         </button>
       </nav>
