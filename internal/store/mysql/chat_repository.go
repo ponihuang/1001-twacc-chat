@@ -53,6 +53,36 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 				)
 				ELSE COALESCE(NULLIF(c.name, ''), 'Unnamed Group')
 			END AS title,
+			CASE
+				WHEN c.type = 'direct' THEN COALESCE(
+					(
+						SELECT u.source_system
+						  FROM conversation_members cm2
+						  JOIN users u ON u.id = cm2.user_id
+						 WHERE cm2.conversation_id = c.id
+						   AND cm2.user_id <> ?
+						 ORDER BY cm2.id ASC
+						 LIMIT 1
+					),
+					''
+				)
+				ELSE ''
+			END AS direct_source_system,
+			CASE
+				WHEN c.type = 'direct' THEN COALESCE(
+					(
+						SELECT u.external_user_id
+						  FROM conversation_members cm2
+						  JOIN users u ON u.id = cm2.user_id
+						 WHERE cm2.conversation_id = c.id
+						   AND cm2.user_id <> ?
+						 ORDER BY cm2.id ASC
+						 LIMIT 1
+					),
+					''
+				)
+				ELSE ''
+			END AS direct_external_user_id,
 			(
 				SELECT COUNT(*)
 				  FROM conversation_members cmc
@@ -95,7 +125,7 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 		  FROM conversation_members cm
 		  JOIN conversations c ON c.id = cm.conversation_id
 		 WHERE cm.user_id = ?
-		 ORDER BY COALESCE(last_message_at, c.created_at) DESC, c.id DESC`, userID, userID, userID, userID)
+		 ORDER BY COALESCE(last_message_at, c.created_at) DESC, c.id DESC`, userID, userID, userID, userID, userID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list conversations: %w", err)
 	}
@@ -109,6 +139,8 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 			&item.ConversationID,
 			&item.Type,
 			&item.Title,
+			&item.DirectSourceSystem,
+			&item.DirectExternalID,
 			&item.MemberCount,
 			&item.LastMessageType,
 			&item.LastMessagePreview,

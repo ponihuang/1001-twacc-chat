@@ -19,6 +19,8 @@ type ConversationSummary struct {
 	ConversationID     int64
 	Type               string
 	Title              string
+	DirectSourceSystem string
+	DirectExternalID   string
 	MemberCount        int
 	LastMessageType    string
 	LastMessagePreview string
@@ -77,6 +79,8 @@ type ConversationItem struct {
 	ConversationID     int64  `json:"conversation_id"`
 	Type               string `json:"type"`
 	Title              string `json:"title"`
+	DirectSourceSystem string `json:"direct_source_system,omitempty"`
+	DirectExternalID   string `json:"direct_external_user_id,omitempty"`
 	MemberCount        int    `json:"member_count"`
 	LastMessageType    string `json:"last_message_type,omitempty"`
 	LastMessagePreview string `json:"last_message_preview,omitempty"`

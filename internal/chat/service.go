@@ -60,6 +60,8 @@ func (s *Service) ListConversations(actor SessionPrincipal) (Response, int, erro
 			ConversationID:     conversation.ConversationID,
 			Type:               conversation.Type,
 			Title:              conversation.Title,
+			DirectSourceSystem: conversation.DirectSourceSystem,
+			DirectExternalID:   conversation.DirectExternalID,
 			MemberCount:        conversation.MemberCount,
 			LastMessageType:    conversation.LastMessageType,
 			LastMessagePreview: conversation.LastMessagePreview,

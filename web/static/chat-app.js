@@ -156,6 +156,34 @@
     return active ? active.title : "";
   }
 
+  function findExistingDirectConversation(sourceSystem, externalUserID) {
+    const source = String(sourceSystem || "").trim();
+    const externalID = String(externalUserID || "").trim().toLowerCase();
+    if (!source || !externalID) {
+      return null;
+    }
+    return conversations.find(function (item) {
+      return item.type === "direct"
+        && String(item.direct_source_system || "").trim() === source
+        && String(item.direct_external_user_id || "").trim().toLowerCase() === externalID;
+    }) || null;
+  }
+
+  function openConversation(conversationID) {
+    pendingDirectTarget = null;
+    activeConversationID = Number(conversationID || 0);
+    if (!activeConversationID) {
+      return;
+    }
+    const key = accountStorageKey(storageKeys.activeConversationID);
+    if (key) {
+      localStorage.setItem(key, String(activeConversationID));
+    }
+    closeSearchMode();
+    renderConversationList(conversations);
+    loadMessages(activeConversationID);
+  }
+
   function readFolderCategories() {
     const key = accountStorageKey(storageKeys.folderCategories);
     if (!key) {
@@ -291,17 +319,7 @@
 
     conversationList.querySelectorAll("[data-conversation-id]").forEach(function (button) {
       button.addEventListener("click", function () {
-        pendingDirectTarget = null;
-        activeConversationID = Number(button.dataset.conversationId || 0);
-        if (!activeConversationID) {
-          return;
-        }
-        const key = accountStorageKey(storageKeys.activeConversationID);
-        if (key) {
-          localStorage.setItem(key, String(activeConversationID));
-        }
-        renderConversationList(conversations);
-        loadMessages(activeConversationID);
+        openConversation(button.dataset.conversationId || 0);
       });
     });
   }
@@ -349,9 +367,10 @@
     searchDirectResults.innerHTML = items.map(function (item) {
       const title = item.display_name || item.external_user_id || "使用者";
       const externalID = item.external_user_id || "";
+      const sourceSystem = item.source_system || readSourceSystem();
       const initial = title.slice(0, 1).toUpperCase();
       return [
-        '<button type="button" class="conversation-search-result" data-search-direct-id="' + escapeHTML(externalID) + '" data-search-direct-title="' + escapeHTML(title) + '">',
+        '<button type="button" class="conversation-search-result" data-search-direct-id="' + escapeHTML(externalID) + '" data-search-direct-title="' + escapeHTML(title) + '" data-search-direct-source="' + escapeHTML(sourceSystem) + '">',
         '<span class="conversation-search-avatar">' + escapeHTML(initial) + '</span>',
         '<span class="conversation-search-text">',
         '<strong>' + escapeHTML(title) + '</strong>',
@@ -363,6 +382,7 @@
     searchDirectResults.querySelectorAll("[data-search-direct-id]").forEach(function (button) {
       button.addEventListener("click", function () {
         openPendingDirectConversation({
+          sourceSystem: button.dataset.searchDirectSource || "",
           externalUserID: button.dataset.searchDirectId || "",
           title: button.dataset.searchDirectTitle || ""
         });
@@ -432,15 +452,7 @@
         if (!conversationID) {
           return;
         }
-        pendingDirectTarget = null;
-        activeConversationID = conversationID;
-        const key = accountStorageKey(storageKeys.activeConversationID);
-        if (key) {
-          localStorage.setItem(key, String(activeConversationID));
-        }
-        closeSearchMode();
-        renderConversationList(conversations);
-        loadMessages(activeConversationID);
+        openConversation(conversationID);
       });
     });
   }
@@ -782,10 +794,16 @@
     if (!externalUserID) {
       return;
     }
+    const sourceSystem = String(target.sourceSystem || readSourceSystem()).trim();
+    const existing = findExistingDirectConversation(sourceSystem, externalUserID);
+    if (existing) {
+      openConversation(existing.conversation_id);
+      return;
+    }
 
     activeConversationID = 0;
     pendingDirectTarget = {
-      sourceSystem: readSourceSystem(),
+      sourceSystem: sourceSystem,
       externalUserID: externalUserID,
       title: target.title || externalUserID
     };

@@ -151,7 +151,7 @@ func conversationKey(userID, conversationID int64) string {
 func TestListConversations(t *testing.T) {
 	repo := &mockRepository{
 		conversations: map[int64][]ConversationSummary{
-			7: {{ConversationID: 9, Type: "group", Title: "採購小組", MemberCount: 3, LastMessageType: "text", LastMessagePreview: "hello", LastMessageAt: time.Date(2026, 4, 7, 1, 2, 3, 0, time.UTC), UnreadCount: 2}},
+			7: {{ConversationID: 9, Type: "direct", Title: "採購小組", DirectSourceSystem: "erp", DirectExternalID: "user_b", MemberCount: 3, LastMessageType: "text", LastMessagePreview: "hello", LastMessageAt: time.Date(2026, 4, 7, 1, 2, 3, 0, time.UTC), UnreadCount: 2}},
 		},
 	}
 	service := NewService(repo, nil)
@@ -176,6 +176,9 @@ func TestListConversations(t *testing.T) {
 	}
 	if items[0].UnreadCount != 2 {
 		t.Fatalf("unread_count = %d, want 2", items[0].UnreadCount)
+	}
+	if items[0].DirectSourceSystem != "erp" || items[0].DirectExternalID != "user_b" {
+		t.Fatalf("unexpected direct peer fields: %+v", items[0])
 	}
 }
 
