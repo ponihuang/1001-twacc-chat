@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
   <link rel="stylesheet" href="/static/app.css?v=global-search-20260508i">
+  <script defer src="/static/page-auth-guard.js?v=auth-guard-20260511a"></script>
   <script defer src="/static/sidebar-nav.js?v=global-search-20260508i"></script>
   <script defer src="/static/settings-panel.js?v=global-search-20260508i"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
   <script defer src="/static/chat-app.js?v=global-search-20260508i"></script>
 </head>
-<body class="desktop-page">
+<body class="desktop-page" data-require-auth-redirect="/login">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
     <aside class="desktop-sidebar" data-sidebar-shell>
       <div class="sidebar-topbar">

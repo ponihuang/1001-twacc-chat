@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v=auth-guard-20260511a">
+  <script defer src="/static/page-auth-guard.js?v=auth-guard-20260511a"></script>
 </head>
-<body class="overview-page">
+<body class="overview-page" data-require-auth-redirect="/login">
   <main class="overview-shell">
     <section class="overview-hero panel-surface">
       <span class="eyebrow">Chat System MVP</span>

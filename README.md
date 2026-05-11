@@ -1,27 +1,35 @@
 # 1001-twacc-chat
 
-以 Go 為主體的 Web 聊天系統 MVP。產品主核心是聊天與群組通訊；外部系統接入僅作為統一 API 能力，讓其他網站或業務系統可以透過 API 與本對談系統溝通，不另為 ERP 或任何單一來源系統建立專屬產品分類或專屬界面。現階段已建立可執行的 HTTP server、首頁導覽頁、MySQL 連線初始化、migration 自動執行、外部系統註冊 / 登入 API、session/token 驗證、聊天列表 / 訊息列表 / 一對一對話 API、WebSocket 即時更新、圖片與檔案訊息上傳、本機靜態附件提供、IP 白名單管理 API，以及 trusted device 核准 API。
+以 Go 為主體的 Web 聊天系統 MVP。產品主核心是聊天與群組通訊；外部系統接入僅作為統一 API 能力，讓其他網站或業務系統可以透過 API 與本對談系統溝通，不另為 ERP 或任何單一來源系統建立專屬產品分類或專屬界面。現階段已建立可執行的 HTTP server、首頁導覽頁、登入頁、MySQL 連線初始化、migration 自動執行、外部系統註冊 / 登入 API、session/token 驗證、聊天列表 / 訊息列表 / 一對一對話 API、使用者與訊息搜尋、個人資料更新 API、WebSocket 即時更新、圖片與檔案訊息上傳、本機靜態附件提供、IP 白名單管理 API，以及 trusted device 核准 API。
 
 ## 目前狀態
 
 目前已完成：
 
 - Go HTTP server 入口與基本路由
-- `GET /`、`GET /chat`、`GET /m/chat`、`GET /embed/chat`、`GET /healthz`
+- `GET /`、`GET /home`、`GET /login`、`GET /chat`、`GET /m/chat`、`GET /embed/chat`、`GET /healthz`
 - `GET /api/conversations`
 - `POST /api/conversations/direct`
+- `GET /api/users/search`
+- `GET /api/messages/search`
 - `GET /api/conversations/{conversation_id}/messages`
 - `POST /api/conversations/{conversation_id}/messages`
 - `GET /ws`
 - `GET /uploads/{filename}`
-- 桌機版 Web 測試登入、對話列表、一對一對話建立
-- 桌機版左欄下拉選單與子頁切換原型（登入 / 登入狀態 / 建立一對一對話 / 設定）
-- 桌機版設定頁前端原型：頭像預覽、聊天室分類建立與分類列顯示
+- `/` 依登入狀態導向 `/login` 或 `/chat`
+- `/home` 與 `/chat` 未登入或 session 過期會導向 `/login`
+- `/home` 保留原入口導覽畫面
+- `/login` 為獨立登入頁，登入後導向 `/chat`，登出後導向 `/login`
+- 桌機版 Web 測試登入、對話列表、搜尋使用者與訊息
+- 桌機版搜尋使用者時，點選使用者會先開啟暫存聊天畫面，送出第一則訊息時才建立一對一對話
+- 桌機版左欄下拉選單：第一列顯示登入帳號並進入設定頁
+- 桌機版設定頁：個人資料、顯示名稱更新、聊天室分類建立與分類列顯示
 - 文字訊息送出、`Enter` 快捷送出
 - 圖片與檔案訊息上傳
 - MySQL 設定讀取、driver 初始化與 migration 自動執行
 - 外部系統註冊 / 登入 API
 - session token 簽發與 Bearer 驗證
+- 顯示名稱更新 API
 - system_admin 裝置查詢與 IP 白名單管理 API
 - trusted device 核准 API
 - 使用者、session、裝置、IP 白名單、聊天核心資料表 migration
@@ -112,13 +120,15 @@ REQUIRE_TRUSTED_DEVICE=false
 
 `/chat` 目前已接上桌機版 Web 測試流程：
 
-- 直接輸入帳號與密碼登入
+- 未登入或 session 過期時導向 `/login`
 - 登入後載入對話列表
-- 透過外部使用者編號建立 / 載入一對一對話
-- 左上 icon 可打開左欄下拉選單，切換登入 / 登入狀態 / 建立一對一對話 / 設定子頁
-- 設定頁目前提供頭像預覽與聊天室分類前端原型
+- 左側上方搜尋框可搜尋使用者與聊天記錄
+- 搜尋使用者後，點選使用者會先開啟暫存聊天畫面，送出第一則訊息時才建立一對一對話
+- 左上 icon 可打開左欄下拉選單，第一列顯示登入帳號並進入設定頁
+- 設定頁目前提供個人資料、顯示名稱更新、頭像預覽與聊天室分類前端原型
 - 聊天室分類目前保存在瀏覽器 `localStorage`，並顯示在左側 `Conversations` 上方
 - `ALL` 為預設分類，固定顯示全部對話
+- 聊天室分類與新建資料夾介面已調整為接近 Telegram Web 的流程
 - 傳送文字訊息
 - `Enter` 送出、`Shift + Enter` 換行
 - 上傳圖片或檔案訊息
@@ -129,6 +139,7 @@ REQUIRE_TRUSTED_DEVICE=false
 - 設定頁與聊天室分類仍屬前端原型，尚未接正式設定 API
 - 聊天室分類目前保存在瀏覽器 `localStorage`，屬於 MVP 階段的前端暫存實作
 - `ALL` 與自訂分類已可影響左側對話列表顯示，但資料仍未持久化到後端
+- 頭像上傳仍為前端原型，尚未接正式後端儲存
 - 若要進正式版，仍需補設定資料表、設定 API 與前端 API 串接
 
 附件格式目前支援：
@@ -145,6 +156,8 @@ REQUIRE_TRUSTED_DEVICE=false
 ## 目前可用端點
 
 - `GET /`
+- `GET /home`
+- `GET /login`
 - `GET /chat`
 - `GET /m/chat`
 - `GET /embed/chat`
@@ -152,11 +165,14 @@ REQUIRE_TRUSTED_DEVICE=false
 - `GET /ws`
 - `GET /api/conversations`
 - `POST /api/conversations/direct`
+- `GET /api/users/search`
+- `GET /api/messages/search`
 - `GET /api/conversations/{conversation_id}/messages`
 - `POST /api/conversations/{conversation_id}/messages`
 - `GET /uploads/{filename}`
 - `POST /api/erp/register`
 - `POST /api/erp/login`
+- `PATCH /api/users/me/profile`
 - `GET /api/system-admin/users/{user_id}/devices`
 - `PUT /api/system-admin/users/{user_id}/ip-whitelist`
 - `POST /api/users/{user_id}/devices/{device_id}/approve`
@@ -171,6 +187,8 @@ REQUIRE_TRUSTED_DEVICE=false
 
 目前骨架路由：
 
+- `/home`：登入後入口導覽頁
+- `/login`：獨立登入頁
 - `/chat`：桌機版全畫面
 - `/m/chat`：手機版全畫面
 - `/embed/chat`：嵌入式浮動視窗
