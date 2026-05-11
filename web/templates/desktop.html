@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=global-search-20260508h">
-  <script defer src="/static/sidebar-nav.js?v=global-search-20260508h"></script>
-  <script defer src="/static/settings-panel.js?v=global-search-20260508g"></script>
+  <link rel="stylesheet" href="/static/app.css?v=global-search-20260508i">
+  <script defer src="/static/sidebar-nav.js?v=global-search-20260508i"></script>
+  <script defer src="/static/settings-panel.js?v=global-search-20260508i"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
-  <script defer src="/static/chat-app.js?v=global-search-20260508h"></script>
+  <script defer src="/static/chat-app.js?v=global-search-20260508i"></script>
 </head>
 <body class="desktop-page">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -196,8 +196,8 @@
             <section class="settings-pane is-active" data-settings-pane="folders">
               <div class="settings-folder-list-view" data-folder-list-view>
                 <div class="settings-folder-hero" aria-hidden="true">🗂️</div>
-                <p class="settings-folder-help">為不同的聊天室建立資料夾並進行分類，然後在它們之間快速切換。</p>
-                <button type="button" class="add-folder-button" data-folder-add>＋ 建立新資料夾</button>
+                <p class="settings-folder-help">建立資料夾，用於存放不同群組的聊天記錄，並可快速切換。</p>
+                <button type="button" class="add-folder-button" data-folder-add>＋ 建立資料夾</button>
 
                 <div class="settings-folder-section-title">聊天室分類</div>
                 <div class="settings-folder-list" data-folder-list></div>
@@ -206,18 +206,18 @@
               <div class="settings-folder-edit-view" data-folder-edit-view hidden>
                 <div class="settings-folder-edit-header">
                   <button type="button" class="settings-icon-button" data-folder-edit-back aria-label="返回分類清單">‹</button>
-                  <strong>編輯資料夾</strong>
-                  <button type="button" class="settings-icon-button" data-folder-edit-menu aria-label="打開資料夾選單">⋮</button>
-                  <div class="settings-folder-menu" data-folder-edit-menu-panel hidden>
-                    <button type="button" data-folder-edit-delete>刪除</button>
-                  </div>
+                  <strong data-folder-edit-title>編輯資料夾</strong>
+                  <button type="button" class="settings-icon-button settings-folder-save-icon" data-folder-edit-save aria-label="儲存資料夾">✓</button>
                 </div>
-                <div class="settings-folder-edit-art" aria-hidden="true">📁</div>
-                <label class="field-label" for="folder-edit-name">資料夾名稱</label>
-                <input id="folder-edit-name" class="text-input" data-folder-edit-name>
+                <section class="settings-folder-edit-intro">
+                  <div class="settings-folder-edit-art" aria-hidden="true">📂</div>
+                  <p>選擇要在此資料夾中顯示和永遠不會顯示的聊天記錄和聊天類型。</p>
+                </section>
+                <label class="field-label visually-hidden" for="folder-edit-name">資料夾名稱</label>
+                <input id="folder-edit-name" class="text-input settings-folder-name-input" data-folder-edit-name placeholder="資料夾名稱">
                 <div class="settings-folder-edit-row">
                   <strong>包含的聊天室</strong>
-                  <button type="button" class="secondary-button" data-folder-edit-save>儲存</button>
+                  <button type="button" class="settings-folder-add-chat" data-folder-add-chat>＋ 新增聊天</button>
                 </div>
                 <div class="auth-status" data-folder-edit-status hidden>已儲存</div>
                 <div class="settings-folder-chat-list" data-folder-chat-list></div>

@@ -33,13 +33,11 @@
   const folderListView = panel.querySelector("[data-folder-list-view]");
   const folderEditView = panel.querySelector("[data-folder-edit-view]");
   const folderEditBackButton = panel.querySelector("[data-folder-edit-back]");
+  const folderEditTitle = panel.querySelector("[data-folder-edit-title]");
   const folderEditNameInput = panel.querySelector("[data-folder-edit-name]");
   const folderChatList = panel.querySelector("[data-folder-chat-list]");
   const folderEditSaveButton = panel.querySelector("[data-folder-edit-save]");
   const folderEditStatus = panel.querySelector("[data-folder-edit-status]");
-  const folderEditMenuButton = panel.querySelector("[data-folder-edit-menu]");
-  const folderEditMenuPanel = panel.querySelector("[data-folder-edit-menu-panel]");
-  const folderEditDeleteButton = panel.querySelector("[data-folder-edit-delete]");
   const subviews = Array.from(panel.querySelectorAll("[data-settings-view]"));
   const openButtons = Array.from(panel.querySelectorAll("[data-settings-open]"));
   const editProfileButton = document.querySelector("[data-settings-edit-open]");
@@ -259,10 +257,12 @@
       return;
     }
     const target = panel.dataset.settingsView || "main";
+    const editingFolder = target === "folders" && folderEditView && !folderEditView.hidden;
+    shell.classList.toggle("is-folder-editing", Boolean(editingFolder));
     document.dispatchEvent(new CustomEvent("twacc:sidebar-state", {
       detail: {
-        title: target === "folders" ? "聊天室分類" : (target === "profile-edit" ? "編輯個人資料" : "設定"),
-        backAction: target === "folders" || target === "profile-edit" ? "settings-main" : "",
+        title: editingFolder ? "" : (target === "folders" ? "聊天室分類" : (target === "profile-edit" ? "編輯個人資料" : "設定")),
+        backAction: editingFolder ? "" : (target === "folders" || target === "profile-edit" ? "settings-main" : ""),
         settingsView: target
       }
     }));
@@ -490,6 +490,7 @@
     const editing = mode === "edit";
     folderListView.hidden = editing;
     folderEditView.hidden = !editing;
+    syncSidebarState();
   }
 
   function renderFolderChatList(folder) {
@@ -515,16 +516,17 @@
     ].join("");
   }
 
-  function openFolderEditor(folderIDValue) {
+  function openFolderEditor(folderIDValue, isNewFolder) {
     const folder = findFolder(folderIDValue);
     if (!folder) {
       return;
     }
     activeFolderID = folder.id;
-    folderEditNameInput.value = folder.name;
-    if (folderEditMenuPanel) {
-      folderEditMenuPanel.hidden = true;
+    folderEditView.classList.toggle("is-new-folder", Boolean(isNewFolder));
+    if (folderEditTitle) {
+      folderEditTitle.textContent = isNewFolder ? "新建資料夾" : "編輯資料夾";
     }
+    folderEditNameInput.value = isNewFolder ? "" : folder.name;
     if (folderEditStatus) {
       folderEditStatus.hidden = true;
       folderEditStatus.textContent = "已儲存";
@@ -679,7 +681,7 @@
       folders.push(folder);
       saveFolders(folders);
       renderFolderCards(readFolders());
-      openFolderEditor(folder.id);
+      openFolderEditor(folder.id, true);
     });
   }
 
@@ -726,18 +728,6 @@
         event.preventDefault();
         saveActiveFolder();
       }
-    });
-  }
-
-  if (folderEditMenuButton && folderEditMenuPanel) {
-    folderEditMenuButton.addEventListener("click", function () {
-      folderEditMenuPanel.hidden = !folderEditMenuPanel.hidden;
-    });
-  }
-
-  if (folderEditDeleteButton) {
-    folderEditDeleteButton.addEventListener("click", function () {
-      deleteFolder(activeFolderID);
     });
   }
 
