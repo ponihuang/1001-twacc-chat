@@ -46,6 +46,7 @@ type Message struct {
 	Content           string
 	CreatedAt         time.Time
 	Attachment        *Attachment
+	Attachments       []Attachment
 }
 
 // CreateMessageInput is the normalized payload stored for a new message.
@@ -55,6 +56,7 @@ type CreateMessageInput struct {
 	MessageType    string
 	Content        string
 	Attachment     *AttachmentInput
+	Attachments    []AttachmentInput
 }
 
 // Attachment stores metadata for a single uploaded file.
@@ -125,13 +127,14 @@ type RealtimeEvent struct {
 
 // MessageItem is the API-facing message item.
 type MessageItem struct {
-	MessageID   int64           `json:"message_id"`
-	SenderID    int64           `json:"sender_id"`
-	SenderName  string          `json:"sender_name"`
-	MessageType string          `json:"message_type"`
-	Content     string          `json:"content"`
-	CreatedAt   string          `json:"created_at"`
-	Attachment  *AttachmentItem `json:"attachment,omitempty"`
+	MessageID   int64            `json:"message_id"`
+	SenderID    int64            `json:"sender_id"`
+	SenderName  string           `json:"sender_name"`
+	MessageType string           `json:"message_type"`
+	Content     string           `json:"content"`
+	CreatedAt   string           `json:"created_at"`
+	Attachment  *AttachmentItem  `json:"attachment,omitempty"`
+	Attachments []AttachmentItem `json:"attachments,omitempty"`
 }
 
 // AttachmentItem is the API-facing uploaded file metadata.
@@ -170,9 +173,10 @@ type MessageSearchData struct {
 
 // CreateMessageRequest is the HTTP payload for sending a chat message.
 type CreateMessageRequest struct {
-	Type       string           `json:"type"`
-	Content    string           `json:"content"`
-	Attachment *AttachmentInput `json:"-"`
+	Type        string            `json:"type"`
+	Content     string            `json:"content"`
+	Attachment  *AttachmentInput  `json:"-"`
+	Attachments []AttachmentInput `json:"-"`
 }
 
 // CreateDirectConversationRequest is the HTTP payload for creating/loading a direct conversation.

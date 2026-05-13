@@ -328,18 +328,18 @@ func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (c
 func (r *ChatRepository) ListMessages(conversationID int64, limit int) ([]chat.Message, error) {
 	rows, err := r.db.Query(`
 		SELECT
-			id,
-			conversation_id,
-			sender_id,
-			sender_name,
-			message_type,
-			content,
-			created_at,
-			attachment_id,
-			attachment_original_name,
-			attachment_storage_path,
-			attachment_mime_type,
-			attachment_size_bytes
+			recent.id,
+			recent.conversation_id,
+			recent.sender_id,
+			recent.sender_name,
+			recent.message_type,
+			recent.content,
+			recent.created_at,
+			a.id AS attachment_id,
+			a.original_name AS attachment_original_name,
+			a.storage_path AS attachment_storage_path,
+			a.mime_type AS attachment_mime_type,
+			a.size_bytes AS attachment_size_bytes
 		  FROM (
 				SELECT
 					m.id,
@@ -348,20 +348,15 @@ func (r *ChatRepository) ListMessages(conversationID int64, limit int) ([]chat.M
 					u.display_name AS sender_name,
 					m.message_type,
 					m.content,
-					m.created_at,
-					a.id AS attachment_id,
-					a.original_name AS attachment_original_name,
-					a.storage_path AS attachment_storage_path,
-					a.mime_type AS attachment_mime_type,
-					a.size_bytes AS attachment_size_bytes
+					m.created_at
 				  FROM messages m
 				  JOIN users u ON u.id = m.sender_id
-				  LEFT JOIN attachments a ON a.message_id = m.id
 				 WHERE m.conversation_id = ?
 				 ORDER BY m.created_at DESC, m.id DESC
 				 LIMIT ?
 		  ) recent
-		 ORDER BY created_at ASC, id ASC`, conversationID, limit)
+		  LEFT JOIN attachments a ON a.message_id = recent.id
+		 ORDER BY recent.created_at ASC, recent.id ASC, a.id ASC`, conversationID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
@@ -392,13 +387,24 @@ func (r *ChatRepository) ListMessages(conversationID int64, limit int) ([]chat.M
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		if attachmentID.Valid {
-			item.Attachment = &chat.Attachment{
+			attachment := chat.Attachment{
 				ID:           attachmentID.Int64,
 				OriginalName: attachmentOriginalName.String,
 				StoragePath:  attachmentStoragePath.String,
 				MIMEType:     attachmentMIMEType.String,
 				SizeBytes:    attachmentSizeBytes.Int64,
 			}
+			item.Attachments = append(item.Attachments, attachment)
+			if item.Attachment == nil {
+				item.Attachment = &item.Attachments[0]
+			}
+		}
+		if len(items) > 0 && items[len(items)-1].ID == item.ID {
+			items[len(items)-1].Attachments = append(items[len(items)-1].Attachments, item.Attachments...)
+			if items[len(items)-1].Attachment == nil && len(items[len(items)-1].Attachments) > 0 {
+				items[len(items)-1].Attachment = &items[len(items)-1].Attachments[0]
+			}
+			continue
 		}
 		items = append(items, item)
 	}
@@ -530,14 +536,18 @@ func (r *ChatRepository) CreateMessage(input chat.CreateMessageInput) (chat.Mess
 		return chat.Message{}, fmt.Errorf("create message last insert id: %w", err)
 	}
 
-	if input.Attachment != nil {
+	attachments := input.Attachments
+	if len(attachments) == 0 && input.Attachment != nil {
+		attachments = []chat.AttachmentInput{*input.Attachment}
+	}
+	for _, attachment := range attachments {
 		if _, err := tx.Exec(
 			`INSERT INTO attachments (message_id, original_name, storage_path, mime_type, size_bytes) VALUES (?, ?, ?, ?, ?)`,
 			messageID,
-			input.Attachment.OriginalName,
-			input.Attachment.StoragePath,
-			input.Attachment.MIMEType,
-			input.Attachment.SizeBytes,
+			attachment.OriginalName,
+			attachment.StoragePath,
+			attachment.MIMEType,
+			attachment.SizeBytes,
 		); err != nil {
 			return chat.Message{}, fmt.Errorf("create attachment: %w", err)
 		}
@@ -547,8 +557,7 @@ func (r *ChatRepository) CreateMessage(input chat.CreateMessageInput) (chat.Mess
 		return chat.Message{}, fmt.Errorf("commit create message: %w", err)
 	}
 
-	var message chat.Message
-	row := r.db.QueryRow(`
+	rows, err := r.db.Query(`
 		SELECT
 			m.id,
 			m.conversation_id,
@@ -565,36 +574,54 @@ func (r *ChatRepository) CreateMessage(input chat.CreateMessageInput) (chat.Mess
 		  FROM messages m
 		  JOIN users u ON u.id = m.sender_id
 		  LEFT JOIN attachments a ON a.message_id = m.id
-		 WHERE m.id = ?`, messageID)
-	var attachmentID sql.NullInt64
-	var attachmentOriginalName sql.NullString
-	var attachmentStoragePath sql.NullString
-	var attachmentMIMEType sql.NullString
-	var attachmentSizeBytes sql.NullInt64
-	if err := row.Scan(
-		&message.ID,
-		&message.ConversationID,
-		&message.SenderID,
-		&message.SenderName,
-		&message.MessageType,
-		&message.Content,
-		&message.CreatedAt,
-		&attachmentID,
-		&attachmentOriginalName,
-		&attachmentStoragePath,
-		&attachmentMIMEType,
-		&attachmentSizeBytes,
-	); err != nil {
+		 WHERE m.id = ?
+		 ORDER BY a.id ASC`, messageID)
+	if err != nil {
 		return chat.Message{}, fmt.Errorf("load created message: %w", err)
 	}
-	if attachmentID.Valid {
-		message.Attachment = &chat.Attachment{
-			ID:           attachmentID.Int64,
-			OriginalName: attachmentOriginalName.String,
-			StoragePath:  attachmentStoragePath.String,
-			MIMEType:     attachmentMIMEType.String,
-			SizeBytes:    attachmentSizeBytes.Int64,
+	defer rows.Close()
+
+	var message chat.Message
+	for rows.Next() {
+		var attachmentID sql.NullInt64
+		var attachmentOriginalName sql.NullString
+		var attachmentStoragePath sql.NullString
+		var attachmentMIMEType sql.NullString
+		var attachmentSizeBytes sql.NullInt64
+		if err := rows.Scan(
+			&message.ID,
+			&message.ConversationID,
+			&message.SenderID,
+			&message.SenderName,
+			&message.MessageType,
+			&message.Content,
+			&message.CreatedAt,
+			&attachmentID,
+			&attachmentOriginalName,
+			&attachmentStoragePath,
+			&attachmentMIMEType,
+			&attachmentSizeBytes,
+		); err != nil {
+			return chat.Message{}, fmt.Errorf("scan created message: %w", err)
 		}
+		if attachmentID.Valid {
+			message.Attachments = append(message.Attachments, chat.Attachment{
+				ID:           attachmentID.Int64,
+				OriginalName: attachmentOriginalName.String,
+				StoragePath:  attachmentStoragePath.String,
+				MIMEType:     attachmentMIMEType.String,
+				SizeBytes:    attachmentSizeBytes.Int64,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return chat.Message{}, fmt.Errorf("load created message rows: %w", err)
+	}
+	if message.ID == 0 {
+		return chat.Message{}, chat.ErrConversationNotFound
+	}
+	if len(message.Attachments) > 0 {
+		message.Attachment = &message.Attachments[0]
 	}
 
 	return message, nil

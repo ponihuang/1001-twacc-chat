@@ -26,6 +26,7 @@
   const folderTabs = app.querySelector("[data-folder-tabs]");
   const messageBoard = app.querySelector("[data-message-board]");
   const messageForm = app.querySelector("[data-message-form]");
+  const chatShell = app.querySelector(".chat-shell");
   const conversationTitle = app.querySelector("[data-conversation-title]");
   const messageStatus = app.querySelector("[data-message-status]");
   const realtimeStateNode = app.querySelector("[data-realtime-state]");
@@ -40,6 +41,8 @@
   const attachmentCaption = app.querySelector("[data-attachment-caption]");
   const attachmentClose = app.querySelector("[data-attachment-close]");
   const attachmentSend = app.querySelector("[data-attachment-send]");
+  const chatDropOverlay = app.querySelector("[data-chat-drop-overlay]");
+  const chatDropZones = app.querySelectorAll("[data-drop-kind]");
 
   let conversations = [];
   let activeConversationID = 0;
@@ -53,7 +56,9 @@
   let reconnectAttempts = 0;
   let messageLoadToken = 0;
   let selectedAttachmentKind = "document";
-  let attachmentPreviewURL = "";
+  let selectedAttachmentFiles = [];
+  let attachmentPreviewURLs = [];
+  let dragDepth = 0;
 
   function readSessionToken() {
     return localStorage.getItem(storageKeys.token) || "";
@@ -547,14 +552,16 @@
 
     messageBoard.innerHTML = data.messages.map(function (message) {
       const outgoing = (app.dataset.actor || "").indexOf(message.sender_name) >= 0 ? " outgoing" : "";
-      const attachment = renderAttachment(message.attachment);
+      const attachments = messageAttachments(message);
+      const photoMessage = allAttachmentsAreImages(attachments);
+      const attachment = renderAttachments(message, attachments);
       const contentText = displayMessageContent(message);
       const content = contentText
         ? ("<p>" + linkifyMessageText(contentText) + "</p>")
         : "";
       return [
         '<div class="message-row' + outgoing + '">',
-        '<div class="message-bubble">',
+        '<div class="message-bubble' + (photoMessage ? " photo-bubble" : "") + '">',
         "<strong>" + escapeHTML(message.sender_name) + "</strong>",
         content,
         attachment,
@@ -582,6 +589,43 @@
     return message.content || "";
   }
 
+  function messageAttachments(message) {
+    if (!message) {
+      return [];
+    }
+    if (Array.isArray(message.attachments) && message.attachments.length) {
+      return message.attachments;
+    }
+    return message.attachment ? [message.attachment] : [];
+  }
+
+  function renderAttachments(message, knownAttachments) {
+    const attachments = knownAttachments || messageAttachments(message);
+    if (!attachments.length) {
+      return "";
+    }
+
+    if (allAttachmentsAreImages(attachments)) {
+      return renderAttachmentPhotoMessage(attachments);
+    }
+
+    return '<div class="message-attachments">' + attachments.map(renderAttachment).join("") + "</div>";
+  }
+
+  function renderAttachmentPhotoMessage(attachments) {
+    return [
+      '<div class="message-photo-grid ' + photoGridClass(attachments.length) + '">',
+      attachments.map(function (attachment) {
+        return [
+          '<a href="' + escapeHTML(attachment.url) + '" target="_blank" rel="noreferrer">',
+          '<img src="' + escapeHTML(attachment.url) + '" alt="' + escapeHTML(attachment.original_name || "photo") + '">',
+          '</a>'
+        ].join("");
+      }).join(""),
+      '</div>'
+    ].join("");
+  }
+
   function renderAttachment(attachment) {
     if (!attachment || !attachment.url) {
       return "";
@@ -607,10 +651,10 @@
     if (!fileStateNode || !composerFileInput) {
       return;
     }
-    const file = composerFileInput.files && composerFileInput.files[0];
+    const files = composerFileInput.files ? Array.from(composerFileInput.files) : [];
     fileStateNode.textContent = "";
-    if (file) {
-      openAttachmentDialog(file);
+    if (files.length) {
+      openAttachmentDialog(files, selectedAttachmentKind);
     } else {
       closeAttachmentDialog(false);
     }
@@ -632,8 +676,9 @@
     if (kind === "photo") {
       composerFileInput.accept = ".jpg,.jpeg,.png";
     } else {
-      composerFileInput.accept = ".doc,.pdf,.xlsx";
+      composerFileInput.accept = ".doc,.docx,.pdf,.xlsx";
     }
+    composerFileInput.multiple = true;
     setAttachmentMenuOpen(false);
     composerFileInput.click();
   }
@@ -643,14 +688,43 @@
     return parts.length > 1 ? parts.pop().toLowerCase() : "file";
   }
 
+  function isImageFile(file) {
+    const name = String(file && file.name ? file.name : "").toLowerCase();
+    return file && (file.type.indexOf("image/") === 0 || /\.(jpg|jpeg|png)$/.test(name));
+  }
+
+  function isImageAttachment(attachment) {
+    const name = String(attachment && attachment.original_name ? attachment.original_name : "").toLowerCase();
+    return !!attachment && ((attachment.mime_type || "").indexOf("image/") === 0 || /\.(jpg|jpeg|png)$/.test(name));
+  }
+
+  function allFilesAreImages(files) {
+    return files.length > 0 && files.every(isImageFile);
+  }
+
+  function allAttachmentsAreImages(attachments) {
+    return attachments.length > 0 && attachments.every(isImageAttachment);
+  }
+
+  function allowedAttachmentFiles(files) {
+    const allowedAttachmentPattern = /\.(jpg|jpeg|png|doc|docx|pdf|xlsx)$/i;
+    return files.filter(function (file) {
+      return allowedAttachmentPattern.test(file.name || "");
+    });
+  }
+
+  function revokeAttachmentPreviewURLs() {
+    attachmentPreviewURLs.forEach(function (url) {
+      URL.revokeObjectURL(url);
+    });
+    attachmentPreviewURLs = [];
+  }
+
   function closeAttachmentDialog(clearFile) {
     if (attachmentDialog) {
       attachmentDialog.hidden = true;
     }
-    if (attachmentPreviewURL) {
-      URL.revokeObjectURL(attachmentPreviewURL);
-      attachmentPreviewURL = "";
-    }
+    revokeAttachmentPreviewURLs();
     if (attachmentPreview) {
       attachmentPreview.innerHTML = "";
     }
@@ -661,19 +735,80 @@
     if (clearFile && composerFileInput) {
       composerFileInput.value = "";
     }
+    if (clearFile) {
+      selectedAttachmentFiles = [];
+    }
   }
 
-  function openAttachmentDialog(file) {
+  function renderAttachmentFileList(files) {
+    return [
+      '<div class="attachment-file-list">',
+      files.map(function (file) {
+        let media = '<span class="attachment-file-ext">' + escapeHTML(fileExtension(file.name)) + '</span>';
+        if (isImageFile(file)) {
+          const url = URL.createObjectURL(file);
+          attachmentPreviewURLs.push(url);
+          media = '<img class="attachment-file-thumb" src="' + escapeHTML(url) + '" alt="' + escapeHTML(file.name) + '">';
+        }
+        return [
+          '<div class="attachment-file-item">',
+          media,
+          '<span class="attachment-file-meta">',
+          '<strong>' + escapeHTML(file.name || "附件") + '</strong>',
+          '<small>' + escapeHTML(formatBytes(file.size)) + '</small>',
+          '</span>',
+          '</div>'
+        ].join("");
+      }).join(""),
+      '</div>'
+    ].join("");
+  }
+
+  function photoGridClass(count) {
+    return "attachment-photo-grid count-" + Math.min(Math.max(count, 1), 5);
+  }
+
+  function renderAttachmentPhotoGrid(files) {
+    return [
+      '<div class="' + photoGridClass(files.length) + '">',
+      files.map(function (file) {
+        const url = URL.createObjectURL(file);
+        attachmentPreviewURLs.push(url);
+        return [
+          '<img src="' + escapeHTML(url) + '" alt="' + escapeHTML(file.name || "photo") + '">'
+        ].join("");
+      }).join(""),
+      '</div>'
+    ].join("");
+  }
+
+  function openAttachmentDialog(files, kind) {
     if (!attachmentDialog || !attachmentPreview || !attachmentTitle) {
       return;
     }
     closeAttachmentDialog(false);
-    const isImage = file.type.indexOf("image/") === 0;
-    attachmentTitle.textContent = isImage || selectedAttachmentKind === "photo" ? "傳送照片" : "傳送文件";
-    if (isImage) {
-      attachmentPreviewURL = URL.createObjectURL(file);
-      attachmentPreview.innerHTML = '<img src="' + escapeHTML(attachmentPreviewURL) + '" alt="' + escapeHTML(file.name) + '">';
+    selectedAttachmentKind = kind === "photo" ? "photo" : "document";
+    selectedAttachmentFiles = Array.isArray(files) ? files : [files];
+    const isSingleImage = selectedAttachmentFiles.length === 1 && isImageFile(selectedAttachmentFiles[0]);
+    const isPhotoSet = selectedAttachmentFiles.length > 1 && allFilesAreImages(selectedAttachmentFiles);
+    if (selectedAttachmentFiles.length > 1) {
+      attachmentTitle.textContent = isPhotoSet
+        ? "傳送 " + selectedAttachmentFiles.length + " 張照片"
+        : "傳送 " + selectedAttachmentFiles.length + " 個檔案";
     } else {
+      attachmentTitle.textContent = isSingleImage || selectedAttachmentKind === "photo" ? "傳送照片" : "傳送文件";
+    }
+    if (isSingleImage) {
+      const file = selectedAttachmentFiles[0];
+      const previewURL = URL.createObjectURL(file);
+      attachmentPreviewURLs.push(previewURL);
+      attachmentPreview.innerHTML = '<img src="' + escapeHTML(previewURL) + '" alt="' + escapeHTML(file.name) + '">';
+    } else if (isPhotoSet) {
+      attachmentPreview.innerHTML = renderAttachmentPhotoGrid(selectedAttachmentFiles);
+    } else if (selectedAttachmentFiles.length > 1) {
+      attachmentPreview.innerHTML = renderAttachmentFileList(selectedAttachmentFiles);
+    } else {
+      const file = selectedAttachmentFiles[0];
       attachmentPreview.innerHTML = [
         '<div class="attachment-document-preview">',
         '<span>' + escapeHTML(fileExtension(file.name)) + '</span>',
@@ -705,6 +840,85 @@
       composerInput.value = attachmentCaption.value.trim();
     }
     messageForm.requestSubmit();
+  }
+
+  function openDraggedFiles(files, kind) {
+    const acceptedFiles = allowedAttachmentFiles(Array.from(files || []));
+    if (!acceptedFiles.length) {
+      setMessageStatus("請拖放 jpg、png、doc、docx、pdf 或 xlsx 檔案。", true);
+      return;
+    }
+    if (composerFileInput) {
+      composerFileInput.value = "";
+    }
+    openAttachmentDialog(acceptedFiles, kind);
+  }
+
+  function dragEventHasFiles(event) {
+    const types = event.dataTransfer && event.dataTransfer.types;
+    return types && Array.from(types).indexOf("Files") !== -1;
+  }
+
+  function setDropOverlayVisible(visible) {
+    if (!chatDropOverlay) {
+      return;
+    }
+    chatDropOverlay.hidden = !visible;
+    if (!visible) {
+      chatDropZones.forEach(function (zone) {
+        zone.classList.remove("is-drag-over");
+      });
+    }
+  }
+
+  function handleChatDragEnter(event) {
+    if (!dragEventHasFiles(event) || attachmentDialog && !attachmentDialog.hidden) {
+      return;
+    }
+    event.preventDefault();
+    dragDepth += 1;
+    setDropOverlayVisible(true);
+  }
+
+  function handleChatDragOver(event) {
+    if (!dragEventHasFiles(event)) {
+      return;
+    }
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    setDropOverlayVisible(true);
+  }
+
+  function handleChatDragLeave(event) {
+    if (!dragEventHasFiles(event)) {
+      return;
+    }
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) {
+      setDropOverlayVisible(false);
+    }
+  }
+
+  function handleDropZoneDragOver(event) {
+    if (!dragEventHasFiles(event)) {
+      return;
+    }
+    event.preventDefault();
+    chatDropZones.forEach(function (zone) {
+      zone.classList.toggle("is-drag-over", zone === event.currentTarget);
+    });
+  }
+
+  function handleDropZoneDrop(event) {
+    if (!dragEventHasFiles(event)) {
+      return;
+    }
+    event.preventDefault();
+    dragDepth = 0;
+    setDropOverlayVisible(false);
+    openDraggedFiles(event.dataTransfer.files, event.currentTarget.dataset.dropKind || "document");
   }
 
   function handleAttachmentCaptionKeydown(event) {
@@ -980,7 +1194,9 @@
     event.preventDefault();
     const headers = authHeaders();
     const content = composerInput.value.trim();
-    const file = composerFileInput && composerFileInput.files ? composerFileInput.files[0] : null;
+    const files = selectedAttachmentFiles.length
+      ? selectedAttachmentFiles.slice()
+      : (composerFileInput && composerFileInput.files ? Array.from(composerFileInput.files) : []);
     if (!headers) {
       setMessageStatus("請先登入。", true);
       return;
@@ -989,7 +1205,7 @@
       setMessageStatus("請先建立或選擇對話。", true);
       return;
     }
-    if (!content && !file) {
+    if (!content && !files.length) {
       setMessageStatus("請輸入訊息內容或選擇檔案。", true);
       return;
     }
@@ -1000,27 +1216,33 @@
       return;
     }
 
-    let response;
-    if (file) {
+    if (files.length) {
       const formData = new FormData();
       formData.set("content", content);
-      formData.set("file", file);
-      response = await fetch("/api/conversations/" + conversationID + "/messages", {
+      files.forEach(function (file) {
+        formData.append("file", file);
+      });
+      const response = await fetch("/api/conversations/" + conversationID + "/messages", {
         method: "POST",
         headers: { Authorization: headers.Authorization },
         body: formData
       });
+      const result = await parseJSON(response);
+      if (!response.ok || !result.success) {
+        setMessageStatus(result.message || "檔案送出失敗，請確認格式或大小後重試。", true);
+        return;
+      }
     } else {
-      response = await fetch("/api/conversations/" + conversationID + "/messages", {
+      const response = await fetch("/api/conversations/" + conversationID + "/messages", {
         method: "POST",
         headers: headers,
         body: JSON.stringify({ type: "text", content: content })
       });
-    }
-    const result = await parseJSON(response);
-    if (!response.ok || !result.success) {
-      setMessageStatus(result.message || "送出失敗。", true);
-      return;
+      const result = await parseJSON(response);
+      if (!response.ok || !result.success) {
+        setMessageStatus(result.message || "送出失敗。", true);
+        return;
+      }
     }
 
     composerInput.value = "";
@@ -1028,6 +1250,7 @@
     if (composerFileInput) {
       composerFileInput.value = "";
     }
+    selectedAttachmentFiles = [];
     updateSelectedFileState();
     closeAttachmentDialog(false);
     await loadMessages(activeConversationID);
@@ -1169,6 +1392,23 @@
     attachmentCaption.addEventListener("input", syncAttachmentCaptionHeight);
     attachmentCaption.addEventListener("keydown", handleAttachmentCaptionKeydown);
     syncAttachmentCaptionHeight();
+  }
+  if (chatShell && chatDropOverlay) {
+    chatShell.addEventListener("dragenter", handleChatDragEnter);
+    chatShell.addEventListener("dragover", handleChatDragOver);
+    chatShell.addEventListener("dragleave", handleChatDragLeave);
+    chatShell.addEventListener("drop", function (event) {
+      if (!dragEventHasFiles(event)) {
+        return;
+      }
+      event.preventDefault();
+      dragDepth = 0;
+      setDropOverlayVisible(false);
+    });
+    chatDropZones.forEach(function (zone) {
+      zone.addEventListener("dragover", handleDropZoneDragOver);
+      zone.addEventListener("drop", handleDropZoneDrop);
+    });
   }
 
   connectRealtime();

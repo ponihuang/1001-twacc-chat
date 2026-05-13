@@ -210,7 +210,8 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 			MessageType: message.MessageType,
 			Content:     message.Content,
 			CreatedAt:   message.CreatedAt.Format(time.RFC3339),
-			Attachment:  attachmentItem(message.Attachment),
+			Attachment:  firstAttachmentItem(message),
+			Attachments: attachmentItems(message.Attachments),
 		})
 	}
 
@@ -297,7 +298,8 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 	if messageType == textMessageType && content == "" {
 		return Response{}, statusCode(ErrMessageContentRequired), ErrMessageContentRequired
 	}
-	if messageType != textMessageType && req.Attachment == nil {
+	attachments := normalizedAttachmentInputs(req)
+	if messageType != textMessageType && len(attachments) == 0 {
 		return Response{}, statusCode(ErrAttachmentRequired), ErrAttachmentRequired
 	}
 
@@ -310,7 +312,7 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 		SenderID:       actor.UserID,
 		MessageType:    messageType,
 		Content:        content,
-		Attachment:     req.Attachment,
+		Attachments:    attachments,
 	})
 	if err != nil {
 		return Response{}, statusCode(err), err
@@ -323,7 +325,8 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 		MessageType: created.MessageType,
 		Content:     created.Content,
 		CreatedAt:   created.CreatedAt.Format(time.RFC3339),
-		Attachment:  attachmentItem(created.Attachment),
+		Attachment:  firstAttachmentItem(created),
+		Attachments: attachmentItems(created.Attachments),
 	}
 
 	if s.broker != nil {
@@ -380,6 +383,35 @@ func statusCode(err error) int {
 	default:
 		return 500
 	}
+}
+
+func normalizedAttachmentInputs(req CreateMessageRequest) []AttachmentInput {
+	if len(req.Attachments) > 0 {
+		return req.Attachments
+	}
+	if req.Attachment != nil {
+		return []AttachmentInput{*req.Attachment}
+	}
+	return nil
+}
+
+func firstAttachmentItem(message Message) *AttachmentItem {
+	if len(message.Attachments) > 0 {
+		return attachmentItem(&message.Attachments[0])
+	}
+	return attachmentItem(message.Attachment)
+}
+
+func attachmentItems(values []Attachment) []AttachmentItem {
+	if len(values) == 0 {
+		return nil
+	}
+
+	items := make([]AttachmentItem, 0, len(values))
+	for index := range values {
+		items = append(items, *attachmentItem(&values[index]))
+	}
+	return items
 }
 
 func attachmentItem(value *Attachment) *AttachmentItem {

@@ -87,6 +87,11 @@ func (m *mockRepository) CreateMessage(input CreateMessageInput) (Message, error
 		return m.createMessageResult, nil
 	}
 
+	attachment := attachmentFromInput(input.Attachment)
+	attachments := attachmentsFromInput(input.Attachments)
+	if attachment == nil && len(attachments) > 0 {
+		attachment = &attachments[0]
+	}
 	return Message{
 		ID:             int64(len(m.createdMessages)),
 		ConversationID: input.ConversationID,
@@ -95,7 +100,8 @@ func (m *mockRepository) CreateMessage(input CreateMessageInput) (Message, error
 		MessageType:    input.MessageType,
 		Content:        input.Content,
 		CreatedAt:      time.Date(2026, 4, 7, 2, 0, 0, 0, time.UTC),
-		Attachment:     attachmentFromInput(input.Attachment),
+		Attachment:     attachment,
+		Attachments:    attachments,
 	}, nil
 }
 
@@ -142,6 +148,23 @@ func attachmentFromInput(value *AttachmentInput) *Attachment {
 		MIMEType:     value.MIMEType,
 		SizeBytes:    value.SizeBytes,
 	}
+}
+
+func attachmentsFromInput(values []AttachmentInput) []Attachment {
+	if len(values) == 0 {
+		return nil
+	}
+
+	attachments := make([]Attachment, 0, len(values))
+	for _, value := range values {
+		attachments = append(attachments, Attachment{
+			OriginalName: value.OriginalName,
+			StoragePath:  value.StoragePath,
+			MIMEType:     value.MIMEType,
+			SizeBytes:    value.SizeBytes,
+		})
+	}
+	return attachments
 }
 
 func conversationKey(userID, conversationID int64) string {

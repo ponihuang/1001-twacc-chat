@@ -21,6 +21,7 @@ var (
 	}
 	allowedFileExts = map[string]string{
 		".doc":  "file",
+		".docx": "file",
 		".pdf":  "file",
 		".xlsx": "file",
 	}

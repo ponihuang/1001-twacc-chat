@@ -433,24 +433,40 @@ func (h *Handler) decodeMultipartMessage(r *http.Request) (CreateMessageRequest,
 		Content: strings.TrimSpace(r.FormValue("content")),
 	}
 
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		if errors.Is(err, http.ErrMissingFile) {
-			return req, nil
+	if r.MultipartForm == nil || len(r.MultipartForm.File["file"]) == 0 {
+		return req, nil
+	}
+
+	hasFileAttachment := false
+	for _, header := range r.MultipartForm.File["file"] {
+		file, err := header.Open()
+		if err != nil {
+			return CreateMessageRequest{}, err
 		}
-		return CreateMessageRequest{}, err
-	}
-	defer file.Close()
+		attachment, detectedType, err := h.files.Save(file, header)
+		closeErr := file.Close()
+		if err != nil {
+			return CreateMessageRequest{}, err
+		}
+		if closeErr != nil {
+			return CreateMessageRequest{}, closeErr
+		}
 
-	attachment, detectedType, err := h.files.Save(file, header)
-	if err != nil {
-		return CreateMessageRequest{}, err
+		if req.Type == "" {
+			req.Type = detectedType
+		}
+		if detectedType == fileMessageType {
+			hasFileAttachment = true
+		}
+		req.Attachments = append(req.Attachments, *attachment)
 	}
 
-	if req.Type == "" {
-		req.Type = detectedType
+	if hasFileAttachment {
+		req.Type = fileMessageType
 	}
-	req.Attachment = attachment
+	if len(req.Attachments) == 1 {
+		req.Attachment = &req.Attachments[0]
+	}
 	return req, nil
 }
 

@@ -1665,6 +1665,7 @@ strong {
 
 .chat-shell {
   flex: 1 1 auto;
+  position: relative;
   display: grid;
   grid-template-rows: auto 1fr auto;
   min-height: 0;
@@ -1773,6 +1774,29 @@ strong {
 .message-row.outgoing .message-bubble {
   border-radius: 20px 20px 10px 20px;
   background: rgba(220, 232, 223, 0.82);
+}
+
+.message-bubble.photo-bubble {
+  min-width: 0;
+  max-width: 520px;
+  padding: 4px;
+  border: 0;
+  border-radius: 16px 16px 4px 16px;
+  background: rgba(220, 232, 223, 0.82);
+}
+
+.message-bubble.photo-bubble > strong {
+  display: none;
+}
+
+.message-bubble.photo-bubble p {
+  margin: 8px 8px 4px;
+}
+
+.message-bubble.photo-bubble small {
+  display: block;
+  padding: 2px 8px 4px;
+  text-align: right;
 }
 
 .composer {
@@ -1916,6 +1940,71 @@ strong {
   flex: 0 0 auto;
 }
 
+.chat-drop-overlay {
+  position: absolute;
+  inset: 74px 0 76px;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.chat-drop-overlay[hidden] {
+  display: none;
+}
+
+.chat-drop-panel {
+  display: grid;
+  gap: 12px;
+  width: min(620px, 88%);
+  pointer-events: auto;
+}
+
+.chat-drop-zone {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  padding: 28px;
+  border: 2px dashed rgba(117, 139, 153, 0.72);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #9aa7b1;
+  text-align: center;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.chat-drop-zone svg {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chat-drop-zone strong {
+  color: #9aa7b1;
+  font-family: Arial, sans-serif;
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+
+.chat-drop-zone span {
+  margin-top: 6px;
+  font-family: Arial, sans-serif;
+  font-size: 0.88rem;
+}
+
+.chat-drop-zone.is-drag-over {
+  border-color: #3390ec;
+  box-shadow: 0 18px 48px rgba(51, 144, 236, 0.18);
+  transform: translateY(-1px);
+}
+
 .attachment-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -2023,6 +2112,195 @@ strong {
   font-family: Arial, sans-serif;
 }
 
+.attachment-file-list {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-height: 360px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.attachment-file-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.attachment-file-item {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.attachment-file-thumb,
+.attachment-file-ext {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+}
+
+.attachment-file-thumb {
+  display: block;
+  object-fit: cover;
+}
+
+.attachment-file-ext {
+  display: grid;
+  place-items: center;
+  background: #3390ec;
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.attachment-file-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+}
+
+.attachment-file-meta strong {
+  overflow: hidden;
+  color: #171717;
+  font-family: Arial, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-file-meta small {
+  color: #6f7478;
+  font-family: Arial, sans-serif;
+}
+
+.attachment-photo-grid,
+.message-photo-grid {
+  display: grid;
+  width: 100%;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.attachment-photo-grid {
+  gap: 3px;
+  border-radius: 12px;
+}
+
+.message-photo-grid {
+  width: min(460px, 72vw);
+  gap: 2px;
+  border-radius: 14px;
+}
+
+.message-photo-grid a {
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  text-decoration: none;
+}
+
+.attachment-photo-grid img,
+.message-photo-grid img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-photo-grid.count-1,
+.message-photo-grid.count-1 {
+  grid-template-columns: 1fr;
+}
+
+.attachment-photo-grid.count-1 img {
+  height: auto;
+  max-height: 520px;
+}
+
+.message-photo-grid.count-1 img {
+  height: auto;
+  max-height: 420px;
+}
+
+.attachment-photo-grid.count-2,
+.attachment-photo-grid.count-4,
+.message-photo-grid.count-2,
+.message-photo-grid.count-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.attachment-photo-grid.count-2 img {
+  height: 280px;
+}
+
+.message-photo-grid.count-2 img {
+  height: 240px;
+}
+
+.attachment-photo-grid.count-3,
+.message-photo-grid.count-3 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.attachment-photo-grid.count-3 img:first-child,
+.message-photo-grid.count-3 a:first-child {
+  grid-column: span 2;
+}
+
+.attachment-photo-grid.count-3 img:first-child {
+  height: 260px;
+}
+
+.message-photo-grid.count-3 a:first-child img {
+  height: 240px;
+}
+
+.attachment-photo-grid.count-3 img:not(:first-child),
+.attachment-photo-grid.count-4 img {
+  height: 180px;
+}
+
+.message-photo-grid.count-3 a:not(:first-child) img,
+.message-photo-grid.count-4 img {
+  height: 170px;
+}
+
+.attachment-photo-grid.count-5,
+.message-photo-grid.count-5 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.attachment-photo-grid.count-5 img:nth-child(-n + 2),
+.message-photo-grid.count-5 a:nth-child(-n + 2) {
+  grid-column: span 3;
+}
+
+.attachment-photo-grid.count-5 img:nth-child(-n + 2) {
+  height: 230px;
+}
+
+.message-photo-grid.count-5 a:nth-child(-n + 2) img {
+  height: 220px;
+}
+
+.attachment-photo-grid.count-5 img:nth-child(n + 3),
+.message-photo-grid.count-5 a:nth-child(n + 3) {
+  grid-column: span 2;
+}
+
+.attachment-photo-grid.count-5 img:nth-child(n + 3) {
+  height: 160px;
+}
+
+.message-photo-grid.count-5 a:nth-child(n + 3) img {
+  height: 150px;
+}
+
 .attachment-dialog-footer {
   display: flex;
   align-items: flex-end;
@@ -2072,10 +2350,15 @@ strong {
   background: #2384df;
 }
 
-.message-attachment {
+.message-attachments {
   display: grid;
   gap: 8px;
   margin-top: 12px;
+}
+
+.message-attachment {
+  display: grid;
+  gap: 8px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 16px;

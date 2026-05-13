@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=composer-height-20260513a">
+  <link rel="stylesheet" href="/static/app.css?v=photo-grid-20260513a">
   <script defer src="/static/page-auth-guard.js?v=auth-guard-20260511a"></script>
   <script defer src="/static/sidebar-nav.js?v=global-search-20260508i"></script>
   <script defer src="/static/settings-panel.js?v=global-search-20260508i"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
-  <script defer src="/static/chat-app.js?v=composer-height-20260513a"></script>
+  <script defer src="/static/chat-app.js?v=photo-grid-20260513a"></script>
 </head>
 <body class="desktop-page" data-require-auth-redirect="/login">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -242,6 +242,28 @@
         <section class="message-board" data-message-board>
         </section>
 
+        <div class="chat-drop-overlay" data-chat-drop-overlay hidden>
+          <div class="chat-drop-panel">
+            <div class="chat-drop-zone" data-drop-kind="document">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"></path>
+                <path d="M14 2v5h5"></path>
+              </svg>
+              <strong>拖放檔案以上傳</strong>
+              <span>以文件方式傳送</span>
+            </div>
+            <div class="chat-drop-zone" data-drop-kind="photo">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <path d="m21 15-5-5L5 21"></path>
+              </svg>
+              <strong>拖放圖片以上傳</strong>
+              <span>以照片方式快速傳送</span>
+            </div>
+          </div>
+        </div>
+
         <form class="composer" data-message-form>
           <div class="composer-fields">
             <textarea class="text-input composer-input" name="content" rows="1" placeholder="輸入文字訊息"></textarea>
@@ -262,7 +284,7 @@
                 </button>
               </div>
             </div>
-            <input id="composer-file" class="composer-file-input" name="file" type="file" accept=".jpg,.jpeg,.png,.doc,.pdf,.xlsx">
+            <input id="composer-file" class="composer-file-input" name="file" type="file" accept=".jpg,.jpeg,.png,.doc,.docx,.pdf,.xlsx" multiple>
             <small data-file-state></small>
           </div>
           <div class="composer-actions">
