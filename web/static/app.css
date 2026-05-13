@@ -1764,60 +1764,312 @@ strong {
   word-break: break-word;
 }
 
+.message-bubble a {
+  color: #2f80d1;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .message-row.outgoing .message-bubble {
   border-radius: 20px 20px 10px 20px;
   background: rgba(220, 232, 223, 0.82);
 }
 
 .composer {
-  display: grid;
+  display: flex;
+  align-items: flex-end;
   gap: 12px;
-  padding: 14px 28px 18px;
+  padding: 14px 28px;
   border-top: 1px solid var(--line);
   background: rgba(255, 249, 241, 0.9);
   color: var(--text);
 }
 
 .composer-fields {
-  display: grid;
+  position: relative;
+  display: flex;
+  align-items: center;
   gap: 8px;
   flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0 8px 0 0;
 }
 
 .composer-input {
-  min-height: 62px;
-  max-height: 160px;
-  padding: 16px 18px;
-  border-color: var(--line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.75);
+  flex: 1;
+  height: 48px;
+  min-height: 48px;
+  max-height: 132px;
+  padding: 13px 18px;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
   color: var(--text);
-  resize: vertical;
+  resize: none;
+  overflow-y: auto;
+  line-height: 22px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.composer-meta {
+.composer-input::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.composer-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.composer-attachment {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.composer-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.composer-icon-button:hover,
+.composer-icon-button[aria-expanded="true"] {
+  background: rgba(92, 75, 57, 0.08);
+  color: var(--text);
+}
+
+.composer-icon-button svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.attachment-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  display: grid;
+  min-width: 176px;
+  padding: 8px;
+  border: 1px solid rgba(92, 75, 57, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 42px rgba(36, 24, 16, 0.16);
+  z-index: 5;
+}
+
+.attachment-menu[hidden] {
+  display: none;
+}
+
+.attachment-menu button {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
 }
 
-.composer-file-label {
-  color: var(--accent-strong);
-  font-size: 0.82rem;
-  font-weight: 700;
+.attachment-menu button:hover {
+  background: rgba(92, 75, 57, 0.08);
+}
+
+.attachment-menu-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  color: var(--muted);
 }
 
 .composer-file-input {
-  width: 100%;
-  color: var(--muted);
+  display: none;
+}
+
+.composer-fields > small {
+  display: none;
 }
 
 .composer-actions {
   display: flex;
-  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.attachment-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(20, 20, 20, 0.34);
+}
+
+.attachment-dialog-backdrop[hidden] {
+  display: none;
+}
+
+.attachment-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(520px, 92vw);
+  max-height: min(700px, 86vh);
+  overflow: hidden;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #171717;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+}
+
+.attachment-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 58px;
+  padding: 0 18px;
+}
+
+.attachment-dialog-close {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #6f7478;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.attachment-dialog-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.attachment-dialog-header strong {
+  font-family: Arial, sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.attachment-dialog-preview {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  padding: 10px 28px 18px;
+  overflow: auto;
+}
+
+.attachment-dialog-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: min(420px, 50vh);
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+.attachment-document-preview {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 100%;
+  text-align: center;
+}
+
+.attachment-document-preview span {
+  display: inline-grid;
+  place-items: center;
+  width: 76px;
+  height: 86px;
+  border-radius: 10px;
+  background: #4f8f46;
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.attachment-document-preview strong {
+  max-width: 420px;
+  overflow-wrap: anywhere;
+  font-family: Arial, sans-serif;
+  font-size: 1rem;
+}
+
+.attachment-document-preview small {
+  color: #6f7478;
+  font-family: Arial, sans-serif;
+}
+
+.attachment-dialog-footer {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.attachment-caption-input {
+  flex: 1;
+  min-height: 44px;
+  max-height: 144px;
+  resize: none;
+  overflow-y: auto;
+  border: 0;
+  outline: none;
+  color: #171717;
+  font: 1rem/22px Arial, sans-serif;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.attachment-caption-input::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.attachment-caption-input::placeholder {
+  color: #9aa1a8;
+}
+
+.attachment-send-button {
+  flex: 0 0 auto;
+  min-width: 88px;
+  height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: #3390ec;
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.attachment-send-button:hover {
+  background: #2384df;
 }
 
 .message-attachment {

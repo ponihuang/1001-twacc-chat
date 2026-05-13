@@ -32,6 +32,14 @@
   const composerInput = messageForm.querySelector(".composer-input");
   const composerFileInput = messageForm.querySelector(".composer-file-input");
   const fileStateNode = messageForm.querySelector("[data-file-state]");
+  const attachmentToggle = messageForm.querySelector("[data-attachment-toggle]");
+  const attachmentMenu = messageForm.querySelector("[data-attachment-menu]");
+  const attachmentDialog = app.querySelector("[data-attachment-dialog]");
+  const attachmentTitle = app.querySelector("[data-attachment-title]");
+  const attachmentPreview = app.querySelector("[data-attachment-preview]");
+  const attachmentCaption = app.querySelector("[data-attachment-caption]");
+  const attachmentClose = app.querySelector("[data-attachment-close]");
+  const attachmentSend = app.querySelector("[data-attachment-send]");
 
   let conversations = [];
   let activeConversationID = 0;
@@ -44,6 +52,8 @@
   let reconnectTimer = 0;
   let reconnectAttempts = 0;
   let messageLoadToken = 0;
+  let selectedAttachmentKind = "document";
+  let attachmentPreviewURL = "";
 
   function readSessionToken() {
     return localStorage.getItem(storageKeys.token) || "";
@@ -104,6 +114,13 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
+  }
+
+  function linkifyMessageText(value) {
+    const escaped = escapeHTML(value);
+    return escaped.replace(/\bhttps?:\/\/[^\s<]+/gi, function (url) {
+      return '<a href="' + url + '" target="_blank" rel="noreferrer noopener">' + url + "</a>";
+    });
   }
 
   function formatTime(value) {
@@ -533,7 +550,7 @@
       const attachment = renderAttachment(message.attachment);
       const contentText = displayMessageContent(message);
       const content = contentText
-        ? ("<p>" + escapeHTML(contentText) + "</p>")
+        ? ("<p>" + linkifyMessageText(contentText) + "</p>")
         : "";
       return [
         '<div class="message-row' + outgoing + '">',
@@ -591,7 +608,112 @@
       return;
     }
     const file = composerFileInput.files && composerFileInput.files[0];
-    fileStateNode.textContent = file ? ("已選擇：" + file.name + " (" + formatBytes(file.size) + ")") : "尚未選擇檔案";
+    fileStateNode.textContent = "";
+    if (file) {
+      openAttachmentDialog(file);
+    } else {
+      closeAttachmentDialog(false);
+    }
+  }
+
+  function setAttachmentMenuOpen(open) {
+    if (!attachmentMenu || !attachmentToggle) {
+      return;
+    }
+    attachmentMenu.hidden = !open;
+    attachmentToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function chooseAttachment(kind) {
+    if (!composerFileInput) {
+      return;
+    }
+    selectedAttachmentKind = kind === "photo" ? "photo" : "document";
+    if (kind === "photo") {
+      composerFileInput.accept = ".jpg,.jpeg,.png";
+    } else {
+      composerFileInput.accept = ".doc,.pdf,.xlsx";
+    }
+    setAttachmentMenuOpen(false);
+    composerFileInput.click();
+  }
+
+  function fileExtension(name) {
+    const parts = String(name || "").split(".");
+    return parts.length > 1 ? parts.pop().toLowerCase() : "file";
+  }
+
+  function closeAttachmentDialog(clearFile) {
+    if (attachmentDialog) {
+      attachmentDialog.hidden = true;
+    }
+    if (attachmentPreviewURL) {
+      URL.revokeObjectURL(attachmentPreviewURL);
+      attachmentPreviewURL = "";
+    }
+    if (attachmentPreview) {
+      attachmentPreview.innerHTML = "";
+    }
+    if (attachmentCaption) {
+      attachmentCaption.value = "";
+      syncAttachmentCaptionHeight();
+    }
+    if (clearFile && composerFileInput) {
+      composerFileInput.value = "";
+    }
+  }
+
+  function openAttachmentDialog(file) {
+    if (!attachmentDialog || !attachmentPreview || !attachmentTitle) {
+      return;
+    }
+    closeAttachmentDialog(false);
+    const isImage = file.type.indexOf("image/") === 0;
+    attachmentTitle.textContent = isImage || selectedAttachmentKind === "photo" ? "傳送照片" : "傳送文件";
+    if (isImage) {
+      attachmentPreviewURL = URL.createObjectURL(file);
+      attachmentPreview.innerHTML = '<img src="' + escapeHTML(attachmentPreviewURL) + '" alt="' + escapeHTML(file.name) + '">';
+    } else {
+      attachmentPreview.innerHTML = [
+        '<div class="attachment-document-preview">',
+        '<span>' + escapeHTML(fileExtension(file.name)) + '</span>',
+        '<strong>' + escapeHTML(file.name) + '</strong>',
+        '<small>' + escapeHTML(formatBytes(file.size)) + '</small>',
+        '</div>'
+      ].join("");
+    }
+    attachmentDialog.hidden = false;
+    if (attachmentCaption) {
+      syncAttachmentCaptionHeight();
+      attachmentCaption.focus();
+    }
+  }
+
+  function syncAttachmentCaptionHeight() {
+    if (!attachmentCaption) {
+      return;
+    }
+    attachmentCaption.style.height = "44px";
+    const maxHeight = 144;
+    const nextHeight = Math.min(attachmentCaption.scrollHeight, maxHeight);
+    attachmentCaption.style.height = nextHeight + "px";
+    attachmentCaption.style.overflowY = attachmentCaption.scrollHeight > maxHeight ? "auto" : "hidden";
+  }
+
+  function sendAttachmentFromDialog() {
+    if (attachmentCaption) {
+      composerInput.value = attachmentCaption.value.trim();
+    }
+    messageForm.requestSubmit();
+  }
+
+  function handleAttachmentCaptionKeydown(event) {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    sendAttachmentFromDialog();
   }
 
   async function loadConversations() {
@@ -902,10 +1024,12 @@
     }
 
     composerInput.value = "";
+    syncComposerInputHeight();
     if (composerFileInput) {
       composerFileInput.value = "";
     }
     updateSelectedFileState();
+    closeAttachmentDialog(false);
     await loadMessages(activeConversationID);
     await loadConversations();
     setMessageStatus("訊息已送出。", false);
@@ -917,7 +1041,21 @@
     }
 
     event.preventDefault();
-    sendMessage(event);
+    if (!composerInput.value.trim()) {
+      return;
+    }
+    messageForm.requestSubmit();
+  }
+
+  function syncComposerInputHeight() {
+    if (!composerInput) {
+      return;
+    }
+    composerInput.style.height = "48px";
+    const maxHeight = 132;
+    const nextHeight = Math.min(composerInput.scrollHeight, maxHeight);
+    composerInput.style.height = nextHeight + "px";
+    composerInput.style.overflowY = composerInput.scrollHeight > maxHeight ? "auto" : "hidden";
   }
 
   document.addEventListener("twacc:session-changed", function () {
@@ -976,7 +1114,9 @@
   });
 
   messageForm.addEventListener("submit", sendMessage);
+  composerInput.addEventListener("input", syncComposerInputHeight);
   composerInput.addEventListener("keydown", handleComposerKeydown);
+  syncComposerInputHeight();
   document.addEventListener("keydown", function (event) {
     if (event.key !== "Escape" || !activeConversationID) {
       return;
@@ -987,6 +1127,48 @@
   if (composerFileInput) {
     composerFileInput.addEventListener("change", updateSelectedFileState);
     updateSelectedFileState();
+  }
+  if (attachmentToggle && attachmentMenu) {
+    attachmentToggle.addEventListener("click", function () {
+      setAttachmentMenuOpen(attachmentMenu.hidden);
+    });
+    attachmentMenu.querySelectorAll("[data-attachment-kind]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        chooseAttachment(button.dataset.attachmentKind || "document");
+      });
+    });
+    document.addEventListener("click", function (event) {
+      if (attachmentMenu.hidden || messageForm.contains(event.target)) {
+        return;
+      }
+      setAttachmentMenuOpen(false);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        setAttachmentMenuOpen(false);
+        closeAttachmentDialog(true);
+      }
+    });
+  }
+  if (attachmentClose) {
+    attachmentClose.addEventListener("click", function () {
+      closeAttachmentDialog(true);
+    });
+  }
+  if (attachmentDialog) {
+    attachmentDialog.addEventListener("click", function (event) {
+      if (event.target === attachmentDialog) {
+        closeAttachmentDialog(true);
+      }
+    });
+  }
+  if (attachmentSend) {
+    attachmentSend.addEventListener("click", sendAttachmentFromDialog);
+  }
+  if (attachmentCaption) {
+    attachmentCaption.addEventListener("input", syncAttachmentCaptionHeight);
+    attachmentCaption.addEventListener("keydown", handleAttachmentCaptionKeydown);
+    syncAttachmentCaptionHeight();
   }
 
   connectRealtime();

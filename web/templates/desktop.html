@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=global-search-20260508i">
+  <link rel="stylesheet" href="/static/app.css?v=composer-height-20260513a">
   <script defer src="/static/page-auth-guard.js?v=auth-guard-20260511a"></script>
   <script defer src="/static/sidebar-nav.js?v=global-search-20260508i"></script>
   <script defer src="/static/settings-panel.js?v=global-search-20260508i"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
-  <script defer src="/static/chat-app.js?v=global-search-20260511a"></script>
+  <script defer src="/static/chat-app.js?v=composer-height-20260513a"></script>
 </head>
 <body class="desktop-page" data-require-auth-redirect="/login">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -244,18 +244,44 @@
 
         <form class="composer" data-message-form>
           <div class="composer-fields">
-            <textarea class="text-input composer-input" name="content" rows="3" placeholder="輸入文字訊息"></textarea>
-            <div class="composer-meta">
-              <label class="composer-file-label" for="composer-file">附加圖片 / 檔案</label>
-              <small>支援文字、jpg、png、doc、pdf、xlsx，單檔上限 40MB。</small>
+            <textarea class="text-input composer-input" name="content" rows="1" placeholder="輸入文字訊息"></textarea>
+            <div class="composer-attachment">
+              <button type="button" class="composer-icon-button" data-attachment-toggle aria-label="附加檔案" aria-expanded="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                </svg>
+              </button>
+              <div class="attachment-menu" data-attachment-menu hidden>
+                <button type="button" data-attachment-kind="photo">
+                  <span class="attachment-menu-icon">▧</span>
+                  <span>照片</span>
+                </button>
+                <button type="button" data-attachment-kind="document">
+                  <span class="attachment-menu-icon">▤</span>
+                  <span>文件</span>
+                </button>
+              </div>
             </div>
             <input id="composer-file" class="composer-file-input" name="file" type="file" accept=".jpg,.jpeg,.png,.doc,.pdf,.xlsx">
-            <small data-file-state>尚未選擇檔案</small>
+            <small data-file-state></small>
           </div>
           <div class="composer-actions">
             <button type="submit" class="primary-button">送出訊息</button>
           </div>
         </form>
+        <div class="attachment-dialog-backdrop" data-attachment-dialog hidden>
+          <section class="attachment-dialog" role="dialog" aria-modal="true" aria-labelledby="attachment-dialog-title">
+            <header class="attachment-dialog-header">
+              <button type="button" class="attachment-dialog-close" data-attachment-close aria-label="關閉">×</button>
+              <strong id="attachment-dialog-title" data-attachment-title>傳送附件</strong>
+            </header>
+            <div class="attachment-dialog-preview" data-attachment-preview></div>
+            <footer class="attachment-dialog-footer">
+              <textarea class="attachment-caption-input" data-attachment-caption rows="1" placeholder="加入說明文字..."></textarea>
+              <button type="button" class="attachment-send-button" data-attachment-send>送出</button>
+            </footer>
+          </section>
+        </div>
       </section>
     </section>
   </main>
