@@ -97,6 +97,12 @@ type DirectConversationData struct {
 	Title          string `json:"title"`
 }
 
+// GroupMemberRequest identifies a user to include in a new group conversation.
+type GroupMemberRequest struct {
+	SourceSystem   string `json:"source_system"`
+	ExternalUserID string `json:"external_user_id"`
+}
+
 // UserSearchResult stores a searchable chat user.
 type UserSearchResult struct {
 	SourceSystem   string
@@ -186,6 +192,12 @@ type CreateDirectConversationRequest struct {
 	ExternalUserID string `json:"external_user_id"`
 }
 
+// CreateGroupConversationRequest is the HTTP payload for creating a group conversation.
+type CreateGroupConversationRequest struct {
+	Name    string               `json:"name"`
+	Members []GroupMemberRequest `json:"members"`
+}
+
 // SentMessageData is the API-facing payload for a newly created message.
 type SentMessageData struct {
 	ConversationID int64       `json:"conversation_id"`
@@ -218,6 +230,7 @@ type Repository interface {
 	ListConversations(userID int64) ([]ConversationSummary, error)
 	SearchUsers(actorUserID int64, sourceSystem, query string, limit int) ([]UserSearchResult, error)
 	CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error)
+	CreateGroupConversation(actorUserID int64, name string, members []GroupMemberRequest) (Conversation, error)
 	ListConversationMemberIDs(conversationID int64) ([]int64, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
 	ListMessages(conversationID int64, limit int) ([]Message, error)

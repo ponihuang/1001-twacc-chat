@@ -24,6 +24,8 @@ var (
 	ErrMessageContentRequired    = errors.New("message content required")
 	ErrTargetUserNotFound        = errors.New("target user not found")
 	ErrDirectChatSelfNotAllow    = errors.New("direct conversation with self is not allowed")
+	ErrGroupNameRequired         = errors.New("group name required")
+	ErrGroupMemberRequired       = errors.New("group member required")
 	ErrAttachmentRequired        = errors.New("attachment required")
 	ErrAttachmentTooLarge        = errors.New("attachment too large")
 	ErrUnsupportedAttachmentType = errors.New("unsupported attachment type")
@@ -35,6 +37,57 @@ var (
 type Service struct {
 	repo   Repository
 	broker Broker
+}
+
+// CreateGroupConversation creates a group conversation owned by the current user.
+func (s *Service) CreateGroupConversation(actor SessionPrincipal, req CreateGroupConversationRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return Response{}, statusCode(ErrGroupNameRequired), ErrGroupNameRequired
+	}
+	if len([]rune(name)) > 255 {
+		name = string([]rune(name)[:255])
+	}
+	members := normalizedGroupMembers(req.Members)
+	if len(members) == 0 {
+		return Response{}, statusCode(ErrGroupMemberRequired), ErrGroupMemberRequired
+	}
+
+	conversation, err := s.repo.CreateGroupConversation(actor.UserID, name, members)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	data := DirectConversationData{
+		ConversationID: conversation.ID,
+		Type:           conversation.Type,
+		Title:          conversation.Title,
+	}
+
+	if s.broker != nil {
+		memberIDs, err := s.repo.ListConversationMemberIDs(conversation.ID)
+		if err != nil {
+			return Response{}, 500, err
+		}
+		s.broker.PublishToUsers(memberIDs, RealtimeEvent{
+			EventType:      "conversation.ready",
+			ConversationID: conversation.ID,
+			Conversation:   &data,
+		})
+	}
+
+	return Response{
+		Success: true,
+		Code:    "GROUP_CONVERSATION_CREATED",
+		Message: "群組對話建立成功",
+		Data:    data,
+	}, 201, nil
 }
 
 // NewService builds a chat service.
@@ -411,9 +464,31 @@ func (s *Service) requireChatUser(userID int64) error {
 	return nil
 }
 
+func normalizedGroupMembers(members []GroupMemberRequest) []GroupMemberRequest {
+	seen := make(map[string]struct{})
+	normalized := make([]GroupMemberRequest, 0, len(members))
+	for _, member := range members {
+		source := strings.TrimSpace(member.SourceSystem)
+		externalID := strings.TrimSpace(member.ExternalUserID)
+		if source == "" || externalID == "" {
+			continue
+		}
+		key := source + "\x00" + strings.ToLower(externalID)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, GroupMemberRequest{
+			SourceSystem:   source,
+			ExternalUserID: externalID,
+		})
+	}
+	return normalized
+}
+
 func statusCode(err error) int {
 	switch {
-	case errors.Is(err, ErrUnsupportedMessageType), errors.Is(err, ErrMessageContentRequired), errors.Is(err, ErrAttachmentRequired), errors.Is(err, ErrAttachmentTooLarge), errors.Is(err, ErrUnsupportedAttachmentType):
+	case errors.Is(err, ErrUnsupportedMessageType), errors.Is(err, ErrMessageContentRequired), errors.Is(err, ErrAttachmentRequired), errors.Is(err, ErrAttachmentTooLarge), errors.Is(err, ErrUnsupportedAttachmentType), errors.Is(err, ErrGroupNameRequired), errors.Is(err, ErrGroupMemberRequired):
 		return 400
 	case errors.Is(err, ErrDirectChatSelfNotAllow):
 		return 409

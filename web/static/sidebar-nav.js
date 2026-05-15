@@ -20,6 +20,8 @@
 
   const viewTitles = {
     home: "聊天系統",
+    "new-group": "新增成員",
+    "new-group-details": "新群組",
     login: "登入",
     status: "登入狀態",
     settings: "設定"
@@ -34,7 +36,7 @@
   }
 
   function viewRequiresAuth(name) {
-    return name === "settings";
+    return name === "settings" || name === "new-group" || name === "new-group-details";
   }
 
   function accountName() {
@@ -143,9 +145,13 @@
         }));
         return;
       }
+      if (currentView() === "new-group-details") {
+        setView("new-group");
+        return;
+      }
       setView("home");
-    });
-  }
+	    });
+	  }
 
   if (settingsMenuToggle && settingsMenu) {
     settingsMenuToggle.addEventListener("click", function () {
@@ -165,6 +171,18 @@
     backAction = detail.backAction || "";
     shell.dataset.settingsView = detail.settingsView || "main";
     applyHeaderState(currentView());
+  });
+
+  document.addEventListener("twacc:open-new-group", function () {
+    setView("new-group");
+  });
+
+  document.addEventListener("twacc:open-new-group-details", function () {
+    setView("new-group-details");
+  });
+
+  document.addEventListener("twacc:sidebar-home", function () {
+    setView("home");
   });
 
   document.addEventListener("twacc:session-changed", applyAuthVisibility);

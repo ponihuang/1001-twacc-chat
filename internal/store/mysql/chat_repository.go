@@ -271,6 +271,65 @@ func (r *ChatRepository) CreateOrGetDirectConversation(actorUserID int64, source
 	return conversation, created, nil
 }
 
+// CreateGroupConversation creates a group conversation with the actor as owner.
+func (r *ChatRepository) CreateGroupConversation(actorUserID int64, name string, members []chat.GroupMemberRequest) (chat.Conversation, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return chat.Conversation{}, fmt.Errorf("begin create group conversation: %w", err)
+	}
+	defer tx.Rollback()
+
+	memberIDs := make([]int64, 0, len(members)+1)
+	seenIDs := map[int64]struct{}{actorUserID: {}}
+	for _, member := range members {
+		var userID int64
+		err := tx.QueryRow(`
+			SELECT id
+			  FROM users
+			 WHERE source_system = ?
+			   AND external_user_id = ?
+			   AND status = 'active'
+			 LIMIT 1`, member.SourceSystem, member.ExternalUserID).Scan(&userID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return chat.Conversation{}, chat.ErrTargetUserNotFound
+			}
+			return chat.Conversation{}, fmt.Errorf("find group member: %w", err)
+		}
+		if _, ok := seenIDs[userID]; ok {
+			continue
+		}
+		seenIDs[userID] = struct{}{}
+		memberIDs = append(memberIDs, userID)
+	}
+	if len(memberIDs) == 0 {
+		return chat.Conversation{}, chat.ErrGroupMemberRequired
+	}
+
+	result, err := tx.Exec(`INSERT INTO conversations (type, name, created_by) VALUES ('group', ?, ?)`, name, actorUserID)
+	if err != nil {
+		return chat.Conversation{}, fmt.Errorf("insert group conversation: %w", err)
+	}
+	conversationID, err := result.LastInsertId()
+	if err != nil {
+		return chat.Conversation{}, fmt.Errorf("read group conversation id: %w", err)
+	}
+
+	if _, err := tx.Exec(`INSERT INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, 'owner')`, conversationID, actorUserID); err != nil {
+		return chat.Conversation{}, fmt.Errorf("insert group owner: %w", err)
+	}
+	for _, memberID := range memberIDs {
+		if _, err := tx.Exec(`INSERT INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, 'member')`, conversationID, memberID); err != nil {
+			return chat.Conversation{}, fmt.Errorf("insert group member: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return chat.Conversation{}, fmt.Errorf("commit group conversation: %w", err)
+	}
+	return r.GetConversationForUser(actorUserID, conversationID)
+}
+
 // ListConversationMemberIDs returns all user IDs in a conversation.
 func (r *ChatRepository) ListConversationMemberIDs(conversationID int64) ([]int64, error) {
 	rows, err := r.db.Query(`SELECT user_id FROM conversation_members WHERE conversation_id = ? ORDER BY id ASC`, conversationID)

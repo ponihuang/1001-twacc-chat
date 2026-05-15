@@ -78,6 +78,76 @@
               <div data-search-message-results></div>
             </div>
           </section>
+          <div class="conversation-create-actions" data-conversation-create-actions data-auth-required hidden>
+            <div class="conversation-create-menu" data-conversation-create-menu hidden>
+              <button type="button" data-conversation-create-action="group">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M16 11a4 4 0 1 0-8 0"></path>
+                  <path d="M4 21a8 8 0 0 1 16 0"></path>
+                  <path d="M18 8a3 3 0 0 1 3 3"></path>
+                  <path d="M21 21a5.5 5.5 0 0 0-3-4.9"></path>
+                </svg>
+                <span>新群組</span>
+              </button>
+            </div>
+            <button type="button" class="conversation-create-toggle" data-conversation-create-toggle aria-label="新增聊天" aria-expanded="false">
+              <svg class="conversation-create-pencil" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path>
+                <path d="m15 5 4 4"></path>
+              </svg>
+              <svg class="conversation-create-close" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 6l12 12"></path>
+                <path d="M18 6L6 18"></path>
+              </svg>
+            </button>
+          </div>
+        </section>
+      </section>
+
+      <section class="sidebar-view" data-sidebar-view="new-group" data-auth-required hidden>
+        <section class="new-group-panel">
+          <div class="new-group-picker">
+            <div class="new-group-selected" data-new-group-selected></div>
+            <label class="new-group-search" aria-label="新增成員">
+              <input type="search" data-new-group-search placeholder="新增人員..." autocomplete="off">
+            </label>
+          </div>
+          <div class="new-group-list" data-new-group-results>
+            <div class="new-group-empty">輸入名稱或帳號搜尋成員</div>
+          </div>
+          <button type="button" class="new-group-next" data-new-group-next aria-label="下一步" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14"></path>
+              <path d="m13 6 6 6-6 6"></path>
+            </svg>
+          </button>
+        </section>
+      </section>
+
+      <section class="sidebar-view" data-sidebar-view="new-group-details" data-auth-required hidden>
+        <section class="new-group-panel new-group-details-panel">
+          <div class="new-group-avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 7a3 3 0 0 1 3-3h1.2l1.1-1.4A2 2 0 0 1 10.9 2h2.2a2 2 0 0 1 1.6.8L15.8 4H17a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M18 14v4"></path>
+              <path d="M16 16h4"></path>
+            </svg>
+          </div>
+          <label class="new-group-name-field">
+            <span>組名</span>
+            <input type="text" data-new-group-name maxlength="255" placeholder="輸入群組名稱">
+          </label>
+          <div class="new-group-member-summary">
+            <strong data-new-group-member-count>0 名成員</strong>
+            <div data-new-group-member-summary></div>
+          </div>
+          <button type="button" class="new-group-next" data-new-group-create aria-label="建立群組">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14"></path>
+              <path d="m13 6 6 6-6 6"></path>
+            </svg>
+          </button>
         </section>
       </section>
 

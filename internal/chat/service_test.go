@@ -27,6 +27,10 @@ type mockRepository struct {
 	directConversation  Conversation
 	directCreated       bool
 	directErr           error
+	groupConversation   Conversation
+	groupName           string
+	groupMembers        []GroupMemberRequest
+	groupErr            error
 }
 
 type readMarker struct {
@@ -123,6 +127,18 @@ func (m *mockRepository) CreateOrGetDirectConversation(actorUserID int64, source
 		return m.directConversation, m.directCreated, nil
 	}
 	return Conversation{ID: 15, Type: "direct", Title: externalUserID}, true, nil
+}
+
+func (m *mockRepository) CreateGroupConversation(actorUserID int64, name string, members []GroupMemberRequest) (Conversation, error) {
+	if m.groupErr != nil {
+		return Conversation{}, m.groupErr
+	}
+	m.groupName = name
+	m.groupMembers = append([]GroupMemberRequest(nil), members...)
+	if m.groupConversation.ID != 0 {
+		return m.groupConversation, nil
+	}
+	return Conversation{ID: 25, Type: "group", Title: name}, nil
 }
 
 func (m *mockRepository) ListConversationMemberIDs(conversationID int64) ([]int64, error) {
@@ -250,6 +266,64 @@ func TestSearchUsers(t *testing.T) {
 	}
 	if len(data.Users) != 1 || data.Users[0].ExternalUserID != "test01" || data.Users[0].DisplayName != "Test One" {
 		t.Fatalf("unexpected search data: %+v", data)
+	}
+}
+
+func TestCreateGroupConversationCreatesGroupAndPublishesEvent(t *testing.T) {
+	repo := &mockRepository{
+		groupConversation: Conversation{ID: 31, Type: "group", Title: "測試群組"},
+		memberIDs: map[int64][]int64{
+			31: {7, 8, 9},
+		},
+	}
+	broker := &mockBroker{}
+	service := NewService(repo, broker)
+
+	resp, status, err := service.CreateGroupConversation(SessionPrincipal{UserID: 7}, CreateGroupConversationRequest{
+		Name: " 測試群組 ",
+		Members: []GroupMemberRequest{
+			{SourceSystem: "erp", ExternalUserID: "u8"},
+			{SourceSystem: "erp", ExternalUserID: "u8"},
+			{SourceSystem: "erp", ExternalUserID: "u9"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateGroupConversation returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+	if repo.groupName != "測試群組" {
+		t.Fatalf("group name = %q, want 測試群組", repo.groupName)
+	}
+	if len(repo.groupMembers) != 2 {
+		t.Fatalf("group members = %+v, want 2 unique members", repo.groupMembers)
+	}
+	data, ok := resp.Data.(DirectConversationData)
+	if !ok {
+		t.Fatalf("response data type = %T, want DirectConversationData", resp.Data)
+	}
+	if data.ConversationID != 31 || data.Type != "group" || data.Title != "測試群組" {
+		t.Fatalf("unexpected group data: %+v", data)
+	}
+	if broker.calls != 1 || broker.event.EventType != "conversation.ready" || broker.event.ConversationID != 31 {
+		t.Fatalf("unexpected broker event: %+v", broker.event)
+	}
+}
+
+func TestCreateGroupConversationRejectsMissingNameOrMembers(t *testing.T) {
+	service := NewService(&mockRepository{}, nil)
+
+	_, status, err := service.CreateGroupConversation(SessionPrincipal{UserID: 7}, CreateGroupConversationRequest{
+		Members: []GroupMemberRequest{{SourceSystem: "erp", ExternalUserID: "u8"}},
+	})
+	if !errors.Is(err, ErrGroupNameRequired) || status != 400 {
+		t.Fatalf("missing name err=%v status=%d, want ErrGroupNameRequired 400", err, status)
+	}
+
+	_, status, err = service.CreateGroupConversation(SessionPrincipal{UserID: 7}, CreateGroupConversationRequest{Name: "測試群組"})
+	if !errors.Is(err, ErrGroupMemberRequired) || status != 400 {
+		t.Fatalf("missing members err=%v status=%d, want ErrGroupMemberRequired 400", err, status)
 	}
 }
 

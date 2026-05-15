@@ -54,6 +54,7 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 		mux.HandleFunc("GET /ws", chatHandler.ServeWebSocket)
 		mux.HandleFunc("GET /api/conversations", chatHandler.ListConversations)
 		mux.HandleFunc("POST /api/conversations/direct", chatHandler.CreateDirectConversation)
+		mux.HandleFunc("POST /api/conversations/group", chatHandler.CreateGroupConversation)
 		mux.HandleFunc("GET /api/users/search", chatHandler.SearchUsers)
 		mux.HandleFunc("GET /api/messages/search", chatHandler.SearchMessages)
 		mux.HandleFunc("GET /api/conversations/{conversation_id}/messages", chatHandler.ListMessages)

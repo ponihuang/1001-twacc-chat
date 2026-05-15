@@ -10,6 +10,7 @@
 - `GET /`、`GET /home`、`GET /login`、`GET /chat`、`GET /m/chat`、`GET /embed/chat`、`GET /healthz`
 - `GET /api/conversations`
 - `POST /api/conversations/direct`
+- `POST /api/conversations/group`
 - `GET /api/users/search`
 - `GET /api/messages/search`
 - `GET /api/conversations/{conversation_id}/messages`
@@ -23,6 +24,7 @@
 - `/login` 為獨立登入頁，登入後導向 `/chat`，登出後導向 `/login`
 - 桌機版 Web 測試登入、對話列表、搜尋使用者與訊息
 - 桌機版搜尋使用者時，點選使用者會先比對既有一對一對話；若已有對話會直接載入，若尚未建立則先開啟暫存聊天畫面，送出第一則訊息時才建立一對一對話
+- 桌機版左側新增入口可建立多人群組：新增成員、輸入群組名稱後建立群組對話
 - 桌機版左欄下拉選單：第一列顯示登入帳號並進入設定頁
 - 桌機版設定頁：個人資料、顯示名稱更新、聊天室分類建立與分類列顯示
 - 文字訊息送出、`Enter` 快捷送出
@@ -126,6 +128,7 @@ REQUIRE_TRUSTED_DEVICE=false
 - 登入後載入對話列表
 - 左側上方搜尋框可搜尋使用者與聊天記錄
 - 搜尋使用者後，點選使用者會先比對既有一對一對話；若已有對話會直接載入，若尚未建立則先開啟暫存聊天畫面，送出第一則訊息時才建立一對一對話
+- 左側右下角新增入口可建立多人群組：新增成員、輸入群組名稱後建立群組對話
 - 左上 icon 可打開左欄下拉選單，第一列顯示登入帳號並進入設定頁
 - 設定頁目前提供個人資料、顯示名稱更新、頭像預覽與聊天室分類前端原型
 - 聊天室分類目前保存在瀏覽器 `localStorage`，並顯示在左側 `Conversations` 上方
@@ -170,6 +173,7 @@ REQUIRE_TRUSTED_DEVICE=false
 - `GET /ws`
 - `GET /api/conversations`
 - `POST /api/conversations/direct`
+- `POST /api/conversations/group`
 - `GET /api/users/search`
 - `GET /api/messages/search`
 - `GET /api/conversations/{conversation_id}/messages`

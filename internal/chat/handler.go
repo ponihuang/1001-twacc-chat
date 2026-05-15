@@ -184,6 +184,33 @@ func (h *Handler) CreateDirectConversation(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, status, resp)
 }
 
+// CreateGroupConversation handles POST /api/conversations/group.
+func (h *Handler) CreateGroupConversation(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	actor, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req CreateGroupConversationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, svcErr := h.service.CreateGroupConversation(actor, req)
+	if svcErr != nil {
+		writeJSON(w, status, errorResponse(svcErr))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // ServeWebSocket upgrades the request and streams chat events for the current user.
 func (h *Handler) ServeWebSocket(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil || h.broker == nil {

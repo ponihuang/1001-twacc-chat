@@ -195,6 +195,55 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 - 若新建成功，回 `201 CONVERSATION_CREATED`
 - 建立或載入成功後，WebSocket 會對對話成員推送 `conversation.ready` 事件，讓雙方可即時看到這個對話
 
+### `POST /api/conversations/group`
+
+用途：
+
+- 建立多人群組對話
+
+請求草案：
+
+```json
+{
+  "name": "採購小組",
+  "members": [
+    {
+      "source_system": "erp",
+      "external_user_id": "user_b"
+    },
+    {
+      "source_system": "erp",
+      "external_user_id": "user_c"
+    }
+  ]
+}
+```
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 需為一般聊天使用者，`system_admin` 不可建立聊天
+- `name` 去除前後空白後不可為空
+- `members` 至少需包含一位有效成員；actor 會自動加入並設為 `owner`
+- 成員會以 `source_system` + `external_user_id` 查找 active 使用者
+- 建立成功後寫入 `conversations.type = group` 與多筆 `conversation_members`
+- 建立成功後，WebSocket 會對所有群組成員推送 `conversation.ready` 事件
+
+成功回應草案：
+
+```json
+{
+  "success": true,
+  "code": "GROUP_CONVERSATION_CREATED",
+  "message": "群組對話建立成功",
+  "data": {
+    "conversation_id": 123,
+    "type": "group",
+    "title": "採購小組"
+  }
+}
+```
+
 ### `GET /api/conversations/{conversation_id}/messages`
 
 用途：

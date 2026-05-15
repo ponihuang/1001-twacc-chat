@@ -23,6 +23,17 @@
   const searchMessageSection = app.querySelector("[data-search-message-section]");
   const searchMessageResults = app.querySelector("[data-search-message-results]");
   const searchAllMessagesButton = app.querySelector("[data-search-all-messages]");
+  const conversationCreateActions = app.querySelector("[data-conversation-create-actions]");
+  const conversationCreateToggle = app.querySelector("[data-conversation-create-toggle]");
+  const conversationCreateMenu = app.querySelector("[data-conversation-create-menu]");
+  const newGroupSearchInput = app.querySelector("[data-new-group-search]");
+  const newGroupSelectedNode = app.querySelector("[data-new-group-selected]");
+  const newGroupResultsNode = app.querySelector("[data-new-group-results]");
+  const newGroupNextButton = app.querySelector("[data-new-group-next]");
+  const newGroupNameInput = app.querySelector("[data-new-group-name]");
+  const newGroupMemberCountNode = app.querySelector("[data-new-group-member-count]");
+  const newGroupMemberSummaryNode = app.querySelector("[data-new-group-member-summary]");
+  const newGroupCreateButton = app.querySelector("[data-new-group-create]");
   const folderTabs = app.querySelector("[data-folder-tabs]");
   const messageBoard = app.querySelector("[data-message-board]");
   const messageBoardShell = messageBoard ? messageBoard.closest(".message-board-shell") : null;
@@ -56,6 +67,7 @@
   let conversationSearchQuery = "";
   let pendingDirectTarget = null;
   let userSearchRequestToken = 0;
+  let groupUserSearchRequestToken = 0;
   let messageSearchRequestToken = 0;
   let realtimeSocket = null;
   let reconnectTimer = 0;
@@ -67,6 +79,8 @@
   let dragDepth = 0;
   let contextMessage = null;
   let replyMessage = null;
+  let newGroupSearchQuery = "";
+  let newGroupSelectedMembers = [];
 
   function readSessionToken() {
     return localStorage.getItem(storageKeys.token) || "";
@@ -527,9 +541,226 @@
     if (conversationSearchInput) {
       conversationSearchInput.value = "";
     }
+    setConversationCreateMenuOpen(false);
     setSearchMode(false);
     renderDirectSearchResults([], false);
     renderMessageSearchResults([], false);
+  }
+
+  function setConversationCreateMenuOpen(open) {
+    if (!conversationCreateActions || !conversationCreateToggle || !conversationCreateMenu) {
+      return;
+    }
+    conversationCreateActions.classList.toggle("is-open", Boolean(open));
+    conversationCreateToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    conversationCreateMenu.hidden = !open;
+  }
+
+  function memberKey(member) {
+    return String((member && member.sourceSystem) || readSourceSystem()) + ":" + String((member && member.externalUserID) || "");
+  }
+
+  function userSearchItemToGroupMember(item) {
+    const title = item.display_name || item.external_user_id || "使用者";
+    return {
+      sourceSystem: item.source_system || readSourceSystem(),
+      externalUserID: item.external_user_id || "",
+      title: title
+    };
+  }
+
+  function isNewGroupMemberSelected(member) {
+    const key = memberKey(member);
+    return newGroupSelectedMembers.some(function (item) {
+      return memberKey(item) === key;
+    });
+  }
+
+  function updateNewGroupSelectedMember(member, selected) {
+    const key = memberKey(member);
+    newGroupSelectedMembers = newGroupSelectedMembers.filter(function (item) {
+      return memberKey(item) !== key;
+    });
+    if (selected) {
+      newGroupSelectedMembers.push(member);
+    }
+    renderNewGroupSelectedMembers();
+  }
+
+  function renderNewGroupSelectedMembers() {
+    if (!newGroupSelectedNode || !newGroupNextButton) {
+      return;
+    }
+    const pickerNode = newGroupSelectedNode.closest(".new-group-picker");
+    newGroupSelectedNode.hidden = !newGroupSelectedMembers.length;
+    newGroupNextButton.disabled = newGroupSelectedMembers.length < 1;
+    if (pickerNode) {
+      pickerNode.classList.toggle("has-selected", newGroupSelectedMembers.length > 0);
+    }
+    newGroupSelectedNode.innerHTML = newGroupSelectedMembers.map(function (member) {
+      const title = member.title || member.externalUserID || "使用者";
+      const initial = title.slice(0, 1).toUpperCase();
+      return [
+        '<span class="new-group-selected-chip" data-new-group-selected-key="' + escapeHTML(memberKey(member)) + '">',
+        '<span class="new-group-selected-avatar">' + escapeHTML(initial) + "</span>",
+        "<span>" + escapeHTML(title) + "</span>",
+        '<button type="button" aria-label="移除 ' + escapeHTML(title) + '">×</button>',
+        "</span>"
+      ].join("");
+    }).join("");
+  }
+
+  function renderNewGroupResults(items, loading) {
+    if (!newGroupResultsNode) {
+      return;
+    }
+    if (!newGroupSearchQuery) {
+      newGroupResultsNode.innerHTML = '<div class="new-group-empty">輸入名稱或帳號搜尋成員</div>';
+      return;
+    }
+    if (loading) {
+      newGroupResultsNode.innerHTML = '<div class="new-group-empty">搜尋成員中...</div>';
+      return;
+    }
+    if (!items.length) {
+      newGroupResultsNode.innerHTML = '<div class="new-group-empty">找不到符合的成員</div>';
+      return;
+    }
+    newGroupResultsNode.innerHTML = items.map(function (item) {
+      const member = userSearchItemToGroupMember(item);
+      const selected = isNewGroupMemberSelected(member);
+      const initial = (member.title || member.externalUserID || "U").slice(0, 1).toUpperCase();
+      return [
+        '<button type="button" class="new-group-member' + (selected ? " is-selected" : "") + '"',
+        ' data-new-group-source="' + escapeHTML(member.sourceSystem) + '"',
+        ' data-new-group-id="' + escapeHTML(member.externalUserID) + '"',
+        ' data-new-group-title="' + escapeHTML(member.title) + '">',
+        '<span class="new-group-member-check" aria-hidden="true"></span>',
+        '<span class="new-group-member-avatar">' + escapeHTML(initial) + "</span>",
+        '<span class="new-group-member-text">',
+        "<strong>" + escapeHTML(member.title) + "</strong>",
+        "<small>@" + escapeHTML(member.externalUserID) + "</small>",
+        "</span>",
+        "</button>"
+      ].join("");
+    }).join("");
+  }
+
+  async function searchNewGroupUsers() {
+    const headers = authHeaders();
+    const query = String(newGroupSearchQuery || "").replace(/^@+/, "").trim();
+    if (!headers || !query) {
+      renderNewGroupResults([], false);
+      return;
+    }
+    const requestToken = ++groupUserSearchRequestToken;
+    renderNewGroupResults([], true);
+    const response = await fetch("/api/users/search?source_system=" + encodeURIComponent(readSourceSystem()) + "&q=" + encodeURIComponent(query), {
+      headers: { Authorization: headers.Authorization }
+    });
+    const result = await parseJSON(response);
+    if (requestToken !== groupUserSearchRequestToken) {
+      return;
+    }
+    if (!response.ok || !result.success) {
+      renderNewGroupResults([], false);
+      return;
+    }
+    const data = result.data || {};
+    renderNewGroupResults(data.users || [], false);
+  }
+
+  function resetNewGroupDraft() {
+    newGroupSearchQuery = "";
+    newGroupSelectedMembers = [];
+    if (newGroupSearchInput) {
+      newGroupSearchInput.value = "";
+    }
+    if (newGroupNameInput) {
+      newGroupNameInput.value = "";
+    }
+    renderNewGroupSelectedMembers();
+    renderNewGroupResults([], false);
+    renderNewGroupDetails();
+  }
+
+  function suggestedNewGroupName() {
+    return newGroupSelectedMembers.map(function (member) {
+      return member.title || member.externalUserID || "使用者";
+    }).join("、");
+  }
+
+  function renderNewGroupDetails() {
+    if (!newGroupMemberCountNode || !newGroupMemberSummaryNode) {
+      return;
+    }
+    const totalMembers = newGroupSelectedMembers.length + 1;
+    newGroupMemberCountNode.textContent = totalMembers + " 名成員";
+    newGroupMemberSummaryNode.innerHTML = newGroupSelectedMembers.map(function (member) {
+      const initial = (member.title || member.externalUserID || "U").slice(0, 1).toUpperCase();
+      return [
+        '<div class="new-group-summary-member">',
+        '<span class="new-group-member-avatar">' + escapeHTML(initial) + "</span>",
+        '<span class="new-group-member-text">',
+        "<strong>" + escapeHTML(member.title || member.externalUserID || "使用者") + "</strong>",
+        "<small>@" + escapeHTML(member.externalUserID || "") + "</small>",
+        "</span>",
+        "</div>"
+      ].join("");
+    }).join("");
+  }
+
+  async function createGroupConversation() {
+    const headers = authHeaders();
+    const name = newGroupNameInput ? newGroupNameInput.value.trim() : "";
+    if (!headers) {
+      setMessageStatus("請先登入。", true);
+      return;
+    }
+    if (!name) {
+      setMessageStatus("請輸入群組名稱。", true);
+      if (newGroupNameInput) {
+        newGroupNameInput.focus();
+      }
+      return;
+    }
+    if (!newGroupSelectedMembers.length) {
+      setMessageStatus("請至少選擇一位成員。", true);
+      return;
+    }
+    if (newGroupCreateButton) {
+      newGroupCreateButton.disabled = true;
+    }
+    setMessageStatus("建立群組中...", false);
+    const response = await fetch("/api/conversations/group", {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify({
+        name: name,
+        members: newGroupSelectedMembers.map(function (member) {
+          return {
+            source_system: member.sourceSystem,
+            external_user_id: member.externalUserID
+          };
+        })
+      })
+    });
+    const result = await parseJSON(response);
+    if (newGroupCreateButton) {
+      newGroupCreateButton.disabled = false;
+    }
+    if (!response.ok || !result.success) {
+      setMessageStatus(result.message || "群組建立失敗。", true);
+      return;
+    }
+    const data = result.data || {};
+    resetNewGroupDraft();
+    document.dispatchEvent(new CustomEvent("twacc:sidebar-home"));
+    await loadConversations();
+    if (data.conversation_id) {
+      openConversation(Number(data.conversation_id));
+    }
+    setMessageStatus("群組已建立。", false);
   }
 
   function conversationPreview(item) {
@@ -1540,6 +1771,99 @@
     });
   }
 
+  if (conversationCreateToggle) {
+    conversationCreateToggle.addEventListener("click", function (event) {
+      event.stopPropagation();
+      setConversationCreateMenuOpen(conversationCreateMenu ? conversationCreateMenu.hidden : true);
+    });
+  }
+
+  if (conversationCreateMenu) {
+    conversationCreateMenu.addEventListener("click", function (event) {
+      const actionButton = event.target.closest("[data-conversation-create-action]");
+      if (!actionButton) {
+        return;
+      }
+      const action = actionButton.dataset.conversationCreateAction;
+      setConversationCreateMenuOpen(false);
+      if (action === "group") {
+        resetNewGroupDraft();
+        document.dispatchEvent(new CustomEvent("twacc:open-new-group"));
+      }
+    });
+  }
+
+  if (newGroupSearchInput) {
+    newGroupSearchInput.addEventListener("input", function () {
+      newGroupSearchQuery = newGroupSearchInput.value.trim();
+      searchNewGroupUsers();
+    });
+  }
+
+  if (newGroupResultsNode) {
+    newGroupResultsNode.addEventListener("click", function (event) {
+      const memberButton = event.target.closest("[data-new-group-id]");
+      if (!memberButton) {
+        return;
+      }
+      const member = {
+        sourceSystem: memberButton.dataset.newGroupSource || readSourceSystem(),
+        externalUserID: memberButton.dataset.newGroupId || "",
+        title: memberButton.dataset.newGroupTitle || ""
+      };
+      updateNewGroupSelectedMember(member, !isNewGroupMemberSelected(member));
+      searchNewGroupUsers();
+    });
+  }
+
+  if (newGroupSelectedNode) {
+    newGroupSelectedNode.addEventListener("click", function (event) {
+      const removeButton = event.target.closest("button");
+      const chip = event.target.closest("[data-new-group-selected-key]");
+      if (!removeButton || !chip) {
+        return;
+      }
+      newGroupSelectedMembers = newGroupSelectedMembers.filter(function (member) {
+        return memberKey(member) !== chip.dataset.newGroupSelectedKey;
+      });
+      renderNewGroupSelectedMembers();
+      searchNewGroupUsers();
+    });
+  }
+
+  if (newGroupNextButton) {
+    newGroupNextButton.addEventListener("click", function () {
+      if (!newGroupSelectedMembers.length) {
+        return;
+      }
+      renderNewGroupDetails();
+      if (newGroupNameInput && !newGroupNameInput.value.trim()) {
+        newGroupNameInput.value = suggestedNewGroupName();
+      }
+      document.dispatchEvent(new CustomEvent("twacc:open-new-group-details"));
+    });
+  }
+
+  if (newGroupCreateButton) {
+    newGroupCreateButton.addEventListener("click", createGroupConversation);
+  }
+
+  document.addEventListener("twacc:sidebar-view-changed", function (event) {
+    const detail = event.detail || {};
+    if (detail.view === "new-group" && newGroupSearchInput) {
+      window.requestAnimationFrame(function () {
+        newGroupSearchInput.focus();
+      });
+    }
+    if (detail.view === "new-group-details" && newGroupNameInput) {
+      renderNewGroupDetails();
+      window.requestAnimationFrame(function () {
+        newGroupNameInput.focus();
+        newGroupNameInput.select();
+      });
+    }
+  });
+
   document.addEventListener("twacc:search-close", closeSearchMode);
 
   window.addEventListener("storage", function (event) {
@@ -1590,6 +1914,9 @@
     });
   }
   document.addEventListener("click", function (event) {
+    if (conversationCreateActions && !conversationCreateActions.contains(event.target)) {
+      setConversationCreateMenuOpen(false);
+    }
     if (!messageContextMenu || messageContextMenu.hidden || messageContextMenu.contains(event.target)) {
       return;
     }
@@ -1599,6 +1926,7 @@
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") {
       closeMessageContextMenu();
+      setConversationCreateMenuOpen(false);
     }
     if (event.key !== "Escape" || !activeConversationID) {
       return;
