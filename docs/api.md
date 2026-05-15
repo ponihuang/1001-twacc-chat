@@ -244,6 +244,84 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 }
 ```
 
+### `POST /api/contacts`
+
+用途：
+
+- 將一位 active 使用者加入目前使用者的單向聯絡人清單
+- 桌機版可從一對一對話右上角選單開啟「加入聯絡人」面板送出
+
+請求草案：
+
+```json
+{
+  "source_system": "erp",
+  "external_user_id": "user_b",
+  "alias_name": "王小明"
+}
+```
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 需為一般聊天使用者，`system_admin` 不可加入聯絡人
+- 聯絡人是單向關係，只新增 `owner_user_id -> contact_user_id`
+- 不可將自己加入聯絡人
+- 重複加入同一人會更新 `alias_name` 並將 `status` 恢復為 `active`
+
+成功回應草案：
+
+```json
+{
+  "success": true,
+  "code": "CONTACT_ADDED",
+  "message": "联系人已加入",
+  "data": {
+    "contact_user_id": 8,
+    "source_system": "erp",
+    "external_user_id": "user_b",
+    "display_name": "王小明",
+    "alias_name": "王小明",
+    "status": "active"
+  }
+}
+```
+
+### `GET /api/contacts`
+
+用途：
+
+- 取得目前使用者已加入的 active 聯絡人清單
+- 桌機版左上角選單的「聯絡人」頁面會使用此 API 顯示名單
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 需為一般聊天使用者，`system_admin` 不可讀取聯絡人
+- 只回傳 `user_contacts.status = active` 且對方 `users.status = active` 的資料
+
+成功回應草案：
+
+```json
+{
+  "success": true,
+  "code": "CONTACTS_OK",
+  "message": "联系人列表已载入",
+  "data": {
+    "contacts": [
+      {
+        "contact_user_id": 8,
+        "source_system": "erp",
+        "external_user_id": "user_b",
+        "display_name": "王小明",
+        "alias_name": "王小明",
+        "status": "active"
+      }
+    ]
+  }
+}
+```
+
 ### `GET /api/conversations/{conversation_id}/messages`
 
 用途：

@@ -207,6 +207,73 @@ func (r *ChatRepository) SearchUsers(actorUserID int64, sourceSystem, query stri
 	return items, rows.Err()
 }
 
+// AddContact saves an active user to the actor's one-way contact list.
+func (r *ChatRepository) AddContact(actorUserID int64, sourceSystem, externalUserID, aliasName string) (chat.ContactData, error) {
+	var contact chat.ContactData
+	row := r.db.QueryRow(`
+		SELECT id, source_system, external_user_id, display_name
+		  FROM users
+		 WHERE source_system = ?
+		   AND external_user_id = ?
+		   AND status = 'active'
+		 LIMIT 1`, sourceSystem, externalUserID)
+	if err := row.Scan(&contact.ContactUserID, &contact.SourceSystem, &contact.ExternalUserID, &contact.DisplayName); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return chat.ContactData{}, chat.ErrTargetUserNotFound
+		}
+		return chat.ContactData{}, fmt.Errorf("find contact user: %w", err)
+	}
+	if contact.ContactUserID == actorUserID {
+		return chat.ContactData{}, chat.ErrContactSelfNotAllow
+	}
+
+	if _, err := r.db.Exec(`
+		INSERT INTO user_contacts (owner_user_id, contact_user_id, alias_name, status)
+		VALUES (?, ?, NULLIF(?, ''), 'active')
+		ON DUPLICATE KEY UPDATE
+			alias_name = VALUES(alias_name),
+			status = 'active',
+			updated_at = NOW()`, actorUserID, contact.ContactUserID, aliasName); err != nil {
+		return chat.ContactData{}, fmt.Errorf("add contact: %w", err)
+	}
+
+	contact.AliasName = aliasName
+	contact.Status = "active"
+	return contact, nil
+}
+
+// ListContacts returns active one-way contacts saved by the actor.
+func (r *ChatRepository) ListContacts(actorUserID int64) ([]chat.ContactData, error) {
+	rows, err := r.db.Query(`
+		SELECT u.id,
+		       u.source_system,
+		       u.external_user_id,
+		       u.display_name,
+		       COALESCE(uc.alias_name, ''),
+		       uc.status
+		  FROM user_contacts uc
+		  JOIN users u ON u.id = uc.contact_user_id
+		 WHERE uc.owner_user_id = ?
+		   AND uc.status = 'active'
+		   AND u.status = 'active'
+		 ORDER BY COALESCE(NULLIF(uc.alias_name, ''), u.display_name, u.external_user_id),
+		          u.external_user_id`, actorUserID)
+	if err != nil {
+		return nil, fmt.Errorf("list contacts: %w", err)
+	}
+	defer rows.Close()
+
+	contacts := make([]chat.ContactData, 0)
+	for rows.Next() {
+		var item chat.ContactData
+		if err := rows.Scan(&item.ContactUserID, &item.SourceSystem, &item.ExternalUserID, &item.DisplayName, &item.AliasName, &item.Status); err != nil {
+			return nil, fmt.Errorf("scan contact: %w", err)
+		}
+		contacts = append(contacts, item)
+	}
+	return contacts, rows.Err()
+}
+
 // CreateOrGetDirectConversation creates a direct conversation with the target user, or returns the existing one.
 func (r *ChatRepository) CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (chat.Conversation, bool, error) {
 	var targetUserID int64

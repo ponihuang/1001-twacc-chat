@@ -28,6 +28,13 @@ type mockRepository struct {
 	directConversation   Conversation
 	directCreated        bool
 	directErr            error
+	contact              ContactData
+	contactSourceSystem  string
+	contactExternalID    string
+	contactAliasName     string
+	contactErr           error
+	contacts             []ContactData
+	listContactsErr      error
 	groupConversation    Conversation
 	groupName            string
 	groupMembers         []GroupMemberRequest
@@ -53,6 +60,28 @@ func (m *mockRepository) SearchUsers(actorUserID int64, sourceSystem, query stri
 	m.searchQuery = query
 	m.searchLimit = limit
 	return append([]UserSearchResult(nil), m.searchUsers...), nil
+}
+
+func (m *mockRepository) AddContact(actorUserID int64, sourceSystem, externalUserID, aliasName string) (ContactData, error) {
+	m.searchUserID = actorUserID
+	m.contactSourceSystem = sourceSystem
+	m.contactExternalID = externalUserID
+	m.contactAliasName = aliasName
+	if m.contactErr != nil {
+		return ContactData{}, m.contactErr
+	}
+	if m.contact.ContactUserID != 0 {
+		return m.contact, nil
+	}
+	return ContactData{ContactUserID: 8, SourceSystem: sourceSystem, ExternalUserID: externalUserID, DisplayName: externalUserID, AliasName: aliasName, Status: "active"}, nil
+}
+
+func (m *mockRepository) ListContacts(actorUserID int64) ([]ContactData, error) {
+	m.searchUserID = actorUserID
+	if m.listContactsErr != nil {
+		return nil, m.listContactsErr
+	}
+	return append([]ContactData(nil), m.contacts...), nil
 }
 
 func (m *mockRepository) GetConversationForUser(userID, conversationID int64) (Conversation, error) {
@@ -272,6 +301,76 @@ func TestSearchUsers(t *testing.T) {
 	}
 	if len(data.Users) != 1 || data.Users[0].ExternalUserID != "test01" || data.Users[0].DisplayName != "Test One" {
 		t.Fatalf("unexpected search data: %+v", data)
+	}
+}
+
+func TestAddContact(t *testing.T) {
+	repo := &mockRepository{
+		contact: ContactData{
+			ContactUserID:  8,
+			SourceSystem:   "erp",
+			ExternalUserID: "test01",
+			DisplayName:    "Test One",
+			AliasName:      "測試",
+			Status:         "active",
+		},
+	}
+	service := NewService(repo, nil)
+
+	resp, status, err := service.AddContact(SessionPrincipal{UserID: 7}, AddContactRequest{
+		SourceSystem:   "erp",
+		ExternalUserID: "test01",
+		AliasName:      " 測試 ",
+	})
+	if err != nil {
+		t.Fatalf("AddContact returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+	if repo.searchUserID != 7 || repo.contactSourceSystem != "erp" || repo.contactExternalID != "test01" || repo.contactAliasName != "測試" {
+		t.Fatalf("unexpected contact call: user=%d source=%q external=%q alias=%q", repo.searchUserID, repo.contactSourceSystem, repo.contactExternalID, repo.contactAliasName)
+	}
+	data, ok := resp.Data.(ContactData)
+	if !ok {
+		t.Fatalf("response data type = %T, want ContactData", resp.Data)
+	}
+	if data.ContactUserID != 8 || data.AliasName != "測試" {
+		t.Fatalf("unexpected contact data: %+v", data)
+	}
+}
+
+func TestListContacts(t *testing.T) {
+	repo := &mockRepository{
+		contacts: []ContactData{
+			{
+				ContactUserID:  8,
+				SourceSystem:   "erp",
+				ExternalUserID: "test01",
+				DisplayName:    "Test One",
+				AliasName:      "測試",
+				Status:         "active",
+			},
+		},
+	}
+	service := NewService(repo, nil)
+
+	resp, status, err := service.ListContacts(SessionPrincipal{UserID: 7})
+	if err != nil {
+		t.Fatalf("ListContacts returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if repo.searchUserID != 7 {
+		t.Fatalf("unexpected actor user id: %d", repo.searchUserID)
+	}
+	data, ok := resp.Data.(ContactListData)
+	if !ok {
+		t.Fatalf("response data type = %T, want ContactListData", resp.Data)
+	}
+	if len(data.Contacts) != 1 || data.Contacts[0].ExternalUserID != "test01" {
+		t.Fatalf("unexpected contacts data: %+v", data)
 	}
 }
 

@@ -24,6 +24,7 @@ var (
 	ErrMessageContentRequired    = errors.New("message content required")
 	ErrTargetUserNotFound        = errors.New("target user not found")
 	ErrDirectChatSelfNotAllow    = errors.New("direct conversation with self is not allowed")
+	ErrContactSelfNotAllow       = errors.New("contact with self is not allowed")
 	ErrGroupNameRequired         = errors.New("group name required")
 	ErrGroupMemberRequired       = errors.New("group member required")
 	ErrAttachmentRequired        = errors.New("attachment required")
@@ -93,6 +94,60 @@ func (s *Service) CreateGroupConversation(actor SessionPrincipal, req CreateGrou
 // NewService builds a chat service.
 func NewService(repo Repository, broker Broker) *Service {
 	return &Service{repo: repo, broker: broker}
+}
+
+// AddContact saves another active user to the current user's contact list.
+func (s *Service) AddContact(actor SessionPrincipal, req AddContactRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	sourceSystem := strings.TrimSpace(req.SourceSystem)
+	externalUserID := strings.TrimSpace(req.ExternalUserID)
+	aliasName := strings.TrimSpace(req.AliasName)
+	if sourceSystem == "" || externalUserID == "" {
+		return Response{}, statusCode(ErrTargetUserNotFound), ErrTargetUserNotFound
+	}
+	if len([]rune(aliasName)) > 100 {
+		aliasName = string([]rune(aliasName)[:100])
+	}
+
+	contact, err := s.repo.AddContact(actor.UserID, sourceSystem, externalUserID, aliasName)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "CONTACT_ADDED",
+		Message: "联系人已加入",
+		Data:    contact,
+	}, 201, nil
+}
+
+// ListContacts returns the current user's active contact list.
+func (s *Service) ListContacts(actor SessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	contacts, err := s.repo.ListContacts(actor.UserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "CONTACTS_OK",
+		Message: "联系人列表已载入",
+		Data:    ContactListData{Contacts: contacts},
+	}, 200, nil
 }
 
 // ListConversations returns conversations visible to the current user.
@@ -495,7 +550,7 @@ func statusCode(err error) int {
 	switch {
 	case errors.Is(err, ErrUnsupportedMessageType), errors.Is(err, ErrMessageContentRequired), errors.Is(err, ErrAttachmentRequired), errors.Is(err, ErrAttachmentTooLarge), errors.Is(err, ErrUnsupportedAttachmentType), errors.Is(err, ErrGroupNameRequired), errors.Is(err, ErrGroupMemberRequired):
 		return 400
-	case errors.Is(err, ErrDirectChatSelfNotAllow):
+	case errors.Is(err, ErrDirectChatSelfNotAllow), errors.Is(err, ErrContactSelfNotAllow):
 		return 409
 	case errors.Is(err, ErrSystemAdminCannotChat), errors.Is(err, ErrInsufficientRole):
 		return 403

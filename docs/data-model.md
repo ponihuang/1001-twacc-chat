@@ -173,7 +173,26 @@
 - 用於計算每個使用者在各對話的未讀數。
 - 訊息列表 API 會在標記已讀前，依此表找出第一筆未讀訊息並回傳 `first_unread_message_id`，讓前端可定位到未讀起點。
 
-## 11. 留存策略
+## 11. `user_contacts`
+
+欄位草案：
+
+- `id`
+- `owner_user_id`
+- `contact_user_id`
+- `alias_name`
+- `status`
+- `created_at`
+- `updated_at`
+
+說明：
+
+- 用於 Telegram-like 的單向聯絡人關係。
+- `owner_user_id` 是誰的聯絡人清單，`contact_user_id` 是被加入的人。
+- `alias_name` 是目前使用者給聯絡人的顯示名稱 / 備註名。
+- `status` 目前使用 `active`；移除或封鎖聯絡人時可擴充為 `deleted`、`blocked`。
+
+## 12. 留存策略
 
 MVP 需要支援訊息與檔案保留 3 個月，因此後續應補：
 

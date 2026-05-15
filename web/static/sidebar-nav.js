@@ -20,6 +20,7 @@
 
   const viewTitles = {
     home: "聊天系統",
+    contacts: "聯絡人",
     "new-group": "新增成員",
     "new-group-details": "新群組",
     login: "登入",
@@ -36,7 +37,7 @@
   }
 
   function viewRequiresAuth(name) {
-    return name === "settings" || name === "new-group" || name === "new-group-details";
+    return name === "settings" || name === "contacts" || name === "new-group" || name === "new-group-details";
   }
 
   function accountName() {

@@ -199,6 +199,28 @@ type CreateGroupConversationRequest struct {
 	Members []GroupMemberRequest `json:"members"`
 }
 
+// AddContactRequest is the HTTP payload for adding a user to the current user's contacts.
+type AddContactRequest struct {
+	SourceSystem   string `json:"source_system"`
+	ExternalUserID string `json:"external_user_id"`
+	AliasName      string `json:"alias_name"`
+}
+
+// ContactData is the API-facing payload for a saved contact.
+type ContactData struct {
+	ContactUserID  int64  `json:"contact_user_id"`
+	SourceSystem   string `json:"source_system"`
+	ExternalUserID string `json:"external_user_id"`
+	DisplayName    string `json:"display_name"`
+	AliasName      string `json:"alias_name,omitempty"`
+	Status         string `json:"status"`
+}
+
+// ContactListData is the API-facing payload for saved contacts.
+type ContactListData struct {
+	Contacts []ContactData `json:"contacts"`
+}
+
 // SentMessageData is the API-facing payload for a newly created message.
 type SentMessageData struct {
 	ConversationID int64       `json:"conversation_id"`
@@ -230,6 +252,8 @@ type Repository interface {
 	IsSystemAdmin(userID int64) (bool, error)
 	ListConversations(userID int64) ([]ConversationSummary, error)
 	SearchUsers(actorUserID int64, sourceSystem, query string, limit int) ([]UserSearchResult, error)
+	AddContact(actorUserID int64, sourceSystem, externalUserID, aliasName string) (ContactData, error)
+	ListContacts(actorUserID int64) ([]ContactData, error)
 	CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error)
 	CreateGroupConversation(actorUserID int64, name string, members []GroupMemberRequest) (Conversation, error)
 	ListConversationMemberIDs(conversationID int64) ([]int64, error)

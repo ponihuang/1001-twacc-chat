@@ -211,6 +211,54 @@ func (h *Handler) CreateGroupConversation(w http.ResponseWriter, r *http.Request
 	writeJSON(w, status, resp)
 }
 
+// AddContact handles POST /api/contacts.
+func (h *Handler) AddContact(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	actor, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req AddContactRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, svcErr := h.service.AddContact(actor, req)
+	if svcErr != nil {
+		writeJSON(w, status, errorResponse(svcErr))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// ListContacts handles GET /api/contacts.
+func (h *Handler) ListContacts(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	actor, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, svcErr := h.service.ListContacts(actor)
+	if svcErr != nil {
+		writeJSON(w, status, errorResponse(svcErr))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // ServeWebSocket upgrades the request and streams chat events for the current user.
 func (h *Handler) ServeWebSocket(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil || h.broker == nil {
@@ -581,6 +629,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "USER_NOT_FOUND", Message: "找不到目标使用者"}
 	case errors.Is(err, ErrDirectChatSelfNotAllow):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "不可与自己建立一对一对话"}
+	case errors.Is(err, ErrContactSelfNotAllow):
+		return Response{Success: false, Code: "INVALID_REQUEST", Message: "不可将自己加入联系人"}
 	case errors.Is(err, ErrUnsupportedMessageType):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "目前仅支持 text / image / file 讯息"}
 	case errors.Is(err, ErrMessageContentRequired):

@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=message-context-20260515f">
+  <link rel="stylesheet" href="/static/app.css?v=contacts-page-20260516a">
   <script defer src="/static/page-auth-guard.js?v=auth-guard-20260511a"></script>
-  <script defer src="/static/sidebar-nav.js?v=global-search-20260508i"></script>
+  <script defer src="/static/sidebar-nav.js?v=contacts-page-20260516a"></script>
   <script defer src="/static/settings-panel.js?v=global-search-20260508i"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
-  <script defer src="/static/chat-app.js?v=message-context-20260515f"></script>
+  <script defer src="/static/chat-app.js?v=contacts-page-20260516a"></script>
 </head>
 <body class="desktop-page" data-require-auth-redirect="/login">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -45,6 +45,15 @@
           <span class="sidebar-account-avatar" data-sidebar-account-avatar>U</span>
           <span class="sidebar-menu-text">
             <strong data-sidebar-account-name>使用者</strong>
+          </span>
+        </button>
+        <button type="button" class="sidebar-menu-item" data-sidebar-open="contacts" data-auth-required hidden>
+          <svg class="sidebar-menu-icon sidebar-menu-icon-contacts" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8" r="4"></circle>
+            <path d="M4 21a8 8 0 0 1 16 0"></path>
+          </svg>
+          <span class="sidebar-menu-text">
+            <strong>聯絡人</strong>
           </span>
         </button>
       </nav>
@@ -100,6 +109,14 @@
                 <path d="M18 6L6 18"></path>
               </svg>
             </button>
+          </div>
+        </section>
+      </section>
+
+      <section class="sidebar-view" data-sidebar-view="contacts" data-auth-required hidden>
+        <section class="contacts-panel">
+          <div class="contacts-list" data-contacts-list>
+            <div class="contacts-empty">尚未加入聯絡人</div>
           </div>
         </section>
       </section>
@@ -307,6 +324,18 @@
             <strong data-conversation-title>目前對話</strong>
             <span data-message-status>請先登入並選擇對話。</span>
           </div>
+          <div class="chat-topbar-actions">
+            <button type="button" class="chat-topbar-icon" data-contact-menu-toggle aria-label="更多選項" aria-expanded="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="5" r="1.8"></circle>
+                <circle cx="12" cy="12" r="1.8"></circle>
+                <circle cx="12" cy="19" r="1.8"></circle>
+              </svg>
+            </button>
+            <div class="chat-contact-menu" data-contact-menu hidden>
+              <button type="button" data-contact-action="add">加入聯絡人</button>
+            </div>
+          </div>
         </header>
 
         <div class="message-board-shell">
@@ -396,6 +425,35 @@
           </section>
         </div>
       </section>
+      <aside class="contact-panel" data-contact-panel hidden>
+        <header class="contact-panel-header">
+          <button type="button" class="contact-panel-back" data-contact-panel-close aria-label="返回對話">‹</button>
+          <strong>加入聯絡人</strong>
+        </header>
+        <form class="contact-form" data-contact-form>
+          <div class="contact-avatar" data-contact-avatar>?</div>
+          <strong data-contact-display-name>聯絡人</strong>
+          <small data-contact-original-name>original name</small>
+          <label class="contact-field">
+            <span>名稱</span>
+            <input type="text" data-contact-alias-name maxlength="100" placeholder="輸入顯示名稱">
+          </label>
+          <label class="contact-field">
+            <span>帳號</span>
+            <input type="text" data-contact-account readonly>
+          </label>
+          <label class="contact-field">
+            <span>備註</span>
+            <textarea data-contact-notes rows="3" placeholder="備註" disabled></textarea>
+          </label>
+          <p class="contact-hint">目前先儲存為單向聯絡人，對方不需要確認。</p>
+          <button type="submit" class="contact-save-button" aria-label="儲存聯絡人">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"></path>
+            </svg>
+          </button>
+        </form>
+      </aside>
     </section>
   </main>
 </body>

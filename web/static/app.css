@@ -1283,6 +1283,19 @@ strong {
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.72);
 }
 
+.sidebar-menu-icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin: 4px;
+  color: var(--text);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .sidebar-account-avatar.has-image {
   color: transparent;
 }
@@ -1628,6 +1641,80 @@ strong {
   height: 100%;
   background: rgba(255, 251, 245, 0.96);
   overflow: hidden;
+}
+
+.contacts-panel {
+  display: grid;
+  grid-template-rows: 1fr;
+  min-height: 0;
+  height: 100%;
+  background: rgba(255, 251, 245, 0.96);
+  overflow: hidden;
+}
+
+.contacts-list {
+  display: grid;
+  align-content: start;
+  min-height: 0;
+  padding: 10px 0 18px;
+  overflow-y: auto;
+}
+
+.contacts-empty {
+  padding: 18px 22px;
+  color: var(--muted);
+}
+
+.contacts-empty.is-error {
+  color: var(--accent);
+}
+
+.contact-list-item {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 68px;
+  padding: 8px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.contact-list-item:hover {
+  background: rgba(51, 144, 236, 0.08);
+}
+
+.contact-list-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #62b4f6, #2f80d1);
+  color: #fff;
+  font-weight: 800;
+}
+
+.contact-list-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.contact-list-text strong,
+.contact-list-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-list-text small {
+  color: var(--muted);
 }
 
 .new-group-picker {
@@ -2083,7 +2170,7 @@ strong {
 
 .desktop-stage {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -2106,6 +2193,10 @@ strong {
   box-shadow: none;
 }
 
+.desktop-stage.is-contact-panel-open .chat-shell {
+  flex-basis: calc(100% - 360px);
+}
+
 .chat-topbar {
   display: flex;
   align-items: center;
@@ -2120,6 +2211,73 @@ strong {
 .chat-topbar-title {
   display: grid;
   gap: 4px;
+  min-width: 0;
+}
+
+.chat-topbar-actions {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.chat-topbar-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chat-topbar-icon:hover,
+.chat-topbar-icon[aria-expanded="true"] {
+  background: rgba(92, 75, 57, 0.08);
+  color: var(--text);
+}
+
+.chat-topbar-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+.chat-contact-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 25;
+  display: grid;
+  min-width: 156px;
+  padding: 8px;
+  border: 1px solid rgba(92, 75, 57, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 42px rgba(36, 24, 16, 0.16);
+}
+
+.chat-contact-menu[hidden] {
+  display: none;
+}
+
+.chat-contact-menu button {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-contact-menu button:hover {
+  background: rgba(51, 144, 236, 0.1);
 }
 
 .desktop-shell:not(.is-conversation-active) .chat-topbar,
@@ -2141,6 +2299,171 @@ strong {
   display: grid;
   min-height: 0;
   overflow: hidden;
+}
+
+.contact-panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  flex: 0 0 360px;
+  min-width: 0;
+  height: 100%;
+  border-left: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  overflow: hidden;
+}
+
+.contact-panel[hidden] {
+  display: none;
+}
+
+.contact-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 64px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+
+.contact-panel-header strong {
+  font-size: 1.12rem;
+}
+
+.contact-panel-back {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.contact-panel-back:hover {
+  background: rgba(92, 75, 57, 0.08);
+  color: var(--text);
+}
+
+.contact-form {
+  position: relative;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 14px;
+  min-height: 0;
+  padding: 28px 22px 92px;
+  overflow-y: auto;
+}
+
+.contact-avatar {
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #62b4f6, #2f80d1);
+  color: #fff;
+  font-size: 2.4rem;
+  font-weight: 800;
+}
+
+.contact-form > strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1.28rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-form > small {
+  margin-top: -12px;
+  color: var(--muted);
+}
+
+.contact-field {
+  position: relative;
+  display: grid;
+  width: 100%;
+  gap: 6px;
+}
+
+.contact-field span {
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.contact-field input,
+.contact-field textarea {
+  width: 100%;
+  border: 1px solid rgba(92, 75, 57, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.contact-field input {
+  height: 46px;
+  padding: 0 12px;
+}
+
+.contact-field textarea {
+  min-height: 74px;
+  padding: 12px;
+  resize: none;
+}
+
+.contact-field input[readonly],
+.contact-field textarea:disabled {
+  color: var(--muted);
+}
+
+.contact-hint {
+  width: 100%;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.contact-save-button {
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border: 0;
+  border-radius: 50%;
+  background: #3390ec;
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(30, 102, 180, 0.34);
+  cursor: pointer;
+}
+
+.contact-save-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.contact-save-button svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .message-board {

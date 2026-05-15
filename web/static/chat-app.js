@@ -34,6 +34,7 @@
   const newGroupMemberCountNode = app.querySelector("[data-new-group-member-count]");
   const newGroupMemberSummaryNode = app.querySelector("[data-new-group-member-summary]");
   const newGroupCreateButton = app.querySelector("[data-new-group-create]");
+  const contactsList = app.querySelector("[data-contacts-list]");
   const folderTabs = app.querySelector("[data-folder-tabs]");
   const messageBoard = app.querySelector("[data-message-board]");
   const messageBoardShell = messageBoard ? messageBoard.closest(".message-board-shell") : null;
@@ -41,6 +42,16 @@
   const chatShell = app.querySelector(".chat-shell");
   const conversationTitle = app.querySelector("[data-conversation-title]");
   const messageStatus = app.querySelector("[data-message-status]");
+  const contactMenuToggle = app.querySelector("[data-contact-menu-toggle]");
+  const contactMenu = app.querySelector("[data-contact-menu]");
+  const contactPanel = app.querySelector("[data-contact-panel]");
+  const contactPanelClose = app.querySelector("[data-contact-panel-close]");
+  const contactForm = app.querySelector("[data-contact-form]");
+  const contactAvatar = app.querySelector("[data-contact-avatar]");
+  const contactDisplayName = app.querySelector("[data-contact-display-name]");
+  const contactOriginalName = app.querySelector("[data-contact-original-name]");
+  const contactAliasName = app.querySelector("[data-contact-alias-name]");
+  const contactAccount = app.querySelector("[data-contact-account]");
   const realtimeStateNode = app.querySelector("[data-realtime-state]");
   const composerInput = messageForm.querySelector(".composer-input");
   const composerFileInput = messageForm.querySelector(".composer-file-input");
@@ -81,6 +92,7 @@
   let replyMessage = null;
   let newGroupSearchQuery = "";
   let newGroupSelectedMembers = [];
+  let contactsLoadToken = 0;
 
   function readSessionToken() {
     return localStorage.getItem(storageKeys.token) || "";
@@ -188,6 +200,62 @@
 
   function setConversationUIActive(isActive) {
     app.classList.toggle("is-conversation-active", Boolean(isActive));
+    if (!isActive) {
+      setContactMenuOpen(false);
+      setContactPanelOpen(false);
+    }
+    updateContactActions();
+  }
+
+  function setContactMenuOpen(isOpen) {
+    if (!contactMenu || !contactMenuToggle) {
+      return;
+    }
+    contactMenu.hidden = !isOpen;
+    contactMenuToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
+  function setContactPanelOpen(isOpen) {
+    if (!contactPanel) {
+      return;
+    }
+    contactPanel.hidden = !isOpen;
+    const stage = contactPanel.closest(".desktop-stage");
+    if (stage) {
+      stage.classList.toggle("is-contact-panel-open", Boolean(isOpen));
+    }
+  }
+
+  function updateContactActions() {
+    if (!contactMenuToggle) {
+      return;
+    }
+    const peer = activeDirectPeer();
+    contactMenuToggle.hidden = !peer;
+    if (!peer) {
+      setContactMenuOpen(false);
+      setContactPanelOpen(false);
+    }
+  }
+
+  function fillContactPanel(peer) {
+    const title = peer.title || peer.externalUserID || "聯絡人";
+    const initial = title.slice(0, 1).toUpperCase();
+    if (contactAvatar) {
+      contactAvatar.textContent = initial || "?";
+    }
+    if (contactDisplayName) {
+      contactDisplayName.textContent = title;
+    }
+    if (contactOriginalName) {
+      contactOriginalName.textContent = "original name";
+    }
+    if (contactAliasName) {
+      contactAliasName.value = title;
+    }
+    if (contactAccount) {
+      contactAccount.value = peer.externalUserID || "";
+    }
   }
 
   function activeConversationTitle() {
@@ -198,6 +266,27 @@
       return item.conversation_id === activeConversationID;
     });
     return active ? active.title : "";
+  }
+
+  function activeDirectPeer() {
+    if (pendingDirectTarget) {
+      return {
+        sourceSystem: pendingDirectTarget.sourceSystem || readSourceSystem(),
+        externalUserID: pendingDirectTarget.externalUserID || "",
+        title: pendingDirectTarget.title || pendingDirectTarget.externalUserID || ""
+      };
+    }
+    const active = conversations.find(function (item) {
+      return item.conversation_id === activeConversationID;
+    });
+    if (!active || active.type !== "direct" || !active.direct_external_user_id) {
+      return null;
+    }
+    return {
+      sourceSystem: active.direct_source_system || readSourceSystem(),
+      externalUserID: active.direct_external_user_id || "",
+      title: active.title || active.direct_external_user_id || ""
+    };
   }
 
   function findExistingDirectConversation(sourceSystem, externalUserID) {
@@ -225,6 +314,7 @@
     }
     closeSearchMode();
     renderConversationList(conversations);
+    updateContactActions();
     loadMessages(activeConversationID);
   }
 
@@ -761,6 +851,128 @@
       openConversation(Number(data.conversation_id));
     }
     setMessageStatus("群組已建立。", false);
+  }
+
+  async function addActivePeerToContacts() {
+    const headers = authHeaders();
+    const peer = activeDirectPeer();
+    if (!headers || !peer) {
+      setMessageStatus("目前沒有可加入的聯絡人。", true);
+      return;
+    }
+    const submitButton = contactForm ? contactForm.querySelector("button[type='submit']") : null;
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
+    setMessageStatus("加入聯絡人中...", false);
+    let response;
+    let result = {};
+    try {
+      response = await fetch("/api/contacts", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({
+          source_system: peer.sourceSystem,
+          external_user_id: peer.externalUserID,
+          alias_name: contactAliasName ? contactAliasName.value.trim() : ""
+        })
+      });
+      result = await parseJSON(response);
+    } catch (_) {
+      setMessageStatus("加入聯絡人失敗，請稍後再試。", true);
+      if (submitButton) {
+        submitButton.disabled = false;
+      }
+      return;
+    }
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+    if (!response.ok || !result.success) {
+      setMessageStatus(result.message || "加入聯絡人失敗。", true);
+      return;
+    }
+    setContactPanelOpen(false);
+    if (sidebarShell && sidebarShell.dataset.sidebarView === "contacts") {
+      loadContacts();
+    }
+    setMessageStatus("已加入聯絡人。", false);
+  }
+
+  function contactListTitle(item) {
+    return item.alias_name || item.display_name || item.external_user_id || "聯絡人";
+  }
+
+  function renderContacts(items, loading) {
+    if (!contactsList) {
+      return;
+    }
+    if (loading) {
+      contactsList.innerHTML = '<div class="contacts-empty">載入聯絡人中...</div>';
+      return;
+    }
+    if (!items.length) {
+      contactsList.innerHTML = '<div class="contacts-empty">尚未加入聯絡人</div>';
+      return;
+    }
+    contactsList.innerHTML = items.map(function (item) {
+      const title = contactListTitle(item);
+      const initial = title.slice(0, 1).toUpperCase();
+      return [
+        '<button type="button" class="contact-list-item"',
+        ' data-contact-source="' + escapeHTML(item.source_system || readSourceSystem()) + '"',
+        ' data-contact-id="' + escapeHTML(item.external_user_id || "") + '"',
+        ' data-contact-title="' + escapeHTML(title) + '">',
+        '<span class="contact-list-avatar">' + escapeHTML(initial || "?") + '</span>',
+        '<span class="contact-list-text">',
+        '<strong>' + escapeHTML(title) + '</strong>',
+        '<small>@' + escapeHTML(item.external_user_id || "") + '</small>',
+        '</span>',
+        '</button>'
+      ].join("");
+    }).join("");
+    contactsList.querySelectorAll("[data-contact-id]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        openPendingDirectConversation({
+          sourceSystem: button.dataset.contactSource || readSourceSystem(),
+          externalUserID: button.dataset.contactId || "",
+          title: button.dataset.contactTitle || ""
+        });
+        document.dispatchEvent(new CustomEvent("twacc:sidebar-home"));
+      });
+    });
+  }
+
+  async function loadContacts() {
+    const headers = authHeaders();
+    if (!contactsList || !headers) {
+      renderContacts([], false);
+      return;
+    }
+    const requestToken = ++contactsLoadToken;
+    renderContacts([], true);
+    let response;
+    let result = {};
+    try {
+      response = await fetch("/api/contacts", {
+        headers: { Authorization: headers.Authorization }
+      });
+      result = await parseJSON(response);
+    } catch (_) {
+      if (requestToken === contactsLoadToken) {
+        contactsList.innerHTML = '<div class="contacts-empty is-error">聯絡人載入失敗</div>';
+      }
+      return;
+    }
+    if (requestToken !== contactsLoadToken) {
+      return;
+    }
+    if (!response.ok || !result.success) {
+      contactsList.innerHTML = '<div class="contacts-empty is-error">' + escapeHTML(result.message || "聯絡人載入失敗") + '</div>';
+      return;
+    }
+    const data = result.data || {};
+    renderContacts(data.contacts || [], false);
   }
 
   function conversationPreview(item) {
@@ -1415,6 +1627,7 @@
     }
 
     renderConversationList(items);
+    updateContactActions();
     if (activeConversationID) {
       await loadMessages(activeConversationID);
       return;
@@ -1634,6 +1847,7 @@
     }
     closeSearchMode();
     renderConversationList(conversations);
+    updateContactActions();
     messageLoadToken += 1;
     setConversationUIActive(true);
     setConversationTitle(activeConversationTitle());
@@ -1885,12 +2099,56 @@
     });
   }
 
-  if (newGroupCreateButton) {
-    newGroupCreateButton.addEventListener("click", createGroupConversation);
+	  if (newGroupCreateButton) {
+	    newGroupCreateButton.addEventListener("click", createGroupConversation);
+	  }
+
+  if (contactMenuToggle) {
+    contactMenuToggle.addEventListener("click", function (event) {
+      event.stopPropagation();
+      setContactMenuOpen(contactMenu ? contactMenu.hidden : true);
+    });
   }
 
-  document.addEventListener("twacc:sidebar-view-changed", function (event) {
+  if (contactMenu) {
+    contactMenu.addEventListener("click", function (event) {
+      const actionButton = event.target.closest("[data-contact-action]");
+      if (!actionButton) {
+        return;
+      }
+      const peer = activeDirectPeer();
+      setContactMenuOpen(false);
+      if (actionButton.dataset.contactAction === "add" && peer) {
+        fillContactPanel(peer);
+        setContactPanelOpen(true);
+        if (contactAliasName) {
+          window.requestAnimationFrame(function () {
+            contactAliasName.focus();
+            contactAliasName.select();
+          });
+        }
+      }
+    });
+  }
+
+  if (contactPanelClose) {
+    contactPanelClose.addEventListener("click", function () {
+      setContactPanelOpen(false);
+    });
+  }
+
+  if (contactForm) {
+    contactForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      addActivePeerToContacts();
+    });
+  }
+
+	  document.addEventListener("twacc:sidebar-view-changed", function (event) {
     const detail = event.detail || {};
+    if (detail.view === "contacts") {
+      loadContacts();
+    }
     if (detail.view === "new-group" && newGroupSearchInput) {
       window.requestAnimationFrame(function () {
         newGroupSearchInput.focus();
@@ -1954,21 +2212,26 @@
       composerInput.focus();
     });
   }
-  document.addEventListener("click", function (event) {
-    if (conversationCreateActions && !conversationCreateActions.contains(event.target)) {
-      setConversationCreateMenuOpen(false);
+	  document.addEventListener("click", function (event) {
+	    if (conversationCreateActions && !conversationCreateActions.contains(event.target)) {
+	      setConversationCreateMenuOpen(false);
+	    }
+    if (contactMenu && contactMenuToggle && !contactMenu.hidden && !contactMenu.contains(event.target) && !contactMenuToggle.contains(event.target)) {
+      setContactMenuOpen(false);
     }
-    if (!messageContextMenu || messageContextMenu.hidden || messageContextMenu.contains(event.target)) {
-      return;
-    }
+	    if (!messageContextMenu || messageContextMenu.hidden || messageContextMenu.contains(event.target)) {
+	      return;
+	    }
     closeMessageContextMenu();
   });
   syncComposerInputHeight();
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") {
-      closeMessageContextMenu();
-      setConversationCreateMenuOpen(false);
-    }
+	  document.addEventListener("keydown", function (event) {
+	    if (event.key === "Escape") {
+	      closeMessageContextMenu();
+	      setConversationCreateMenuOpen(false);
+      setContactMenuOpen(false);
+      setContactPanelOpen(false);
+	    }
     if (event.key !== "Escape" || !activeConversationID) {
       return;
     }
