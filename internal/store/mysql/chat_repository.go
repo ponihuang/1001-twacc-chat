@@ -89,32 +89,36 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 				 WHERE cmc.conversation_id = c.id
 			) AS member_count,
 			COALESCE((
-				SELECT m.message_type
-				  FROM messages m
-				 WHERE m.conversation_id = c.id
-				 ORDER BY m.created_at DESC, m.id DESC
-				 LIMIT 1
-			), ''),
-			COALESCE((
-				SELECT m.content
-				  FROM messages m
-				 WHERE m.conversation_id = c.id
-				 ORDER BY m.created_at DESC, m.id DESC
-				 LIMIT 1
-			), ''),
-			(
-				SELECT m.created_at
-				  FROM messages m
-				 WHERE m.conversation_id = c.id
-				 ORDER BY m.created_at DESC, m.id DESC
-				 LIMIT 1
-			) AS last_message_at,
+					SELECT m.message_type
+					  FROM messages m
+					 WHERE m.conversation_id = c.id
+					   AND m.is_recalled = FALSE
+					 ORDER BY m.created_at DESC, m.id DESC
+					 LIMIT 1
+				), ''),
+				COALESCE((
+					SELECT m.content
+					  FROM messages m
+					 WHERE m.conversation_id = c.id
+					   AND m.is_recalled = FALSE
+					 ORDER BY m.created_at DESC, m.id DESC
+					 LIMIT 1
+				), ''),
+				(
+					SELECT m.created_at
+					  FROM messages m
+					 WHERE m.conversation_id = c.id
+					   AND m.is_recalled = FALSE
+					 ORDER BY m.created_at DESC, m.id DESC
+					 LIMIT 1
+				) AS last_message_at,
 			(
 				SELECT COUNT(*)
-				  FROM messages m_unread
-				 WHERE m_unread.conversation_id = c.id
-				   AND m_unread.sender_id <> ?
-				   AND m_unread.id > COALESCE((
+					  FROM messages m_unread
+					 WHERE m_unread.conversation_id = c.id
+					   AND m_unread.is_recalled = FALSE
+					   AND m_unread.sender_id <> ?
+					   AND m_unread.id > COALESCE((
 						SELECT cr.last_read_message_id
 						  FROM conversation_reads cr
 						 WHERE cr.conversation_id = c.id
@@ -349,11 +353,12 @@ func (r *ChatRepository) ListMessages(conversationID int64, limit int) ([]chat.M
 					m.message_type,
 					m.content,
 					m.created_at
-				  FROM messages m
-				  JOIN users u ON u.id = m.sender_id
-				 WHERE m.conversation_id = ?
-				 ORDER BY m.created_at DESC, m.id DESC
-				 LIMIT ?
+					  FROM messages m
+					  JOIN users u ON u.id = m.sender_id
+					 WHERE m.conversation_id = ?
+					   AND m.is_recalled = FALSE
+					 ORDER BY m.created_at DESC, m.id DESC
+					 LIMIT ?
 		  ) recent
 		  LEFT JOIN attachments a ON a.message_id = recent.id
 		 ORDER BY recent.created_at ASC, recent.id ASC, a.id ASC`, conversationID, limit)
@@ -442,8 +447,9 @@ func (r *ChatRepository) SearchMessages(userID int64, query string, limit int) (
 		  JOIN conversations c ON c.id = m.conversation_id
 		  JOIN conversation_members cm ON cm.conversation_id = c.id AND cm.user_id = ?
 		  JOIN users u ON u.id = m.sender_id
-		 WHERE m.message_type = 'text'
-		   AND m.content LIKE ?
+			 WHERE m.message_type = 'text'
+			   AND m.is_recalled = FALSE
+			   AND m.content LIKE ?
 		 ORDER BY m.created_at DESC, m.id DESC
 		 LIMIT ?`, userID, userID, "%"+query+"%", limit)
 	if err != nil {
@@ -478,9 +484,10 @@ func (r *ChatRepository) MarkConversationRead(userID, conversationID int64) erro
 	row := r.db.QueryRow(`
 		SELECT (
 			SELECT MAX(m.id)
-			  FROM messages m
-			 WHERE m.conversation_id = cm.conversation_id
-		)
+				  FROM messages m
+				 WHERE m.conversation_id = cm.conversation_id
+				   AND m.is_recalled = FALSE
+			)
 		  FROM conversation_members cm
 		 WHERE cm.user_id = ?
 		   AND cm.conversation_id = ?
@@ -575,6 +582,7 @@ func (r *ChatRepository) CreateMessage(input chat.CreateMessageInput) (chat.Mess
 		  JOIN users u ON u.id = m.sender_id
 		  LEFT JOIN attachments a ON a.message_id = m.id
 		 WHERE m.id = ?
+		   AND m.is_recalled = FALSE
 		 ORDER BY a.id ASC`, messageID)
 	if err != nil {
 		return chat.Message{}, fmt.Errorf("load created message: %w", err)
@@ -631,7 +639,7 @@ func (r *ChatRepository) CreateMessage(input chat.CreateMessageInput) (chat.Mess
 func (r *ChatRepository) DeleteMessage(conversationID, messageID, actorUserID int64) error {
 	tx, err := r.db.Begin()
 	if err != nil {
-		return fmt.Errorf("begin delete message: %w", err)
+		return fmt.Errorf("begin recall message: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -642,11 +650,12 @@ func (r *ChatRepository) DeleteMessage(conversationID, messageID, actorUserID in
 		  JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ?
 		 WHERE m.conversation_id = ?
 		   AND m.id = ?
+		   AND m.is_recalled = FALSE
 		 LIMIT 1`, actorUserID, conversationID, messageID).Scan(&senderID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return chat.ErrMessageNotFound
 		}
-		return fmt.Errorf("find message for delete: %w", err)
+		return fmt.Errorf("find message for recall: %w", err)
 	}
 	if senderID != actorUserID {
 		return chat.ErrMessageRecallForbidden
@@ -656,28 +665,27 @@ func (r *ChatRepository) DeleteMessage(conversationID, messageID, actorUserID in
 		UPDATE conversation_reads
 		   SET last_read_message_id = NULL
 		 WHERE last_read_message_id = ?`, messageID); err != nil {
-		return fmt.Errorf("clear read marker for deleted message: %w", err)
-	}
-	if _, err := tx.Exec(`DELETE FROM attachments WHERE message_id = ?`, messageID); err != nil {
-		return fmt.Errorf("delete message attachments: %w", err)
+		return fmt.Errorf("clear read marker for recalled message: %w", err)
 	}
 	result, err := tx.Exec(`
-		DELETE FROM messages
+		UPDATE messages
+		   SET is_recalled = TRUE
 		 WHERE conversation_id = ?
 		   AND id = ?
-		   AND sender_id = ?`, conversationID, messageID, actorUserID)
+		   AND sender_id = ?
+		   AND is_recalled = FALSE`, conversationID, messageID, actorUserID)
 	if err != nil {
-		return fmt.Errorf("delete message: %w", err)
+		return fmt.Errorf("recall message: %w", err)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("delete message rows affected: %w", err)
+		return fmt.Errorf("recall message rows affected: %w", err)
 	}
 	if affected == 0 {
 		return chat.ErrMessageNotFound
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit delete message: %w", err)
+		return fmt.Errorf("commit recall message: %w", err)
 	}
 	return nil
 }

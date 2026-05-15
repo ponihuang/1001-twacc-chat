@@ -378,7 +378,7 @@ func (s *Service) DeleteMessage(conversationID, messageID int64, actor SessionPr
 			return Response{}, 500, err
 		}
 		s.broker.PublishToUsers(memberIDs, RealtimeEvent{
-			EventType:      "message.deleted",
+			EventType:      "message.recalled",
 			ConversationID: conversationID,
 			MessageID:      messageID,
 		})
@@ -386,9 +386,9 @@ func (s *Service) DeleteMessage(conversationID, messageID int64, actor SessionPr
 
 	return Response{
 		Success: true,
-		Code:    "MESSAGE_DELETED",
+		Code:    "MESSAGE_RECALLED",
 		Message: "訊息已收回",
-		Data: DeletedMessageData{
+		Data: RecalledMessageData{
 			ConversationID: conversationID,
 			MessageID:      messageID,
 		},

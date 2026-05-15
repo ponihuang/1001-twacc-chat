@@ -192,8 +192,8 @@ type SentMessageData struct {
 	Message        MessageItem `json:"message"`
 }
 
-// DeletedMessageData is the API-facing payload for a recalled message.
-type DeletedMessageData struct {
+// RecalledMessageData is the API-facing payload for a recalled message.
+type RecalledMessageData struct {
 	ConversationID int64 `json:"conversation_id"`
 	MessageID      int64 `json:"message_id"`
 }

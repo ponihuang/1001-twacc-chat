@@ -139,11 +139,13 @@
 - `sender_id`
 - `message_type`
 - `content`
+- `is_recalled`
 - `created_at`
 
 說明：
 
 - `message_type` 可為 `text`、`image`、`file`
+- `is_recalled` 表示訊息已收回。收回屬於軟隱藏，訊息與附件資料仍保留，前端列表、訊息清單、搜尋與未讀計算需排除已收回訊息。
 
 ## 9. `attachments`
 

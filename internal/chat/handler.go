@@ -120,8 +120,8 @@ func (h *Handler) SearchMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
-// DeleteMessage handles DELETE /api/conversations/{conversation_id}/messages/{message_id}.
-func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
+// RecallMessage handles POST /api/conversations/{conversation_id}/messages/{message_id}/recall.
+func (h *Handler) RecallMessage(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
 		return
@@ -150,6 +150,11 @@ func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, status, resp)
+}
+
+// DeleteMessage handles the legacy DELETE recall route.
+func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
+	h.RecallMessage(w, r)
 }
 
 // CreateDirectConversation handles POST /api/conversations/direct.

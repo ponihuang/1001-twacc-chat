@@ -276,6 +276,35 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 }
 ```
 
+### `POST /api/conversations/{conversation_id}/messages/{message_id}/recall`
+
+用途：
+
+- 收回自己送出的訊息
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 必須是對話成員
+- 只能收回自己送出的訊息
+- 收回是軟隱藏：資料庫會將 `messages.is_recalled` 設為 `TRUE`，不實體刪除 `messages` 或 `attachments`
+- 訊息列表、對話列表最後訊息、未讀數與訊息搜尋都會排除 `is_recalled = TRUE` 的訊息
+- 舊版 `DELETE /api/conversations/{conversation_id}/messages/{message_id}` 目前保留相容，但前端收回流程使用此 `POST .../recall` 端點
+
+成功回應草案：
+
+```json
+{
+  "success": true,
+  "code": "MESSAGE_RECALLED",
+  "message": "訊息已收回",
+  "data": {
+    "conversation_id": 123,
+    "message_id": 456
+  }
+}
+```
+
 補充原則：
 
 - 對外整合不另開 ERP 專屬前端視窗
@@ -296,6 +325,7 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 - 目前事件類型：
   - `conversation.ready`
   - `message.created`
+  - `message.recalled`
 
 事件草案：
 
@@ -323,6 +353,14 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
     "content": "hello",
     "created_at": "2026-04-07T03:00:00Z"
   }
+}
+```
+
+```json
+{
+  "event_type": "message.recalled",
+  "conversation_id": 123,
+  "message_id": 456
 }
 ```
 

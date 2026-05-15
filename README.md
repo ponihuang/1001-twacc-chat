@@ -14,7 +14,7 @@
 - `GET /api/messages/search`
 - `GET /api/conversations/{conversation_id}/messages`
 - `POST /api/conversations/{conversation_id}/messages`
-- `DELETE /api/conversations/{conversation_id}/messages/{message_id}`
+- `POST /api/conversations/{conversation_id}/messages/{message_id}/recall`
 - `GET /ws`
 - `GET /uploads/{filename}`
 - `/` 依登入狀態導向 `/login` 或 `/chat`
@@ -27,7 +27,7 @@
 - 桌機版設定頁：個人資料、顯示名稱更新、聊天室分類建立與分類列顯示
 - 文字訊息送出、`Enter` 快捷送出
 - 圖片與檔案訊息上傳
-- 桌機版訊息泡泡右鍵操作選單：自己或對方訊息都可引用回覆，收回僅限自己送出的訊息，回覆摘要與左側對話列表預覽只取該訊息本身內容
+- 桌機版訊息泡泡右鍵操作選單：自己或對方訊息都可引用回覆，收回僅限自己送出的訊息；收回以 `is_recalled` 隱藏，不會實體刪除訊息資料；回覆摘要與左側對話列表預覽只取該訊息本身內容
 - MySQL 設定讀取、driver 初始化與 migration 自動執行
 - 外部系統註冊 / 登入 API
 - session token 簽發與 Bearer 驗證
@@ -135,7 +135,7 @@ REQUIRE_TRUSTED_DEVICE=false
 - `Enter` 送出、`Shift + Enter` 換行
 - 透過訊息輸入框右側附件按鈕選擇圖片或文件，選檔後可在預覽視窗輸入說明文字並送出；可一次選取多個檔案，送出後會保留在同一則訊息中；說明文字一開始顯示一行，最多顯示六行後可捲動查看
 - 可將圖片或檔案拖放到對話頁面，拖入時顯示文件 / 照片兩個上傳區，放開後進入同一個預覽與送出流程；多檔會以同一則訊息送出
-- 對任一訊息泡泡點右鍵會顯示接近 Telegram Web 的操作選單，目前支援自己或對方訊息引用回覆，收回僅限自己送出的訊息；回覆預覽會整合在同一個輸入框區塊內，且回覆已含引用的訊息時只帶入該訊息本身內容，不遞迴帶入更早引用鏈；左側對話列表顯示最後訊息時也只顯示回覆正文，不顯示引用前綴與引用內容
+- 對任一訊息泡泡點右鍵會顯示接近 Telegram Web 的操作選單，目前支援自己或對方訊息引用回覆，收回僅限自己送出的訊息；收回會將訊息標記為 `is_recalled` 並在列表、搜尋與訊息區隱藏，不會實體刪除資料；回覆預覽會整合在同一個輸入框區塊內，且回覆已含引用的訊息時只帶入該訊息本身內容，不遞迴帶入更早引用鏈；左側對話列表顯示最後訊息時也只顯示回覆正文，不顯示引用前綴與引用內容
 - WebSocket 即時刷新對話列表與目前訊息區
 
 目前限制：
@@ -174,7 +174,7 @@ REQUIRE_TRUSTED_DEVICE=false
 - `GET /api/messages/search`
 - `GET /api/conversations/{conversation_id}/messages`
 - `POST /api/conversations/{conversation_id}/messages`
-- `DELETE /api/conversations/{conversation_id}/messages/{message_id}`
+- `POST /api/conversations/{conversation_id}/messages/{message_id}/recall`
 - `GET /uploads/{filename}`
 - `POST /api/erp/register`
 - `POST /api/erp/login`

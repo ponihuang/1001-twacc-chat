@@ -493,7 +493,7 @@ func TestSendMessageRejectsMissingConversation(t *testing.T) {
 	}
 }
 
-func TestDeleteMessageDeletesOwnMessageAndPublishesEvent(t *testing.T) {
+func TestDeleteMessageRecallsOwnMessageAndPublishesEvent(t *testing.T) {
 	repo := &mockRepository{
 		headers: map[string]Conversation{
 			conversationKey(7, 9): {ID: 9, Type: "direct", Title: "王小明"},
@@ -515,10 +515,10 @@ func TestDeleteMessageDeletesOwnMessageAndPublishesEvent(t *testing.T) {
 	if len(repo.deletedMessages) != 1 || repo.deletedMessages[0] != 22 {
 		t.Fatalf("deleted messages = %+v, want [22]", repo.deletedMessages)
 	}
-	if broker.calls != 1 || broker.event.EventType != "message.deleted" || broker.event.MessageID != 22 {
+	if broker.calls != 1 || broker.event.EventType != "message.recalled" || broker.event.MessageID != 22 {
 		t.Fatalf("unexpected broker event: %+v", broker.event)
 	}
-	data := resp.Data.(DeletedMessageData)
+	data := resp.Data.(RecalledMessageData)
 	if data.ConversationID != 9 || data.MessageID != 22 {
 		t.Fatalf("unexpected deleted message data: %+v", data)
 	}

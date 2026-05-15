@@ -764,8 +764,8 @@
     const messageID = contextMessage.messageID;
     closeMessageContextMenu();
     setMessageStatus("收回訊息中...", false);
-    const response = await fetch("/api/conversations/" + activeConversationID + "/messages/" + messageID, {
-      method: "DELETE",
+    const response = await fetch("/api/conversations/" + activeConversationID + "/messages/" + messageID + "/recall", {
+      method: "POST",
       headers: { Authorization: headers.Authorization }
     });
     const result = await parseJSON(response);
@@ -1289,7 +1289,7 @@
       return;
     }
 
-    if (event.event_type === "message.deleted") {
+    if (event.event_type === "message.recalled" || event.event_type === "message.deleted") {
       loadConversations();
       if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
         loadMessages(activeConversationID);
