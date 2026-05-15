@@ -154,10 +154,11 @@ type AttachmentItem struct {
 
 // MessageListData is the API-facing message list payload.
 type MessageListData struct {
-	ConversationID int64         `json:"conversation_id"`
-	Type           string        `json:"type"`
-	Title          string        `json:"title"`
-	Messages       []MessageItem `json:"messages"`
+	ConversationID       int64         `json:"conversation_id"`
+	Type                 string        `json:"type"`
+	Title                string        `json:"title"`
+	FirstUnreadMessageID int64         `json:"first_unread_message_id,omitempty"`
+	Messages             []MessageItem `json:"messages"`
 }
 
 // MessageSearchItem is the API-facing result for global message search.
@@ -234,6 +235,7 @@ type Repository interface {
 	ListConversationMemberIDs(conversationID int64) ([]int64, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
 	ListMessages(conversationID int64, limit int) ([]Message, error)
+	FirstUnreadMessageID(userID, conversationID int64) (int64, error)
 	SearchMessages(userID int64, query string, limit int) ([]Message, error)
 	MarkConversationRead(userID, conversationID int64) error
 	CreateMessage(input CreateMessageInput) (Message, error)

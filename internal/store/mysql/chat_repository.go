@@ -476,6 +476,33 @@ func (r *ChatRepository) ListMessages(conversationID int64, limit int) ([]chat.M
 	return items, rows.Err()
 }
 
+// FirstUnreadMessageID returns the oldest unread incoming message for a user in a conversation.
+func (r *ChatRepository) FirstUnreadMessageID(userID, conversationID int64) (int64, error) {
+	var messageID sql.NullInt64
+	row := r.db.QueryRow(`
+		SELECT MIN(m.id)
+		  FROM conversation_members cm
+		  JOIN messages m ON m.conversation_id = cm.conversation_id
+		 WHERE cm.user_id = ?
+		   AND cm.conversation_id = ?
+		   AND m.is_recalled = FALSE
+		   AND m.sender_id <> ?
+		   AND m.id > COALESCE((
+				SELECT cr.last_read_message_id
+				  FROM conversation_reads cr
+				 WHERE cr.conversation_id = cm.conversation_id
+				   AND cr.user_id = cm.user_id
+				 LIMIT 1
+		   ), 0)`, userID, conversationID, userID)
+	if err := row.Scan(&messageID); err != nil {
+		return 0, fmt.Errorf("load first unread message: %w", err)
+	}
+	if !messageID.Valid {
+		return 0, nil
+	}
+	return messageID.Int64, nil
+}
+
 // SearchMessages returns text messages in conversations visible to the user.
 func (r *ChatRepository) SearchMessages(userID int64, query string, limit int) ([]chat.Message, error) {
 	rows, err := r.db.Query(`

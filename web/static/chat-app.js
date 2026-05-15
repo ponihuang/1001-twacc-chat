@@ -862,6 +862,8 @@
       return;
     }
 
+    const firstUnreadMessageID = Number(data.first_unread_message_id || 0);
+    let unreadDividerRendered = false;
     messageBoard.innerHTML = data.messages.map(function (message) {
       const isOutgoing = isOutgoingMessage(message);
       const outgoing = isOutgoing ? " outgoing" : "";
@@ -870,7 +872,15 @@
       const attachment = renderAttachments(message, attachments);
       const contentText = displayMessageContent(message);
       const content = renderMessageContent(contentText);
-      return [
+      const unreadDivider = firstUnreadMessageID
+        && !unreadDividerRendered
+        && Number(message.message_id) === firstUnreadMessageID
+        ? '<div class="message-unread-divider" data-unread-divider><span>未讀訊息</span></div>'
+        : "";
+      if (unreadDivider) {
+        unreadDividerRendered = true;
+      }
+      return unreadDivider + [
         '<div class="message-row' + outgoing + '">',
         '<div class="message-bubble' + (photoMessage ? " photo-bubble" : "") + '"',
         ' data-message-id="' + escapeHTML(message.message_id) + '"',
@@ -885,7 +895,9 @@
         "</div>"
       ].join("");
     }).join("");
-    scrollMessageBoardToLatest();
+    if (!scrollMessageBoardToUnreadDivider() && !scrollMessageBoardToMessage(firstUnreadMessageID)) {
+      scrollMessageBoardToLatest();
+    }
   }
 
   function closeMessageContextMenu() {
@@ -1013,6 +1025,35 @@
     window.requestAnimationFrame(function () {
       messageBoard.scrollTop = messageBoard.scrollHeight;
     });
+  }
+
+  function scrollMessageBoardToMessage(messageID) {
+    if (!messageBoard || !messageID) {
+      return false;
+    }
+    const target = messageBoard.querySelector('[data-message-id="' + CSS.escape(String(messageID)) + '"]');
+    if (!target) {
+      return false;
+    }
+    window.requestAnimationFrame(function () {
+      const row = target.closest(".message-row") || target;
+      messageBoard.scrollTop = Math.max(0, row.offsetTop - 16);
+    });
+    return true;
+  }
+
+  function scrollMessageBoardToUnreadDivider() {
+    if (!messageBoard) {
+      return false;
+    }
+    const target = messageBoard.querySelector("[data-unread-divider]");
+    if (!target) {
+      return false;
+    }
+    window.requestAnimationFrame(function () {
+      messageBoard.scrollTop = Math.max(0, target.offsetTop - 12);
+    });
+    return true;
   }
 
   function displayMessageContent(message) {

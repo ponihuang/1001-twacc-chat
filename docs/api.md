@@ -249,6 +249,38 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 用途：
 
 - 取得對話訊息列表
+- 回傳前會依目前使用者的 `conversation_reads.last_read_message_id` 找出第一筆未讀訊息，放在 `first_unread_message_id`
+- 回傳成功後，後端會將該對話標記為已讀；前端可用 `first_unread_message_id` 將畫面定位到第一筆未讀訊息，並在該訊息前顯示「未讀訊息」分隔提示
+
+成功回應草案：
+
+```json
+{
+  "success": true,
+  "code": "MESSAGES_OK",
+  "message": "訊息列表讀取成功",
+  "data": {
+    "conversation_id": 123,
+    "type": "direct",
+    "title": "王小明",
+    "first_unread_message_id": 456,
+    "messages": [
+      {
+        "message_id": 456,
+        "sender_id": 8,
+        "sender_name": "王小明",
+        "message_type": "text",
+        "content": "hello",
+        "created_at": "2026-05-16T00:08:17+08:00"
+      }
+    ]
+  }
+}
+```
+
+目前限制：
+
+- 訊息列表目前載入最近 `100` 筆；若第一筆未讀早於這批訊息，前端會找不到該訊息並退回定位到最新訊息。
 
 ### `POST /api/conversations/{conversation_id}/messages`
 

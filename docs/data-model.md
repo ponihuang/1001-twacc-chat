@@ -159,7 +159,21 @@
 - `size_bytes`
 - `created_at`
 
-## 10. 留存策略
+## 10. `conversation_reads`
+
+欄位草案：
+
+- `conversation_id`
+- `user_id`
+- `last_read_message_id`
+- `last_read_at`
+
+說明：
+
+- 用於計算每個使用者在各對話的未讀數。
+- 訊息列表 API 會在標記已讀前，依此表找出第一筆未讀訊息並回傳 `first_unread_message_id`，讓前端可定位到未讀起點。
+
+## 11. 留存策略
 
 MVP 需要支援訊息與檔案保留 3 個月，因此後續應補：
 

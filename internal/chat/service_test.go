@@ -7,30 +7,31 @@ import (
 )
 
 type mockRepository struct {
-	admins              map[int64]bool
-	conversations       map[int64][]ConversationSummary
-	headers             map[string]Conversation
-	messages            map[int64][]Message
-	searchUsers         []UserSearchResult
-	searchMessages      []Message
-	searchUserID        int64
-	searchSourceSystem  string
-	searchQuery         string
-	searchLimit         int
-	memberIDs           map[int64][]int64
-	markedReads         []readMarker
-	createdMessages     []CreateMessageInput
-	createMessageResult Message
-	createMessageErr    error
-	deletedMessages     []int64
-	deleteMessageErr    error
-	directConversation  Conversation
-	directCreated       bool
-	directErr           error
-	groupConversation   Conversation
-	groupName           string
-	groupMembers        []GroupMemberRequest
-	groupErr            error
+	admins               map[int64]bool
+	conversations        map[int64][]ConversationSummary
+	headers              map[string]Conversation
+	messages             map[int64][]Message
+	searchUsers          []UserSearchResult
+	searchMessages       []Message
+	firstUnreadMessageID int64
+	searchUserID         int64
+	searchSourceSystem   string
+	searchQuery          string
+	searchLimit          int
+	memberIDs            map[int64][]int64
+	markedReads          []readMarker
+	createdMessages      []CreateMessageInput
+	createMessageResult  Message
+	createMessageErr     error
+	deletedMessages      []int64
+	deleteMessageErr     error
+	directConversation   Conversation
+	directCreated        bool
+	directErr            error
+	groupConversation    Conversation
+	groupName            string
+	groupMembers         []GroupMemberRequest
+	groupErr             error
 }
 
 type readMarker struct {
@@ -76,6 +77,10 @@ func (m *mockRepository) SearchMessages(userID int64, query string, limit int) (
 	m.searchQuery = query
 	m.searchLimit = limit
 	return append([]Message(nil), m.searchMessages...), nil
+}
+
+func (m *mockRepository) FirstUnreadMessageID(userID, conversationID int64) (int64, error) {
+	return m.firstUnreadMessageID, nil
 }
 
 func (m *mockRepository) MarkConversationRead(userID, conversationID int64) error {
@@ -202,6 +207,7 @@ func TestListConversations(t *testing.T) {
 		conversations: map[int64][]ConversationSummary{
 			7: {{ConversationID: 9, Type: "direct", Title: "採購小組", DirectSourceSystem: "erp", DirectExternalID: "user_b", MemberCount: 3, LastMessageType: "text", LastMessagePreview: "hello", LastMessageAt: time.Date(2026, 4, 7, 1, 2, 3, 0, time.UTC), UnreadCount: 2}},
 		},
+		firstUnreadMessageID: 2,
 	}
 	service := NewService(repo, nil)
 
@@ -338,6 +344,7 @@ func TestListMessages(t *testing.T) {
 				{ID: 2, ConversationID: 9, SenderID: 8, SenderName: "王小明", MessageType: "text", Content: "hi", CreatedAt: time.Date(2026, 4, 7, 1, 1, 0, 0, time.UTC)},
 			},
 		},
+		firstUnreadMessageID: 2,
 	}
 	service := NewService(repo, nil)
 
@@ -358,6 +365,9 @@ func TestListMessages(t *testing.T) {
 	}
 	if len(data.Messages) != 2 {
 		t.Fatalf("len(messages) = %d, want 2", len(data.Messages))
+	}
+	if data.FirstUnreadMessageID != 2 {
+		t.Fatalf("first unread message id = %d, want 2", data.FirstUnreadMessageID)
 	}
 	if len(repo.markedReads) != 1 || repo.markedReads[0] != (readMarker{userID: 7, conversationID: 9}) {
 		t.Fatalf("unexpected read markers: %+v", repo.markedReads)

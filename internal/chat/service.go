@@ -252,6 +252,10 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 	if err != nil {
 		return Response{}, 500, err
 	}
+	firstUnreadMessageID, err := s.repo.FirstUnreadMessageID(actor.UserID, conversationID)
+	if err != nil {
+		return Response{}, 500, err
+	}
 	if err := s.repo.MarkConversationRead(actor.UserID, conversationID); err != nil {
 		return Response{}, 500, err
 	}
@@ -275,10 +279,11 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 		Code:    "MESSAGES_OK",
 		Message: "讯息列表读取成功",
 		Data: MessageListData{
-			ConversationID: conversation.ID,
-			Type:           conversation.Type,
-			Title:          conversation.Title,
-			Messages:       items,
+			ConversationID:       conversation.ID,
+			Type:                 conversation.Type,
+			Title:                conversation.Title,
+			FirstUnreadMessageID: firstUnreadMessageID,
+			Messages:             items,
 		},
 	}, 200, nil
 }
