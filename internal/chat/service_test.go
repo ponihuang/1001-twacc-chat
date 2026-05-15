@@ -22,6 +22,8 @@ type mockRepository struct {
 	createdMessages     []CreateMessageInput
 	createMessageResult Message
 	createMessageErr    error
+	deletedMessages     []int64
+	deleteMessageErr    error
 	directConversation  Conversation
 	directCreated       bool
 	directErr           error
@@ -103,6 +105,14 @@ func (m *mockRepository) CreateMessage(input CreateMessageInput) (Message, error
 		Attachment:     attachment,
 		Attachments:    attachments,
 	}, nil
+}
+
+func (m *mockRepository) DeleteMessage(conversationID, messageID, actorUserID int64) error {
+	if m.deleteMessageErr != nil {
+		return m.deleteMessageErr
+	}
+	m.deletedMessages = append(m.deletedMessages, messageID)
+	return nil
 }
 
 func (m *mockRepository) CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error) {
@@ -480,5 +490,36 @@ func TestSendMessageRejectsMissingConversation(t *testing.T) {
 	}
 	if status != 404 {
 		t.Fatalf("status = %d, want 404", status)
+	}
+}
+
+func TestDeleteMessageDeletesOwnMessageAndPublishesEvent(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 9): {ID: 9, Type: "direct", Title: "王小明"},
+		},
+		memberIDs: map[int64][]int64{
+			9: {7, 8},
+		},
+	}
+	broker := &mockBroker{}
+	service := NewService(repo, broker)
+
+	resp, status, err := service.DeleteMessage(9, 22, SessionPrincipal{UserID: 7})
+	if err != nil {
+		t.Fatalf("DeleteMessage returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if len(repo.deletedMessages) != 1 || repo.deletedMessages[0] != 22 {
+		t.Fatalf("deleted messages = %+v, want [22]", repo.deletedMessages)
+	}
+	if broker.calls != 1 || broker.event.EventType != "message.deleted" || broker.event.MessageID != 22 {
+		t.Fatalf("unexpected broker event: %+v", broker.event)
+	}
+	data := resp.Data.(DeletedMessageData)
+	if data.ConversationID != 9 || data.MessageID != 22 {
+		t.Fatalf("unexpected deleted message data: %+v", data)
 	}
 }

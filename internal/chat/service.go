@@ -27,6 +27,8 @@ var (
 	ErrAttachmentRequired        = errors.New("attachment required")
 	ErrAttachmentTooLarge        = errors.New("attachment too large")
 	ErrUnsupportedAttachmentType = errors.New("unsupported attachment type")
+	ErrMessageNotFound           = errors.New("message not found")
+	ErrMessageRecallForbidden    = errors.New("message recall forbidden")
 )
 
 // Service implements chat list and message list rules.
@@ -352,6 +354,47 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 	}, 201, nil
 }
 
+// DeleteMessage recalls a message sent by the current user.
+func (s *Service) DeleteMessage(conversationID, messageID int64, actor SessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if conversationID <= 0 || messageID <= 0 {
+		return Response{}, statusCode(ErrMessageNotFound), ErrMessageNotFound
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if _, err := s.repo.GetConversationForUser(actor.UserID, conversationID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if err := s.repo.DeleteMessage(conversationID, messageID, actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	if s.broker != nil {
+		memberIDs, err := s.repo.ListConversationMemberIDs(conversationID)
+		if err != nil {
+			return Response{}, 500, err
+		}
+		s.broker.PublishToUsers(memberIDs, RealtimeEvent{
+			EventType:      "message.deleted",
+			ConversationID: conversationID,
+			MessageID:      messageID,
+		})
+	}
+
+	return Response{
+		Success: true,
+		Code:    "MESSAGE_DELETED",
+		Message: "訊息已收回",
+		Data: DeletedMessageData{
+			ConversationID: conversationID,
+			MessageID:      messageID,
+		},
+	}, 200, nil
+}
+
 func (s *Service) requireChatUser(userID int64) error {
 	if userID <= 0 {
 		return ErrInsufficientRole
@@ -376,7 +419,9 @@ func statusCode(err error) int {
 		return 409
 	case errors.Is(err, ErrSystemAdminCannotChat), errors.Is(err, ErrInsufficientRole):
 		return 403
-	case errors.Is(err, ErrConversationNotFound):
+	case errors.Is(err, ErrMessageRecallForbidden):
+		return 403
+	case errors.Is(err, ErrConversationNotFound), errors.Is(err, ErrMessageNotFound):
 		return 404
 	case errors.Is(err, ErrTargetUserNotFound):
 		return 404

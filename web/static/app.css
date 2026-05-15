@@ -1710,6 +1710,13 @@ strong {
   align-content: stretch;
 }
 
+.message-board-shell {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .message-board {
   padding: 24px 28px;
   display: grid;
@@ -1739,6 +1746,7 @@ strong {
 
 .message-row {
   display: flex;
+  pointer-events: none;
 }
 
 .message-row.outgoing {
@@ -1754,6 +1762,7 @@ strong {
   background: rgba(255, 255, 255, 0.88);
   color: var(--text);
   box-shadow: 0 10px 24px rgba(36, 24, 16, 0.06);
+  pointer-events: auto;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -1769,6 +1778,43 @@ strong {
   color: #2f80d1;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.message-reply-quote {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 4px solid #4d9cff;
+  border-radius: 8px;
+  background: rgba(77, 156, 255, 0.12);
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.message-row.outgoing .message-reply-quote {
+  border-left-color: #55b45c;
+  background: rgba(85, 180, 92, 0.13);
+}
+
+.message-reply-quote strong {
+  display: block;
+  color: #2f8df0;
+  font-size: 0.86rem;
+}
+
+.message-row.outgoing .message-reply-quote strong {
+  color: #4a9a50;
+}
+
+.message-reply-quote span {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-row.outgoing .message-bubble {
@@ -1799,8 +1845,127 @@ strong {
   text-align: right;
 }
 
-.composer {
+.message-context-menu {
+  position: absolute;
+  z-index: 80;
+  display: grid;
+  gap: 10px;
+  color: #161616;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.message-context-menu[hidden] {
+  display: none;
+}
+
+.message-context-actions {
+  display: grid;
+  min-width: 210px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 34px rgba(20, 20, 20, 0.22);
+}
+
+.message-context-actions button {
   display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #161616;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.message-context-actions button:hover {
+  background: rgba(34, 34, 34, 0.08);
+}
+
+.message-context-actions button[hidden] {
+  display: none;
+}
+
+.message-context-actions button.danger {
+  color: #e53935;
+}
+
+.message-context-actions button span:first-child {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.composer-reply-preview {
+  flex: 1 0 calc(100% - 16px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 8px 0 16px;
+  padding: 8px 12px 8px 14px;
+  border-left: 4px solid #d4528a;
+  border-radius: 10px;
+  background: rgba(249, 232, 241, 0.95);
+  box-shadow: none;
+}
+
+.composer-reply-preview[hidden] {
+  display: none;
+}
+
+.composer-reply-preview span {
+  display: grid;
+  min-width: 0;
+}
+
+.composer-reply-preview strong,
+.composer-reply-preview small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-reply-preview strong {
+  color: #d4528a;
+  font-size: 0.86rem;
+}
+
+.composer-reply-preview small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.composer-reply-preview button {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #d4528a;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.composer-reply-preview button:hover {
+  background: rgba(92, 75, 57, 0.08);
+  color: #b83e73;
+}
+
+.composer {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: 12px;
   padding: 14px 28px;
@@ -1813,6 +1978,7 @@ strong {
   position: relative;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   flex: 1;
   min-width: 0;
@@ -1820,6 +1986,11 @@ strong {
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.82);
   padding: 0 8px 0 0;
+}
+
+.composer-fields:has(.composer-reply-preview:not([hidden])) {
+  align-items: flex-end;
+  padding-bottom: 6px;
 }
 
 .composer-input {

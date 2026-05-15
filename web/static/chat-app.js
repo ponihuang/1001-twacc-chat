@@ -25,6 +25,7 @@
   const searchAllMessagesButton = app.querySelector("[data-search-all-messages]");
   const folderTabs = app.querySelector("[data-folder-tabs]");
   const messageBoard = app.querySelector("[data-message-board]");
+  const messageBoardShell = messageBoard ? messageBoard.closest(".message-board-shell") : null;
   const messageForm = app.querySelector("[data-message-form]");
   const chatShell = app.querySelector(".chat-shell");
   const conversationTitle = app.querySelector("[data-conversation-title]");
@@ -43,6 +44,11 @@
   const attachmentSend = app.querySelector("[data-attachment-send]");
   const chatDropOverlay = app.querySelector("[data-chat-drop-overlay]");
   const chatDropZones = app.querySelectorAll("[data-drop-kind]");
+  const messageContextMenu = app.querySelector("[data-message-context-menu]");
+  const replyPreview = app.querySelector("[data-reply-preview]");
+  const replySenderNode = app.querySelector("[data-reply-sender]");
+  const replyExcerptNode = app.querySelector("[data-reply-excerpt]");
+  const replyCancelButton = app.querySelector("[data-reply-cancel]");
 
   let conversations = [];
   let activeConversationID = 0;
@@ -59,6 +65,8 @@
   let selectedAttachmentFiles = [];
   let attachmentPreviewURLs = [];
   let dragDepth = 0;
+  let contextMessage = null;
+  let replyMessage = null;
 
   function readSessionToken() {
     return localStorage.getItem(storageKeys.token) || "";
@@ -531,7 +539,8 @@
     if (item.last_message_type === "file") {
       return "附件";
     }
-    return item.last_message_preview || (item.type === "direct" ? "一對一對話" : "群組對話");
+    const preview = currentMessageBodyText(item.last_message_preview || "");
+    return preview || (item.type === "direct" ? "一對一對話" : "群組對話");
   }
 
   function conversationPreviewExcerpt(item) {
@@ -543,6 +552,78 @@
     return preview.slice(0, limit) + "...";
   }
 
+  function isOutgoingMessage(message) {
+    const senderName = String(message && message.sender_name ? message.sender_name : "").trim();
+    if (!senderName) {
+      return false;
+    }
+    const displayName = String(localStorage.getItem("twacc_chat_display_name") || "").trim();
+    const externalUserID = String(readExternalUserID() || "").trim();
+    return senderName === displayName || senderName === externalUserID;
+  }
+
+  function trimMessageExcerpt(text) {
+    const normalized = String(text || "").replace(/\s+/g, " ").trim();
+    return normalized.length > 40 ? normalized.slice(0, 40) + "..." : normalized;
+  }
+
+  function currentMessageBodyText(content) {
+    let text = String(content || "").trim();
+    let nestedDepth = 0;
+    while (nestedDepth < 5) {
+      const reply = parseReplyContent(text);
+      if (!reply) {
+        break;
+      }
+      text = String(reply.body || "").trim();
+      nestedDepth += 1;
+    }
+    return text;
+  }
+
+  function messageExcerpt(message) {
+    const text = currentMessageBodyText(displayMessageContent(message));
+    if (text) {
+      return trimMessageExcerpt(text);
+    }
+    const attachments = messageAttachments(message);
+    if (attachments.length) {
+      return allAttachmentsAreImages(attachments) ? "圖片" : "附件";
+    }
+    return "訊息";
+  }
+
+  function parseReplyContent(content) {
+    const text = String(content || "").replace(/\r\n/g, "\n");
+    const match = text.match(/^回覆 ([^：]+)：(?:「([\s\S]*?)」)?\n([\s\S]*)$/);
+    if (!match) {
+      return null;
+    }
+    return {
+      senderName: match[1] || "訊息",
+      excerpt: match[2] || "",
+      body: match[3] || ""
+    };
+  }
+
+  function renderMessageContent(contentText) {
+    if (!contentText) {
+      return "";
+    }
+    const reply = parseReplyContent(contentText);
+    if (!reply) {
+      return "<p>" + linkifyMessageText(contentText) + "</p>";
+    }
+    const quote = [
+      '<div class="message-reply-quote">',
+      "<strong>" + escapeHTML(reply.senderName) + "</strong>",
+      "<span>" + linkifyMessageText(reply.excerpt || "訊息") + "</span>",
+      "</div>"
+    ].join("");
+    const body = reply.body ? "<p>" + linkifyMessageText(reply.body) + "</p>" : "";
+    return quote + body;
+  }
+
   function renderMessages(data) {
     if (!data.messages || !data.messages.length) {
       messageBoard.innerHTML = "";
@@ -551,17 +632,20 @@
     }
 
     messageBoard.innerHTML = data.messages.map(function (message) {
-      const outgoing = (app.dataset.actor || "").indexOf(message.sender_name) >= 0 ? " outgoing" : "";
+      const isOutgoing = isOutgoingMessage(message);
+      const outgoing = isOutgoing ? " outgoing" : "";
       const attachments = messageAttachments(message);
       const photoMessage = allAttachmentsAreImages(attachments);
       const attachment = renderAttachments(message, attachments);
       const contentText = displayMessageContent(message);
-      const content = contentText
-        ? ("<p>" + linkifyMessageText(contentText) + "</p>")
-        : "";
+      const content = renderMessageContent(contentText);
       return [
         '<div class="message-row' + outgoing + '">',
-        '<div class="message-bubble' + (photoMessage ? " photo-bubble" : "") + '">',
+        '<div class="message-bubble' + (photoMessage ? " photo-bubble" : "") + '"',
+        ' data-message-id="' + escapeHTML(message.message_id) + '"',
+        ' data-sender-name="' + escapeHTML(message.sender_name) + '"',
+        ' data-message-excerpt="' + escapeHTML(messageExcerpt(message)) + '"',
+        ' data-outgoing="' + (isOutgoing ? "true" : "false") + '">',
         "<strong>" + escapeHTML(message.sender_name) + "</strong>",
         content,
         attachment,
@@ -571,6 +655,127 @@
       ].join("");
     }).join("");
     scrollMessageBoardToLatest();
+  }
+
+  function closeMessageContextMenu() {
+    if (!messageContextMenu) {
+      return;
+    }
+    messageContextMenu.hidden = true;
+    contextMessage = null;
+  }
+
+  function findContextMessageBubble(target) {
+    if (!target || !messageBoard || !target.closest) {
+      return null;
+    }
+    const bubble = target.closest(".message-bubble");
+    return bubble && messageBoard.contains(bubble) ? bubble : null;
+  }
+
+  function bubbleFromContextEvent(event) {
+    let node = event.target;
+    while (node && node !== messageBoard) {
+      if (node.classList && node.classList.contains("message-bubble")) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function positionMessageContextMenu(event) {
+    if (!messageContextMenu) {
+      return;
+    }
+    messageContextMenu.hidden = false;
+    const menuRect = messageContextMenu.getBoundingClientRect();
+    const boardRect = messageBoard ? messageBoard.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    const shellRect = messageBoardShell ? messageBoardShell.getBoundingClientRect() : boardRect;
+    const margin = 12;
+    const gap = 2;
+    const preferredLeft = event.clientX - shellRect.left + gap;
+    const preferredTop = event.clientY - shellRect.top + gap;
+    const left = Math.max(margin, Math.min(preferredLeft, shellRect.width - menuRect.width - margin));
+    const top = Math.max(margin, Math.min(preferredTop, shellRect.height - menuRect.height - margin));
+    messageContextMenu.style.left = left + "px";
+    messageContextMenu.style.top = top + "px";
+  }
+
+  function openMessageContextMenu(event, bubble) {
+    if (!messageContextMenu || !bubble) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    contextMessage = {
+      messageID: Number(bubble.dataset.messageId || 0),
+      senderName: bubble.dataset.senderName || "",
+      excerpt: bubble.dataset.messageExcerpt || "",
+      outgoing: bubble.dataset.outgoing === "true"
+    };
+
+    const replyButton = messageContextMenu.querySelector('[data-message-action="reply"]');
+    if (replyButton) {
+      replyButton.hidden = false;
+    }
+    const deleteButton = messageContextMenu.querySelector('[data-message-action="delete"]');
+    if (deleteButton) {
+      deleteButton.hidden = !contextMessage.outgoing;
+    }
+    positionMessageContextMenu(event);
+  }
+
+  function updateReplyPreview() {
+    if (!replyPreview) {
+      return;
+    }
+    if (!replyMessage) {
+      replyPreview.hidden = true;
+      return;
+    }
+    if (replySenderNode) {
+      replySenderNode.textContent = replyMessage.senderName || "訊息";
+    }
+    if (replyExcerptNode) {
+      replyExcerptNode.textContent = replyMessage.excerpt || "";
+    }
+    replyPreview.hidden = false;
+  }
+
+  function setReplyMessage(message) {
+    replyMessage = message ? {
+      senderName: message.senderName || "",
+      excerpt: message.excerpt || ""
+    } : null;
+    updateReplyPreview();
+  }
+
+  async function recallContextMessage() {
+    if (!contextMessage || !contextMessage.messageID || !activeConversationID) {
+      return;
+    }
+    const headers = authHeaders();
+    if (!headers) {
+      setMessageStatus("請先登入。", true);
+      return;
+    }
+    const messageID = contextMessage.messageID;
+    closeMessageContextMenu();
+    setMessageStatus("收回訊息中...", false);
+    const response = await fetch("/api/conversations/" + activeConversationID + "/messages/" + messageID, {
+      method: "DELETE",
+      headers: { Authorization: headers.Authorization }
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      setMessageStatus(result.message || "訊息收回失敗。", true);
+      return;
+    }
+    await loadMessages(activeConversationID);
+    await loadConversations();
+    setMessageStatus("訊息已收回。", false);
   }
 
   function scrollMessageBoardToLatest() {
@@ -1081,6 +1286,14 @@
       if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
         loadMessages(activeConversationID);
       }
+      return;
+    }
+
+    if (event.event_type === "message.deleted") {
+      loadConversations();
+      if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
+        loadMessages(activeConversationID);
+      }
     }
   }
 
@@ -1193,7 +1406,7 @@
   async function sendMessage(event) {
     event.preventDefault();
     const headers = authHeaders();
-    const content = composerInput.value.trim();
+    let content = composerInput.value.trim();
     const files = selectedAttachmentFiles.length
       ? selectedAttachmentFiles.slice()
       : (composerFileInput && composerFileInput.files ? Array.from(composerFileInput.files) : []);
@@ -1208,6 +1421,9 @@
     if (!content && !files.length) {
       setMessageStatus("請輸入訊息內容或選擇檔案。", true);
       return;
+    }
+    if (replyMessage && content) {
+      content = "回覆 " + (replyMessage.senderName || "訊息") + "：「" + (replyMessage.excerpt || "") + "」\n" + content;
     }
 
     setMessageStatus("訊息送出中...", false);
@@ -1251,6 +1467,7 @@
       composerFileInput.value = "";
     }
     selectedAttachmentFiles = [];
+    setReplyMessage(null);
     updateSelectedFileState();
     closeAttachmentDialog(false);
     await loadMessages(activeConversationID);
@@ -1339,8 +1556,50 @@
   messageForm.addEventListener("submit", sendMessage);
   composerInput.addEventListener("input", syncComposerInputHeight);
   composerInput.addEventListener("keydown", handleComposerKeydown);
+  messageBoard.addEventListener("contextmenu", function (event) {
+    const bubble = bubbleFromContextEvent(event);
+    if (!bubble) {
+      return;
+    }
+    openMessageContextMenu(event, bubble);
+  }, true);
+  messageBoard.addEventListener("scroll", closeMessageContextMenu, { passive: true });
+  messageBoard.addEventListener("wheel", closeMessageContextMenu, { passive: true });
+  if (messageContextMenu) {
+    messageContextMenu.addEventListener("click", function (event) {
+      const actionButton = event.target.closest("[data-message-action]");
+      if (!actionButton || !contextMessage) {
+        return;
+      }
+      const action = actionButton.dataset.messageAction;
+      if (action === "reply") {
+        setReplyMessage(contextMessage);
+        closeMessageContextMenu();
+        composerInput.focus();
+        return;
+      }
+      if (action === "delete") {
+        recallContextMessage();
+      }
+    });
+  }
+  if (replyCancelButton) {
+    replyCancelButton.addEventListener("click", function () {
+      setReplyMessage(null);
+      composerInput.focus();
+    });
+  }
+  document.addEventListener("click", function (event) {
+    if (!messageContextMenu || messageContextMenu.hidden || messageContextMenu.contains(event.target)) {
+      return;
+    }
+    closeMessageContextMenu();
+  });
   syncComposerInputHeight();
   document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      closeMessageContextMenu();
+    }
     if (event.key !== "Escape" || !activeConversationID) {
       return;
     }

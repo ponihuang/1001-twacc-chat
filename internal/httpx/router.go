@@ -58,6 +58,7 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 		mux.HandleFunc("GET /api/messages/search", chatHandler.SearchMessages)
 		mux.HandleFunc("GET /api/conversations/{conversation_id}/messages", chatHandler.ListMessages)
 		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages", chatHandler.SendMessage)
+		mux.HandleFunc("DELETE /api/conversations/{conversation_id}/messages/{message_id}", chatHandler.DeleteMessage)
 	}
 
 	return mux

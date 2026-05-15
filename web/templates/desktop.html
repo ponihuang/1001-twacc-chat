@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=photo-grid-20260513a">
+  <link rel="stylesheet" href="/static/app.css?v=message-context-20260515f">
   <script defer src="/static/page-auth-guard.js?v=auth-guard-20260511a"></script>
   <script defer src="/static/sidebar-nav.js?v=global-search-20260508i"></script>
   <script defer src="/static/settings-panel.js?v=global-search-20260508i"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
-  <script defer src="/static/chat-app.js?v=photo-grid-20260513a"></script>
+  <script defer src="/static/chat-app.js?v=message-context-20260515f"></script>
 </head>
 <body class="desktop-page" data-require-auth-redirect="/login">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -239,8 +239,22 @@
           </div>
         </header>
 
-        <section class="message-board" data-message-board>
-        </section>
+        <div class="message-board-shell">
+          <section class="message-board" data-message-board>
+          </section>
+          <div class="message-context-menu" data-message-context-menu hidden>
+            <div class="message-context-actions">
+              <button type="button" data-message-action="reply">
+                <span aria-hidden="true">↩</span>
+                <span>回覆</span>
+              </button>
+              <button type="button" class="danger" data-message-action="delete">
+                <span aria-hidden="true">⌫</span>
+                <span>收回</span>
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div class="chat-drop-overlay" data-chat-drop-overlay hidden>
           <div class="chat-drop-panel">
@@ -266,6 +280,13 @@
 
         <form class="composer" data-message-form>
           <div class="composer-fields">
+            <div class="composer-reply-preview" data-reply-preview hidden>
+              <span>
+                <strong data-reply-sender></strong>
+                <small data-reply-excerpt></small>
+              </span>
+              <button type="button" data-reply-cancel aria-label="取消引用">×</button>
+            </div>
             <textarea class="text-input composer-input" name="content" rows="1" placeholder="輸入文字訊息"></textarea>
             <div class="composer-attachment">
               <button type="button" class="composer-icon-button" data-attachment-toggle aria-label="附加檔案" aria-expanded="false">

@@ -123,6 +123,7 @@ type RealtimeEvent struct {
 	ConversationID int64                   `json:"conversation_id,omitempty"`
 	Conversation   *DirectConversationData `json:"conversation,omitempty"`
 	Message        MessageItem             `json:"message,omitempty"`
+	MessageID      int64                   `json:"message_id,omitempty"`
 }
 
 // MessageItem is the API-facing message item.
@@ -191,6 +192,12 @@ type SentMessageData struct {
 	Message        MessageItem `json:"message"`
 }
 
+// DeletedMessageData is the API-facing payload for a recalled message.
+type DeletedMessageData struct {
+	ConversationID int64 `json:"conversation_id"`
+	MessageID      int64 `json:"message_id"`
+}
+
 // Response is the API response shape for chat endpoints.
 type Response struct {
 	Success bool   `json:"success"`
@@ -217,4 +224,5 @@ type Repository interface {
 	SearchMessages(userID int64, query string, limit int) ([]Message, error)
 	MarkConversationRead(userID, conversationID int64) error
 	CreateMessage(input CreateMessageInput) (Message, error)
+	DeleteMessage(conversationID, messageID, actorUserID int64) error
 }

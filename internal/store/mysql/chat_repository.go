@@ -626,3 +626,58 @@ func (r *ChatRepository) CreateMessage(input chat.CreateMessageInput) (chat.Mess
 
 	return message, nil
 }
+
+// DeleteMessage recalls a message owned by the actor.
+func (r *ChatRepository) DeleteMessage(conversationID, messageID, actorUserID int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin delete message: %w", err)
+	}
+	defer tx.Rollback()
+
+	var senderID int64
+	if err := tx.QueryRow(`
+		SELECT m.sender_id
+		  FROM messages m
+		  JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ?
+		 WHERE m.conversation_id = ?
+		   AND m.id = ?
+		 LIMIT 1`, actorUserID, conversationID, messageID).Scan(&senderID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return chat.ErrMessageNotFound
+		}
+		return fmt.Errorf("find message for delete: %w", err)
+	}
+	if senderID != actorUserID {
+		return chat.ErrMessageRecallForbidden
+	}
+
+	if _, err := tx.Exec(`
+		UPDATE conversation_reads
+		   SET last_read_message_id = NULL
+		 WHERE last_read_message_id = ?`, messageID); err != nil {
+		return fmt.Errorf("clear read marker for deleted message: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM attachments WHERE message_id = ?`, messageID); err != nil {
+		return fmt.Errorf("delete message attachments: %w", err)
+	}
+	result, err := tx.Exec(`
+		DELETE FROM messages
+		 WHERE conversation_id = ?
+		   AND id = ?
+		   AND sender_id = ?`, conversationID, messageID, actorUserID)
+	if err != nil {
+		return fmt.Errorf("delete message: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete message rows affected: %w", err)
+	}
+	if affected == 0 {
+		return chat.ErrMessageNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete message: %w", err)
+	}
+	return nil
+}
