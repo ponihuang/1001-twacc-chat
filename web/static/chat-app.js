@@ -93,6 +93,10 @@
   let newGroupSearchQuery = "";
   let newGroupSelectedMembers = [];
   let contactsLoadToken = 0;
+  let contactKeys = new Set();
+  let contactExternalIDs = new Set();
+  let contactsLoaded = false;
+  let contactsIndexLoading = false;
 
   function readSessionToken() {
     return localStorage.getItem(storageKeys.token) || "";
@@ -231,8 +235,14 @@
       return;
     }
     const peer = activeDirectPeer();
-    contactMenuToggle.hidden = !peer;
-    if (!peer) {
+    if (peer && !contactsLoaded) {
+      contactMenuToggle.hidden = true;
+      ensureContactsLoaded();
+      return;
+    }
+    const canAddContact = Boolean(peer) && !isContactPeer(peer);
+    contactMenuToggle.hidden = !canAddContact;
+    if (!canAddContact) {
       setContactMenuOpen(false);
       setContactPanelOpen(false);
     }
@@ -287,6 +297,18 @@
       externalUserID: active.direct_external_user_id || "",
       title: active.title || active.direct_external_user_id || ""
     };
+  }
+
+  function contactKey(sourceSystem, externalUserID) {
+    return String(sourceSystem || readSourceSystem()).trim() + ":" + String(externalUserID || "").trim().toLowerCase();
+  }
+
+  function isContactPeer(peer) {
+    if (!peer || !peer.externalUserID) {
+      return false;
+    }
+    const externalID = String(peer.externalUserID || "").trim().toLowerCase();
+    return contactKeys.has(contactKey(peer.sourceSystem, peer.externalUserID)) || contactExternalIDs.has(externalID);
   }
 
   function findExistingDirectConversation(sourceSystem, externalUserID) {
@@ -892,7 +914,11 @@
       setMessageStatus(result.message || "加入聯絡人失敗。", true);
       return;
     }
+    contactKeys.add(contactKey(peer.sourceSystem, peer.externalUserID));
+    contactExternalIDs.add(String(peer.externalUserID || "").trim().toLowerCase());
+    contactsLoaded = true;
     setContactPanelOpen(false);
+    updateContactActions();
     if (sidebarShell && sidebarShell.dataset.sidebarView === "contacts") {
       loadContacts();
     }
@@ -946,33 +972,76 @@
   async function loadContacts() {
     const headers = authHeaders();
     if (!contactsList || !headers) {
-      renderContacts([], false);
+      if (contactsList) {
+        renderContacts([], false);
+      }
       return;
     }
     const requestToken = ++contactsLoadToken;
     renderContacts([], true);
+    const contacts = await fetchContacts(requestToken);
+    if (!contacts) {
+      return;
+    }
+    renderContacts(contacts, false);
+  }
+
+  async function fetchContacts(requestToken) {
+    const headers = authHeaders();
+    if (!headers) {
+      contactKeys = new Set();
+      contactExternalIDs = new Set();
+      contactsLoaded = false;
+      contactsIndexLoading = false;
+      updateContactActions();
+      return [];
+    }
     let response;
     let result = {};
     try {
+      contactsIndexLoading = true;
       response = await fetch("/api/contacts", {
         headers: { Authorization: headers.Authorization }
       });
       result = await parseJSON(response);
     } catch (_) {
-      if (requestToken === contactsLoadToken) {
+      contactsIndexLoading = false;
+      if (contactsList && requestToken === contactsLoadToken) {
         contactsList.innerHTML = '<div class="contacts-empty is-error">聯絡人載入失敗</div>';
       }
-      return;
+      return null;
     }
-    if (requestToken !== contactsLoadToken) {
-      return;
+    if (requestToken && requestToken !== contactsLoadToken) {
+      contactsIndexLoading = false;
+      return null;
     }
     if (!response.ok || !result.success) {
-      contactsList.innerHTML = '<div class="contacts-empty is-error">' + escapeHTML(result.message || "聯絡人載入失敗") + '</div>';
-      return;
+      contactsIndexLoading = false;
+      if (contactsList && requestToken === contactsLoadToken) {
+        contactsList.innerHTML = '<div class="contacts-empty is-error">' + escapeHTML(result.message || "聯絡人載入失敗") + '</div>';
+      }
+      return null;
     }
     const data = result.data || {};
-    renderContacts(data.contacts || [], false);
+    const contacts = data.contacts || [];
+    contactKeys = new Set(contacts.map(function (item) {
+      return contactKey(item.source_system, item.external_user_id);
+    }));
+    contactExternalIDs = new Set(contacts.map(function (item) {
+      return String(item.external_user_id || "").trim().toLowerCase();
+    }).filter(Boolean));
+    contactsLoaded = true;
+    contactsIndexLoading = false;
+    updateContactActions();
+    return contacts;
+  }
+
+  async function ensureContactsLoaded() {
+    if (contactsLoaded || contactsIndexLoading || !authHeaders()) {
+      updateContactActions();
+      return;
+    }
+    await fetchContacts(0);
   }
 
   function conversationPreview(item) {
@@ -1985,7 +2054,12 @@
   }
 
   document.addEventListener("twacc:session-changed", function () {
+    contactKeys = new Set();
+    contactExternalIDs = new Set();
+    contactsLoaded = false;
+    contactsIndexLoading = false;
     connectRealtime();
+    ensureContactsLoaded();
     loadConversations();
   });
 
@@ -2104,8 +2178,13 @@
 	  }
 
   if (contactMenuToggle) {
-    contactMenuToggle.addEventListener("click", function (event) {
+    contactMenuToggle.addEventListener("click", async function (event) {
       event.stopPropagation();
+      await ensureContactsLoaded();
+      if (contactMenuToggle.hidden) {
+        setContactMenuOpen(false);
+        return;
+      }
       setContactMenuOpen(contactMenu ? contactMenu.hidden : true);
     });
   }

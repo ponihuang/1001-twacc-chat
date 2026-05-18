@@ -2333,6 +2333,10 @@ strong {
   cursor: pointer;
 }
 
+.chat-topbar-icon[hidden] {
+  display: none;
+}
+
 .chat-topbar-icon:hover,
 .chat-topbar-icon[aria-expanded="true"] {
   background: rgba(92, 75, 57, 0.08);
