@@ -1388,6 +1388,24 @@ strong {
   overflow-y: auto;
   padding-right: 4px;
   padding-bottom: 96px;
+  scrollbar-color: rgba(110, 104, 96, 0.42) transparent;
+  scrollbar-width: thin;
+}
+
+.conversation-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.conversation-list::-webkit-scrollbar-track {
+  border: 0;
+  background: transparent;
+}
+
+.conversation-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(110, 104, 96, 0.42);
+  background-clip: content-box;
 }
 
 .conversation-search-panel {
@@ -2043,9 +2061,18 @@ strong {
 
 .conversation-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
+}
+
+.conversation-card-header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-unread-badge {
@@ -2061,6 +2088,7 @@ strong {
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.2;
+  flex: 0 0 auto;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
@@ -2146,13 +2174,16 @@ strong {
 
 .conversation-card {
   display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: start;
   gap: 4px;
-  min-height: 70px;
+  min-height: 96px;
   padding: 12px 16px;
   border: 0;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.44);
   color: var(--text);
+  overflow: hidden;
   transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
 }
 
@@ -2169,8 +2200,15 @@ strong {
 .conversation-card span,
 .conversation-card small {
   color: var(--muted);
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  min-width: 0;
+}
+
+.conversation-card > span:not(.conversation-card-header),
+.conversation-card > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-card small,
@@ -2519,6 +2557,24 @@ strong {
     linear-gradient(315deg, rgba(51, 71, 59, 0.12), transparent 30%),
     rgba(255, 250, 244, 0.54);
   overflow-y: auto;
+  scrollbar-color: rgba(110, 104, 96, 0.42) transparent;
+  scrollbar-width: thin;
+}
+
+.message-board::-webkit-scrollbar {
+  width: 10px;
+}
+
+.message-board::-webkit-scrollbar-track {
+  border: 0;
+  background: transparent;
+}
+
+.message-board::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(110, 104, 96, 0.42);
+  background-clip: content-box;
 }
 
 .empty-chat-state {
