@@ -16,6 +16,43 @@
   box-sizing: border-box;
 }
 
+* {
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+}
+
+*:hover {
+  scrollbar-color: rgba(110, 104, 96, 0.42) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  border: 0;
+  background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: content-box;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(110, 104, 96, 0.42);
+  background-clip: content-box;
+}
+
 body {
   margin: 0;
   color: var(--text);
@@ -1388,24 +1425,6 @@ strong {
   overflow-y: auto;
   padding-right: 4px;
   padding-bottom: 96px;
-  scrollbar-color: rgba(110, 104, 96, 0.42) transparent;
-  scrollbar-width: thin;
-}
-
-.conversation-list::-webkit-scrollbar {
-  width: 10px;
-}
-
-.conversation-list::-webkit-scrollbar-track {
-  border: 0;
-  background: transparent;
-}
-
-.conversation-list::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: rgba(110, 104, 96, 0.42);
-  background-clip: content-box;
 }
 
 .conversation-search-panel {
@@ -2557,24 +2576,6 @@ strong {
     linear-gradient(315deg, rgba(51, 71, 59, 0.12), transparent 30%),
     rgba(255, 250, 244, 0.54);
   overflow-y: auto;
-  scrollbar-color: rgba(110, 104, 96, 0.42) transparent;
-  scrollbar-width: thin;
-}
-
-.message-board::-webkit-scrollbar {
-  width: 10px;
-}
-
-.message-board::-webkit-scrollbar-track {
-  border: 0;
-  background: transparent;
-}
-
-.message-board::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: rgba(110, 104, 96, 0.42);
-  background-clip: content-box;
 }
 
 .empty-chat-state {
