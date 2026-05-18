@@ -1042,6 +1042,16 @@ strong {
   color: var(--text);
 }
 
+.settings-icon-button:disabled {
+  color: rgba(110, 104, 96, 0.34);
+  cursor: not-allowed;
+}
+
+.settings-icon-button:disabled:hover {
+  background: transparent;
+  color: rgba(110, 104, 96, 0.34);
+}
+
 .settings-folder-menu {
   position: absolute;
   top: 42px;
@@ -1099,6 +1109,15 @@ strong {
   color: #2a8be8;
   font-size: 1.6rem;
   font-weight: 700;
+}
+
+.settings-folder-save-icon.is-empty {
+  color: rgba(110, 104, 96, 0.38);
+}
+
+.settings-folder-save-icon.is-empty:hover {
+  background: rgba(165, 63, 43, 0.08);
+  color: rgba(110, 104, 96, 0.54);
 }
 
 .settings-folder-edit-intro {
@@ -2169,11 +2188,35 @@ strong {
 }
 
 .desktop-stage {
+  position: relative;
   display: flex;
   flex-direction: row;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+}
+
+.folder-toast {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 90;
+  max-width: min(520px, calc(100% - 48px));
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: rgba(31, 43, 34, 0.92);
+  color: #fff;
+  font-family: Arial, "Noto Sans TC", sans-serif;
+  font-size: 0.98rem;
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: 0 14px 38px rgba(31, 27, 24, 0.18);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.folder-toast[hidden] {
+  display: none;
 }
 
 .chat-shell {

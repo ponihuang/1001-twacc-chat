@@ -46,7 +46,10 @@
 
   let activeFolderID = "";
   let activeFolderTabID = "";
+  let activeFolderDraft = null;
+  let activeFolderIsNew = false;
   let profileEditOriginalName = "";
+  let folderToastTimer = 0;
 
   function readSession() {
     return {
@@ -446,6 +449,54 @@
     return name;
   }
 
+  function showFolderEditStatus(text, isError) {
+    if (!folderEditStatus) {
+      return;
+    }
+    folderEditStatus.hidden = false;
+    folderEditStatus.textContent = text;
+    folderEditStatus.classList.toggle("is-error", Boolean(isError));
+    folderEditStatus.classList.toggle("is-success", !isError);
+  }
+
+  function showFolderToast(text) {
+    const stage = document.querySelector(".desktop-stage");
+    const host = stage || document.body;
+    if (!host) {
+      return;
+    }
+    let toast = host.querySelector("[data-folder-toast]");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.className = "folder-toast";
+      toast.dataset.folderToast = "true";
+      host.appendChild(toast);
+    }
+    toast.textContent = text;
+    toast.hidden = false;
+    window.clearTimeout(folderToastTimer);
+    folderToastTimer = window.setTimeout(function () {
+      toast.hidden = true;
+    }, 2400);
+  }
+
+  function selectedFolderConversationIDs() {
+    if (!folderChatList) {
+      return [];
+    }
+    return Array.from(folderChatList.querySelectorAll('input[type="checkbox"]:checked')).map(function (input) {
+      return String(input.value);
+    });
+  }
+
+  function updateFolderSaveState() {
+    if (!folderEditSaveButton) {
+      return;
+    }
+    folderEditSaveButton.disabled = false;
+    folderEditSaveButton.classList.toggle("is-empty", selectedFolderConversationIDs().length < 1);
+  }
+
   function readConversationsFromDOM() {
     try {
       const key = accountStorageKey(conversationCatalogStorageKey);
@@ -490,6 +541,12 @@
     const editing = mode === "edit";
     folderListView.hidden = editing;
     folderEditView.hidden = !editing;
+    if (!editing) {
+      activeFolderID = "";
+      activeFolderDraft = null;
+      activeFolderIsNew = false;
+      folderEditView.classList.remove("is-new-folder");
+    }
     syncSidebarState();
   }
 
@@ -516,12 +573,18 @@
     ].join("");
   }
 
-  function openFolderEditor(folderIDValue, isNewFolder) {
-    const folder = findFolder(folderIDValue);
+  function openFolderEditor(folderIDValue, isNewFolder, draftFolder) {
+    const folder = draftFolder || findFolder(folderIDValue);
     if (!folder) {
       return;
     }
     activeFolderID = folder.id;
+    activeFolderDraft = {
+      id: folder.id,
+      name: folder.name,
+      conversation_ids: Array.isArray(folder.conversation_ids) ? folder.conversation_ids.map(String) : []
+    };
+    activeFolderIsNew = Boolean(isNewFolder);
     folderEditView.classList.toggle("is-new-folder", Boolean(isNewFolder));
     if (folderEditTitle) {
       folderEditTitle.textContent = isNewFolder ? "新建資料夾" : "編輯資料夾";
@@ -529,46 +592,45 @@
     folderEditNameInput.value = isNewFolder ? "" : folder.name;
     if (folderEditStatus) {
       folderEditStatus.hidden = true;
-      folderEditStatus.textContent = "已儲存";
       folderEditStatus.classList.remove("is-error");
       folderEditStatus.classList.add("is-success");
     }
-    renderFolderChatList(folder);
+    renderFolderChatList(activeFolderDraft);
+    updateFolderSaveState();
     setFolderView("edit");
   }
 
   function saveActiveFolder() {
-    if (!activeFolderID) {
-      return;
+    if (!activeFolderID || !activeFolderDraft) {
+      return false;
+    }
+    const selectedIDs = selectedFolderConversationIDs();
+    if (!selectedIDs.length) {
+      showFolderToast("請至少選擇一個對話加入此資料夾");
+      return false;
     }
     const folders = readFolders();
-    const target = folders.find(function (folder) {
+    const folderName = folderEditNameInput.value.trim() || activeFolderDraft.name;
+    const target = activeFolderIsNew ? {
+      id: activeFolderDraft.id,
+      name: folderName,
+      conversation_ids: selectedIDs
+    } : folders.find(function (folder) {
       return folder.id === activeFolderID;
     });
     if (!target) {
-      return;
+      return false;
     }
-    const selectedIDs = Array.from(folderChatList.querySelectorAll('input[type="checkbox"]:checked')).map(function (input) {
-      return String(input.value);
-    });
-    target.name = folderEditNameInput.value.trim() || target.name;
+    target.name = folderName;
     target.conversation_ids = selectedIDs;
+    if (activeFolderIsNew) {
+      folders.push(target);
+    }
     const saved = saveFolders(folders);
     renderFolderCards(saved);
-    const updated = saved.find(function (folder) {
-      return folder.id === activeFolderID;
-    });
-    if (updated) {
-      folderEditNameInput.value = updated.name;
-      renderFolderChatList(updated);
-    }
-    if (folderEditStatus) {
-      folderEditStatus.hidden = false;
-      folderEditStatus.textContent = "已儲存";
-      folderEditStatus.classList.remove("is-error");
-      folderEditStatus.classList.add("is-success");
-    }
     applyConversationFolderFilter();
+    setFolderView("list");
+    return true;
   }
 
   function deleteFolder(folderIDValue) {
@@ -582,7 +644,6 @@
     }
     renderFolderCards(saved);
     if (activeFolderID === folderIDValue) {
-      activeFolderID = "";
       setFolderView("list");
     }
   }
@@ -678,10 +739,7 @@
         name: nextFolderName(folders),
         conversation_ids: []
       };
-      folders.push(folder);
-      saveFolders(folders);
-      renderFolderCards(readFolders());
-      openFolderEditor(folder.id, true);
+      openFolderEditor(folder.id, true, folder);
     });
   }
 
@@ -713,7 +771,6 @@
 
   if (folderEditBackButton) {
     folderEditBackButton.addEventListener("click", function () {
-      saveActiveFolder();
       setFolderView("list");
     });
   }
@@ -722,12 +779,9 @@
     folderEditSaveButton.addEventListener("click", saveActiveFolder);
   }
 
-  if (folderEditNameInput) {
-    folderEditNameInput.addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        saveActiveFolder();
-      }
+  if (folderChatList) {
+    folderChatList.addEventListener("change", function () {
+      updateFolderSaveState();
     });
   }
 
