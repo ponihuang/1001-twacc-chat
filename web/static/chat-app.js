@@ -52,6 +52,7 @@
   const contactOriginalName = app.querySelector("[data-contact-original-name]");
   const contactAliasName = app.querySelector("[data-contact-alias-name]");
   const contactAccount = app.querySelector("[data-contact-account]");
+  const mobileChatBackButton = app.querySelector("[data-mobile-chat-back]");
   const realtimeStateNode = app.querySelector("[data-realtime-state]");
   const composerInput = messageForm.querySelector(".composer-input");
   const composerFileInput = messageForm.querySelector(".composer-file-input");
@@ -204,6 +205,7 @@
 
   function setConversationUIActive(isActive) {
     app.classList.toggle("is-conversation-active", Boolean(isActive));
+    app.classList.toggle("is-mobile-chat-open", Boolean(isActive));
     if (!isActive) {
       setContactMenuOpen(false);
       setContactPanelOpen(false);
@@ -2186,6 +2188,14 @@
         return;
       }
       setContactMenuOpen(contactMenu ? contactMenu.hidden : true);
+    });
+  }
+
+  if (mobileChatBackButton) {
+    mobileChatBackButton.addEventListener("click", function () {
+      app.classList.remove("is-mobile-chat-open");
+      setContactMenuOpen(false);
+      setContactPanelOpen(false);
     });
   }
 

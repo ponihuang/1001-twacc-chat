@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=contact-menu-hidden-20260518a">
+  <link rel="stylesheet" href="/static/app.css?v=responsive-chat-20260519a">
   <script defer src="/static/page-auth-guard.js?v=auth-guard-20260511a"></script>
   <script defer src="/static/sidebar-nav.js?v=contacts-page-20260516a"></script>
   <script defer src="/static/settings-panel.js?v=folder-save-20260516a"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
-  <script defer src="/static/chat-app.js?v=contact-menu-20260518b"></script>
+  <script defer src="/static/chat-app.js?v=responsive-chat-20260519a"></script>
 </head>
 <body class="desktop-page" data-require-auth-redirect="/login">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -320,6 +320,7 @@
     <section class="desktop-stage">
       <section class="chat-shell panel-surface">
         <header class="chat-topbar">
+          <button type="button" class="chat-mobile-back" data-mobile-chat-back aria-label="返回對話列表">‹</button>
           <div class="chat-topbar-title">
             <strong data-conversation-title>目前對話</strong>
             <span data-message-status>請先登入並選擇對話。</span>
