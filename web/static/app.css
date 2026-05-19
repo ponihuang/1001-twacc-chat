@@ -2297,6 +2297,10 @@ strong {
   flex-basis: calc(100% - 360px);
 }
 
+.desktop-stage.is-group-info-open .chat-shell {
+  flex-basis: calc(100% - 360px);
+}
+
 .chat-topbar {
   display: flex;
   align-items: center;
@@ -2332,7 +2336,28 @@ strong {
 .chat-topbar-title {
   display: grid;
   gap: 4px;
+  flex: 1 1 auto;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.chat-topbar-title.is-clickable {
+  cursor: pointer;
+}
+
+.chat-topbar-title.is-clickable:hover strong {
+  color: var(--accent-strong);
+}
+
+.chat-topbar-title:disabled {
+  color: inherit;
+  opacity: 1;
 }
 
 .chat-topbar-actions {
@@ -2474,6 +2499,182 @@ strong {
 .contact-panel-back:hover {
   background: rgba(92, 75, 57, 0.08);
   color: var(--text);
+}
+
+.group-info-panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  flex: 0 0 360px;
+  min-width: 0;
+  height: 100%;
+  border-left: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  overflow: hidden;
+}
+
+.group-info-panel[hidden] {
+  display: none;
+}
+
+.group-info-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 64px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+
+.group-info-header strong {
+  font-size: 1.12rem;
+}
+
+.group-info-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.group-info-close:hover {
+  background: rgba(92, 75, 57, 0.08);
+  color: var(--text);
+}
+
+.group-info-body {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  min-height: 0;
+  padding-top: 28px;
+  overflow-y: auto;
+}
+
+.group-info-avatar {
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #55d7c5, #2292df);
+  color: #fff;
+  font-size: 2.4rem;
+  font-weight: 800;
+}
+
+.group-info-body > strong {
+  max-width: calc(100% - 44px);
+  margin-top: 16px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1.2rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-info-body > small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.group-info-tabs {
+  display: flex;
+  width: 100%;
+  margin-top: 24px;
+  border-top: 1px solid rgba(92, 75, 57, 0.1);
+  border-bottom: 1px solid rgba(92, 75, 57, 0.1);
+}
+
+.group-info-tabs button {
+  flex: 1 1 auto;
+  min-height: 48px;
+  border: 0;
+  border-bottom: 3px solid #3390ec;
+  background: transparent;
+  color: #3390ec;
+  font: inherit;
+  font-weight: 800;
+}
+
+.group-info-members {
+  display: grid;
+  align-content: start;
+  width: 100%;
+}
+
+.group-info-member {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 20px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.group-info-member:hover {
+  background: rgba(51, 144, 236, 0.08);
+}
+
+.group-info-member:focus-visible {
+  outline: 2px solid rgba(51, 144, 236, 0.55);
+  outline-offset: -2px;
+}
+
+.group-info-member-avatar {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #66b9f7, #2f80d1);
+  color: #fff;
+  font-weight: 800;
+}
+
+.group-info-member-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.group-info-member-text strong,
+.group-info-member-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-info-member-text strong {
+  color: var(--text);
+  font-size: 0.98rem;
+}
+
+.group-info-member-text small,
+.group-info-empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.group-info-empty {
+  justify-self: start;
+  padding: 18px 20px;
 }
 
 .contact-form {
@@ -3730,7 +3931,8 @@ strong {
     padding-inline: 12px;
   }
 
-  .contact-panel {
+  .contact-panel,
+  .group-info-panel {
     position: absolute;
     inset: 0;
     z-index: 60;
@@ -3738,7 +3940,8 @@ strong {
     width: 100%;
   }
 
-  .desktop-stage.is-contact-panel-open .chat-shell {
+  .desktop-stage.is-contact-panel-open .chat-shell,
+  .desktop-stage.is-group-info-open .chat-shell {
     flex-basis: auto;
   }
 }

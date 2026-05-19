@@ -42,6 +42,13 @@
   const chatShell = app.querySelector(".chat-shell");
   const conversationTitle = app.querySelector("[data-conversation-title]");
   const messageStatus = app.querySelector("[data-message-status]");
+  const groupInfoOpenButton = app.querySelector("[data-group-info-open]");
+  const groupInfoPanel = app.querySelector("[data-group-info-panel]");
+  const groupInfoClose = app.querySelector("[data-group-info-close]");
+  const groupInfoAvatar = app.querySelector("[data-group-info-avatar]");
+  const groupInfoTitle = app.querySelector("[data-group-info-title]");
+  const groupInfoCount = app.querySelector("[data-group-info-count]");
+  const groupInfoMembers = app.querySelector("[data-group-info-members]");
   const contactMenuToggle = app.querySelector("[data-contact-menu-toggle]");
   const contactMenu = app.querySelector("[data-contact-menu]");
   const contactPanel = app.querySelector("[data-contact-panel]");
@@ -85,6 +92,7 @@
   let reconnectTimer = 0;
   let reconnectAttempts = 0;
   let messageLoadToken = 0;
+  let groupInfoLoadToken = 0;
   let selectedAttachmentKind = "document";
   let selectedAttachmentFiles = [];
   let attachmentPreviewURLs = [];
@@ -209,8 +217,10 @@
     if (!isActive) {
       setContactMenuOpen(false);
       setContactPanelOpen(false);
+      setGroupInfoPanelOpen(false);
     }
     updateContactActions();
+    updateGroupInfoAction();
   }
 
   function setContactMenuOpen(isOpen) {
@@ -229,6 +239,33 @@
     const stage = contactPanel.closest(".desktop-stage");
     if (stage) {
       stage.classList.toggle("is-contact-panel-open", Boolean(isOpen));
+    }
+  }
+
+  function setGroupInfoPanelOpen(isOpen) {
+    if (!groupInfoPanel) {
+      return;
+    }
+    groupInfoPanel.hidden = !isOpen;
+    const stage = groupInfoPanel.closest(".desktop-stage");
+    if (stage) {
+      stage.classList.toggle("is-group-info-open", Boolean(isOpen));
+    }
+    if (!isOpen) {
+      groupInfoLoadToken += 1;
+    }
+  }
+
+  function updateGroupInfoAction() {
+    if (!groupInfoOpenButton) {
+      return;
+    }
+    const group = activeGroupConversation();
+    groupInfoOpenButton.disabled = !group;
+    groupInfoOpenButton.classList.toggle("is-clickable", Boolean(group));
+    groupInfoOpenButton.setAttribute("aria-label", group ? "開啟群組資訊" : "目前對話");
+    if (!group) {
+      setGroupInfoPanelOpen(false);
     }
   }
 
@@ -270,14 +307,137 @@
     }
   }
 
+  function renderGroupInfoLoading(group) {
+    const title = group ? group.title || "群組" : "群組";
+    if (groupInfoAvatar) {
+      groupInfoAvatar.textContent = title.slice(0, 1).toUpperCase() || "G";
+    }
+    if (groupInfoTitle) {
+      groupInfoTitle.textContent = title;
+    }
+    if (groupInfoCount) {
+      groupInfoCount.textContent = "載入成員中...";
+    }
+    if (groupInfoMembers) {
+      groupInfoMembers.innerHTML = '<div class="group-info-empty">載入成員中...</div>';
+    }
+  }
+
+  function memberRoleLabel(role) {
+    if (role === "owner") {
+      return "群主";
+    }
+    if (role === "admin") {
+      return "管理員";
+    }
+    return "成員";
+  }
+
+  function renderGroupInfo(data) {
+    const title = data.title || activeConversationTitle() || "群組";
+    const members = Array.isArray(data.members) ? data.members : [];
+    const memberCount = data.member_count || members.length || 0;
+    if (groupInfoAvatar) {
+      groupInfoAvatar.textContent = title.slice(0, 1).toUpperCase() || "G";
+    }
+    if (groupInfoTitle) {
+      groupInfoTitle.textContent = title;
+    }
+    if (groupInfoCount) {
+      groupInfoCount.textContent = memberCount + " 位成員";
+    }
+    if (!groupInfoMembers) {
+      return;
+    }
+    if (!members.length) {
+      groupInfoMembers.innerHTML = '<div class="group-info-empty">目前沒有成員資料</div>';
+      return;
+    }
+    groupInfoMembers.innerHTML = members.map(function (member) {
+      const name = escapeHTML(member.display_name || member.external_user_id || "成員");
+      const account = member.external_user_id ? "@" + member.external_user_id : memberRoleLabel(member.role);
+      const initial = (member.display_name || member.external_user_id || "?").slice(0, 1).toUpperCase();
+      return '<button type="button" class="group-info-member" data-group-member-source="' + escapeHTML(member.source_system || readSourceSystem()) + '" data-group-member-external="' + escapeHTML(member.external_user_id || "") + '" data-group-member-title="' + escapeHTML(member.display_name || member.external_user_id || "成員") + '">'
+        + '<div class="group-info-member-avatar">' + escapeHTML(initial) + '</div>'
+        + '<div class="group-info-member-text">'
+        + '<strong>' + name + '</strong>'
+        + '<small>' + escapeHTML(account) + '</small>'
+        + '</div>'
+        + '</button>';
+    }).join("");
+  }
+
+  function openGroupMemberConversation(button) {
+    const sourceSystem = String(button.dataset.groupMemberSource || readSourceSystem()).trim();
+    const externalUserID = String(button.dataset.groupMemberExternal || "").trim();
+    const title = String(button.dataset.groupMemberTitle || externalUserID || "成員").trim();
+    if (!externalUserID) {
+      return;
+    }
+    const currentSource = String(readSourceSystem() || "").trim();
+    const currentExternalID = String(readExternalUserID() || "").trim().toLowerCase();
+    if (sourceSystem === currentSource && externalUserID.toLowerCase() === currentExternalID) {
+      setMessageStatus("這是你目前登入的帳號。", false);
+      return;
+    }
+    setGroupInfoPanelOpen(false);
+    openPendingDirectConversation({
+      sourceSystem: sourceSystem,
+      externalUserID: externalUserID,
+      title: title
+    });
+  }
+
+  async function loadGroupInfo() {
+    const headers = authHeaders();
+    const group = activeGroupConversation();
+    if (!headers || !group) {
+      return;
+    }
+    const requestToken = ++groupInfoLoadToken;
+    renderGroupInfoLoading(group);
+    let response;
+    let result = {};
+    try {
+      response = await fetch("/api/conversations/" + group.conversation_id + "/members", {
+        headers: { Authorization: headers.Authorization }
+      });
+      result = await parseJSON(response);
+    } catch (_) {
+      if (requestToken === groupInfoLoadToken && groupInfoMembers) {
+        groupInfoMembers.innerHTML = '<div class="group-info-empty">群組資訊載入失敗</div>';
+      }
+      return;
+    }
+    if (requestToken !== groupInfoLoadToken || group.conversation_id !== activeConversationID) {
+      return;
+    }
+    if (!response.ok || !result.success) {
+      if (groupInfoMembers) {
+        groupInfoMembers.innerHTML = '<div class="group-info-empty">' + escapeHTML(result.message || "群組資訊載入失敗") + '</div>';
+      }
+      return;
+    }
+    renderGroupInfo(result.data || {});
+  }
+
   function activeConversationTitle() {
     if (pendingDirectTarget) {
       return pendingDirectTarget.title || pendingDirectTarget.externalUserID || "";
     }
-    const active = conversations.find(function (item) {
-      return item.conversation_id === activeConversationID;
-    });
+    const active = activeConversation();
     return active ? active.title : "";
+  }
+
+  function activeConversation() {
+    return conversations.find(function (item) {
+      return item.conversation_id === activeConversationID;
+    }) || null;
+  }
+
+  function activeGroupConversation() {
+    const active = activeConversation();
+    return active && active.type === "group" ? active : null;
   }
 
   function activeDirectPeer() {
@@ -288,9 +448,7 @@
         title: pendingDirectTarget.title || pendingDirectTarget.externalUserID || ""
       };
     }
-    const active = conversations.find(function (item) {
-      return item.conversation_id === activeConversationID;
-    });
+    const active = activeConversation();
     if (!active || active.type !== "direct" || !active.direct_external_user_id) {
       return null;
     }
@@ -339,6 +497,8 @@
     closeSearchMode();
     renderConversationList(conversations);
     updateContactActions();
+    updateGroupInfoAction();
+    setGroupInfoPanelOpen(false);
     loadMessages(activeConversationID);
   }
 
@@ -1699,6 +1859,7 @@
 
     renderConversationList(items);
     updateContactActions();
+    updateGroupInfoAction();
     if (activeConversationID) {
       await loadMessages(activeConversationID);
       return;
@@ -2191,11 +2352,40 @@
     });
   }
 
+  if (groupInfoOpenButton) {
+    groupInfoOpenButton.addEventListener("click", function () {
+      if (!activeGroupConversation()) {
+        return;
+      }
+      setContactMenuOpen(false);
+      setContactPanelOpen(false);
+      setGroupInfoPanelOpen(true);
+      loadGroupInfo();
+    });
+  }
+
+  if (groupInfoClose) {
+    groupInfoClose.addEventListener("click", function () {
+      setGroupInfoPanelOpen(false);
+    });
+  }
+
+  if (groupInfoMembers) {
+    groupInfoMembers.addEventListener("click", function (event) {
+      const memberButton = event.target.closest("[data-group-member-external]");
+      if (!memberButton || !groupInfoMembers.contains(memberButton)) {
+        return;
+      }
+      openGroupMemberConversation(memberButton);
+    });
+  }
+
   if (mobileChatBackButton) {
     mobileChatBackButton.addEventListener("click", function () {
       app.classList.remove("is-mobile-chat-open");
       setContactMenuOpen(false);
       setContactPanelOpen(false);
+      setGroupInfoPanelOpen(false);
     });
   }
 
@@ -2209,6 +2399,7 @@
       setContactMenuOpen(false);
       if (actionButton.dataset.contactAction === "add" && peer) {
         fillContactPanel(peer);
+        setGroupInfoPanelOpen(false);
         setContactPanelOpen(true);
         if (contactAliasName) {
           window.requestAnimationFrame(function () {
@@ -2316,10 +2507,11 @@
   syncComposerInputHeight();
 	  document.addEventListener("keydown", function (event) {
 	    if (event.key === "Escape") {
-	      closeMessageContextMenu();
-	      setConversationCreateMenuOpen(false);
+      closeMessageContextMenu();
+      setConversationCreateMenuOpen(false);
       setContactMenuOpen(false);
       setContactPanelOpen(false);
+      setGroupInfoPanelOpen(false);
 	    }
     if (event.key !== "Escape" || !activeConversationID) {
       return;

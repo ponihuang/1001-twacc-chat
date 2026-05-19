@@ -59,6 +59,7 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 		mux.HandleFunc("POST /api/contacts", chatHandler.AddContact)
 		mux.HandleFunc("GET /api/users/search", chatHandler.SearchUsers)
 		mux.HandleFunc("GET /api/messages/search", chatHandler.SearchMessages)
+		mux.HandleFunc("GET /api/conversations/{conversation_id}/members", chatHandler.ListConversationMembers)
 		mux.HandleFunc("GET /api/conversations/{conversation_id}/messages", chatHandler.ListMessages)
 		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages", chatHandler.SendMessage)
 		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages/{message_id}/recall", chatHandler.RecallMessage)

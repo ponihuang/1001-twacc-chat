@@ -13,6 +13,7 @@ type mockRepository struct {
 	messages             map[int64][]Message
 	searchUsers          []UserSearchResult
 	searchMessages       []Message
+	members              []ConversationMember
 	firstUnreadMessageID int64
 	searchUserID         int64
 	searchSourceSystem   string
@@ -39,6 +40,8 @@ type mockRepository struct {
 	groupName            string
 	groupMembers         []GroupMemberRequest
 	groupErr             error
+	listMembersID        int64
+	listMembersErr       error
 }
 
 type readMarker struct {
@@ -99,6 +102,14 @@ func (m *mockRepository) ListMessages(conversationID int64, limit int) ([]Messag
 		messages = messages[len(messages)-limit:]
 	}
 	return messages, nil
+}
+
+func (m *mockRepository) ListConversationMembers(conversationID int64) ([]ConversationMember, error) {
+	m.listMembersID = conversationID
+	if m.listMembersErr != nil {
+		return nil, m.listMembersErr
+	}
+	return append([]ConversationMember(nil), m.members...), nil
 }
 
 func (m *mockRepository) SearchMessages(userID int64, query string, limit int) ([]Message, error) {
@@ -479,6 +490,40 @@ func TestListMessagesRejectsMissingConversation(t *testing.T) {
 	_, _, err := service.ListMessages(9, SessionPrincipal{UserID: 7})
 	if !errors.Is(err, ErrConversationNotFound) {
 		t.Fatalf("expected ErrConversationNotFound, got %v", err)
+	}
+}
+
+func TestListConversationMembers(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 31): {ID: 31, Type: "group", Title: "測試群組"},
+		},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "u7", DisplayName: "王小明", Role: "owner"},
+			{UserID: 8, SourceSystem: "erp", ExternalUserID: "u8", DisplayName: "陳小華", Role: "member"},
+		},
+	}
+	service := NewService(repo, nil)
+
+	resp, status, err := service.ListConversationMembers(SessionPrincipal{UserID: 7}, 31)
+	if err != nil {
+		t.Fatalf("ListConversationMembers returned error: %v", err)
+	}
+	if status != 200 || !resp.Success {
+		t.Fatalf("unexpected response status=%d resp=%+v", status, resp)
+	}
+	data, ok := resp.Data.(ConversationMembersData)
+	if !ok {
+		t.Fatalf("response data type = %T, want ConversationMembersData", resp.Data)
+	}
+	if repo.listMembersID != 31 {
+		t.Fatalf("listMembersID = %d, want 31", repo.listMembersID)
+	}
+	if data.ConversationID != 31 || data.Title != "測試群組" || data.MemberCount != 2 {
+		t.Fatalf("unexpected members data: %+v", data)
+	}
+	if len(data.Members) != 2 || data.Members[0].Role != "owner" || data.Members[1].ExternalUserID != "u8" {
+		t.Fatalf("unexpected members: %+v", data.Members)
 	}
 }
 

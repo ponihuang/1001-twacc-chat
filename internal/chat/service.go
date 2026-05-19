@@ -186,6 +186,52 @@ func (s *Service) ListConversations(actor SessionPrincipal) (Response, int, erro
 	return Response{Success: true, Code: "CONVERSATIONS_OK", Message: "对话列表读取成功", Data: items}, 200, nil
 }
 
+// ListConversationMembers returns member data for a conversation visible to the actor.
+func (s *Service) ListConversationMembers(actor SessionPrincipal, conversationID int64) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if conversationID <= 0 {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+
+	conversation, err := s.repo.GetConversationForUser(actor.UserID, conversationID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	members, err := s.repo.ListConversationMembers(conversationID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	items := make([]ConversationMemberItem, 0, len(members))
+	for _, member := range members {
+		items = append(items, ConversationMemberItem{
+			UserID:         member.UserID,
+			SourceSystem:   member.SourceSystem,
+			ExternalUserID: member.ExternalUserID,
+			DisplayName:    member.DisplayName,
+			Role:           member.Role,
+		})
+	}
+
+	return Response{
+		Success: true,
+		Code:    "CONVERSATION_MEMBERS_OK",
+		Message: "成员列表读取成功",
+		Data: ConversationMembersData{
+			ConversationID: conversation.ID,
+			Type:           conversation.Type,
+			Title:          conversation.Title,
+			MemberCount:    len(items),
+			Members:        items,
+		},
+	}, 200, nil
+}
+
 // SearchUsers returns active users matching the query for direct conversation creation.
 func (s *Service) SearchUsers(actor SessionPrincipal, sourceSystem, query string) (Response, int, error) {
 	if s == nil || s.repo == nil {

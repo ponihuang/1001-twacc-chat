@@ -244,6 +244,44 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 }
 ```
 
+### `GET /api/conversations/{conversation_id}/members`
+
+用途：
+
+- 取得群組或對話的成員列表
+- 桌機版點選群組對話上方標題區後，右側群組資訊面板會使用此 API 顯示成員
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 必須是該對話成員
+- 回傳成員依 `owner`、`admin`、一般成員排序
+
+成功回應草案：
+
+```json
+{
+  "success": true,
+  "code": "CONVERSATION_MEMBERS_OK",
+  "message": "成員列表讀取成功",
+  "data": {
+    "conversation_id": 123,
+    "type": "group",
+    "title": "採購小組",
+    "member_count": 3,
+    "members": [
+      {
+        "user_id": 7,
+        "source_system": "erp",
+        "external_user_id": "user_a",
+        "display_name": "王小明",
+        "role": "owner"
+      }
+    ]
+  }
+}
+```
+
 ### `POST /api/contacts`
 
 用途：

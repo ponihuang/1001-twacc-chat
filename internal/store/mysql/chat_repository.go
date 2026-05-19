@@ -417,6 +417,42 @@ func (r *ChatRepository) ListConversationMemberIDs(conversationID int64) ([]int6
 	return userIDs, rows.Err()
 }
 
+// ListConversationMembers returns active user details for all members in a conversation.
+func (r *ChatRepository) ListConversationMembers(conversationID int64) ([]chat.ConversationMember, error) {
+	rows, err := r.db.Query(`
+		SELECT u.id,
+		       u.source_system,
+		       u.external_user_id,
+		       u.display_name,
+		       cm.role
+		  FROM conversation_members cm
+		  JOIN users u ON u.id = cm.user_id
+		 WHERE cm.conversation_id = ?
+		   AND u.status = 'active'
+		 ORDER BY
+		   CASE cm.role
+		     WHEN 'owner' THEN 0
+		     WHEN 'admin' THEN 1
+		     ELSE 2
+		   END,
+		   cm.id ASC`, conversationID)
+	if err != nil {
+		return nil, fmt.Errorf("list conversation member details: %w", err)
+	}
+	defer rows.Close()
+
+	members := make([]chat.ConversationMember, 0)
+	for rows.Next() {
+		var item chat.ConversationMember
+		if err := rows.Scan(&item.UserID, &item.SourceSystem, &item.ExternalUserID, &item.DisplayName, &item.Role); err != nil {
+			return nil, fmt.Errorf("scan conversation member details: %w", err)
+		}
+		members = append(members, item)
+	}
+
+	return members, rows.Err()
+}
+
 // GetConversationForUser returns conversation metadata if the user belongs to the conversation.
 func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (chat.Conversation, error) {
 	var conversation chat.Conversation

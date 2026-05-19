@@ -221,6 +221,33 @@ type ContactListData struct {
 	Contacts []ContactData `json:"contacts"`
 }
 
+// ConversationMember stores a visible member in a conversation.
+type ConversationMember struct {
+	UserID         int64
+	SourceSystem   string
+	ExternalUserID string
+	DisplayName    string
+	Role           string
+}
+
+// ConversationMemberItem is the API-facing conversation member payload.
+type ConversationMemberItem struct {
+	UserID         int64  `json:"user_id"`
+	SourceSystem   string `json:"source_system"`
+	ExternalUserID string `json:"external_user_id"`
+	DisplayName    string `json:"display_name"`
+	Role           string `json:"role"`
+}
+
+// ConversationMembersData is the API-facing payload for a conversation's members.
+type ConversationMembersData struct {
+	ConversationID int64                    `json:"conversation_id"`
+	Type           string                   `json:"type"`
+	Title          string                   `json:"title"`
+	MemberCount    int                      `json:"member_count"`
+	Members        []ConversationMemberItem `json:"members"`
+}
+
 // SentMessageData is the API-facing payload for a newly created message.
 type SentMessageData struct {
 	ConversationID int64       `json:"conversation_id"`
@@ -257,6 +284,7 @@ type Repository interface {
 	CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error)
 	CreateGroupConversation(actorUserID int64, name string, members []GroupMemberRequest) (Conversation, error)
 	ListConversationMemberIDs(conversationID int64) ([]int64, error)
+	ListConversationMembers(conversationID int64) ([]ConversationMember, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
 	ListMessages(conversationID int64, limit int) ([]Message, error)
 	FirstUnreadMessageID(userID, conversationID int64) (int64, error)
