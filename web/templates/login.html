@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=forgot-password-click-20260519a">
-  <script defer src="/static/auth.js?v=forgot-password-click-20260519a"></script>
+  <link rel="stylesheet" href="/static/app.css?v=login-field-error-20260520a">
+  <script defer src="/static/auth.js?v=login-field-error-20260520a"></script>
 </head>
 <body class="login-page">
   <main class="login-shell" data-auth-app data-login-redirect="/chat" data-redirect-when-authenticated="/chat">
@@ -21,7 +21,8 @@
         <input id="external-user-id" class="text-input" name="external_user_id" placeholder="例如：asq" autocomplete="username" required>
 
         <label class="field-label" for="login-password">密碼</label>
-        <input id="login-password" class="text-input" name="password" type="password" minlength="4" maxlength="20" pattern="[A-Za-z0-9!-/:-@\[-`{-~]{4,20}" autocomplete="current-password" title="密碼需為 4 到 20 碼，只能包含英文、數字或特殊符號" required>
+        <input id="login-password" class="text-input" name="password" type="password" minlength="4" maxlength="20" pattern="[A-Za-z0-9!-/:-@\[-`{-~]{4,20}" autocomplete="current-password" title="密碼需為 4 到 20 碼，只能包含英文、數字或特殊符號" aria-describedby="login-field-error" required>
+        <div id="login-field-error" class="login-field-error" data-login-field-error role="alert" hidden>帳號或密碼錯誤</div>
 
         <input id="source-system" type="hidden" name="source_system" value="erp">
         <input id="device-id" type="hidden" name="device_id">

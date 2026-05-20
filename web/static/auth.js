@@ -12,6 +12,7 @@
   const sourceSystemInput = app.querySelector("#source-system");
   const externalUserIDInput = app.querySelector("#external-user-id");
   const passwordInput = app.querySelector("#login-password");
+  const loginFieldError = app.querySelector("[data-login-field-error]");
   const deviceIDInput = app.querySelector("#device-id");
   const integrationTokenInput = app.querySelector("#integration-token");
   const forgotPasswordToggle = app.querySelector("[data-forgot-password-toggle]");
@@ -122,6 +123,19 @@
     };
   }
 
+  function setLoginFieldError(message) {
+    if (!loginFieldError) {
+      return;
+    }
+    const hasError = Boolean(message);
+    loginFieldError.textContent = message || "";
+    loginFieldError.hidden = !hasError;
+    externalUserIDInput.classList.toggle("is-error", hasError);
+    passwordInput.classList.toggle("is-error", hasError);
+    externalUserIDInput.setAttribute("aria-invalid", hasError ? "true" : "false");
+    passwordInput.setAttribute("aria-invalid", hasError ? "true" : "false");
+  }
+
   function renderSessionState() {
     const session = readSession();
     deviceIDInput.value = session.deviceID || generateDeviceID();
@@ -216,6 +230,7 @@
 
   async function submitLogin(event) {
     event.preventDefault();
+    setLoginFieldError("");
 
     const payload = {
       source_system: sourceSystemInput.value.trim(),
@@ -240,7 +255,7 @@
       }
 
       if (!responseData.response.ok || !responseData.result.success || !responseData.result.token) {
-        throw new Error(responseData.result.message || "登入失敗");
+        throw new Error("帳號或密碼錯誤");
       }
 
       localStorage.setItem(storageKeys.token, responseData.result.token);
@@ -258,6 +273,7 @@
       statusNode.textContent = error.message || "登入失敗";
       statusNode.classList.remove("is-success");
       statusNode.classList.add("is-error");
+      setLoginFieldError(error.message || "帳號或密碼錯誤");
     }
   }
 
@@ -282,6 +298,11 @@
   }
 
   loginForm.addEventListener("submit", submitLogin);
+  [externalUserIDInput, passwordInput].forEach(function (input) {
+    input.addEventListener("input", function () {
+      setLoginFieldError("");
+    });
+  });
   logoutButtons.forEach(function (button) {
     button.addEventListener("click", logout);
   });

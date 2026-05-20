@@ -2193,6 +2193,29 @@ strong {
   box-shadow: 0 0 0 3px rgba(165, 63, 43, 0.08);
 }
 
+.text-input.is-error {
+  border-color: rgba(165, 63, 43, 0.72);
+  background: rgba(165, 63, 43, 0.04);
+}
+
+.text-input.is-error:focus {
+  border-color: rgba(165, 63, 43, 0.82);
+  box-shadow: 0 0 0 3px rgba(165, 63, 43, 0.12);
+}
+
+.login-field-error {
+  min-height: 18px;
+  margin-top: -4px;
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.login-field-error[hidden] {
+  display: none;
+}
+
 .auth-actions {
   display: flex;
   gap: 10px;
@@ -2402,10 +2425,6 @@ strong {
 
 .chat-topbar-title.is-clickable {
   cursor: pointer;
-}
-
-.chat-topbar-title.is-clickable:hover strong {
-  color: var(--accent-strong);
 }
 
 .chat-topbar-title:disabled {
