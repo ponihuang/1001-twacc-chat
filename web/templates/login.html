@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=root-login-20260506b">
-  <script defer src="/static/auth.js?v=root-login-20260506b"></script>
+  <link rel="stylesheet" href="/static/app.css?v=forgot-password-click-20260519a">
+  <script defer src="/static/auth.js?v=forgot-password-click-20260519a"></script>
 </head>
 <body class="login-page">
   <main class="login-shell" data-auth-app data-login-redirect="/chat" data-redirect-when-authenticated="/chat">
@@ -30,10 +30,15 @@
         <div class="auth-actions">
           <button type="submit" class="primary-button">登入</button>
         </div>
-        <div class="auth-status" data-auth-status>尚未登入</div>
+        <div class="auth-status" data-auth-status hidden>尚未登入</div>
       </form>
 
-      <section class="login-session-summary" aria-live="polite">
+      <div class="forgot-password">
+        <button type="button" class="forgot-password-trigger" data-forgot-password-toggle aria-describedby="forgot-password-help" aria-expanded="false">忘記密碼</button>
+        <span id="forgot-password-help" class="forgot-password-hint" data-forgot-password-hint role="status" hidden>請聯繫客服</span>
+      </div>
+
+      <section class="login-session-summary" aria-live="polite" hidden>
         <strong data-login-state>未登入</strong>
         <span data-token-state>尚未保存 session token</span>
       </section>

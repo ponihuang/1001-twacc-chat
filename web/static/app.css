@@ -193,6 +193,55 @@ strong {
   border-top: 1px solid var(--line);
 }
 
+.login-session-summary[hidden] {
+  display: none;
+}
+
+.forgot-password {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.forgot-password-trigger {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.forgot-password-trigger:hover,
+.forgot-password-trigger[aria-expanded="true"] {
+  color: var(--accent-strong);
+}
+
+.forgot-password-hint {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: max-content;
+  padding: 5px 9px;
+  border: 1px solid rgba(92, 75, 57, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 700;
+  box-shadow: 0 10px 28px rgba(36, 24, 16, 0.12);
+}
+
+.forgot-password-hint[hidden] {
+  display: none;
+}
+
 .overview-page {
   min-height: 100vh;
   padding: 32px;
@@ -2181,6 +2230,10 @@ strong {
   padding-top: 4px;
   font-size: 0.92rem;
   color: var(--muted);
+}
+
+.auth-status[hidden] {
+  display: none;
 }
 
 .auth-status.is-success {

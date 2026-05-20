@@ -14,6 +14,8 @@
   const passwordInput = app.querySelector("#login-password");
   const deviceIDInput = app.querySelector("#device-id");
   const integrationTokenInput = app.querySelector("#integration-token");
+  const forgotPasswordToggle = app.querySelector("[data-forgot-password-toggle]");
+  const forgotPasswordHint = app.querySelector("[data-forgot-password-hint]");
 
   const storageKeys = {
     token: "twacc_chat_session_token",
@@ -271,9 +273,34 @@
     }
   }
 
+  function setForgotPasswordHintOpen(isOpen) {
+    if (!forgotPasswordToggle || !forgotPasswordHint) {
+      return;
+    }
+    forgotPasswordHint.hidden = !isOpen;
+    forgotPasswordToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
   loginForm.addEventListener("submit", submitLogin);
   logoutButtons.forEach(function (button) {
     button.addEventListener("click", logout);
   });
+  if (forgotPasswordToggle && forgotPasswordHint) {
+    forgotPasswordToggle.addEventListener("click", function (event) {
+      event.stopPropagation();
+      setForgotPasswordHintOpen(forgotPasswordHint.hidden);
+    });
+    document.addEventListener("click", function (event) {
+      if (forgotPasswordHint.hidden || forgotPasswordToggle.contains(event.target) || forgotPasswordHint.contains(event.target)) {
+        return;
+      }
+      setForgotPasswordHintOpen(false);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        setForgotPasswordHintOpen(false);
+      }
+    });
+  }
   renderSessionState();
 })();
