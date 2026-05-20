@@ -104,6 +104,7 @@
   let contactsLoadToken = 0;
   let contactKeys = new Set();
   let contactExternalIDs = new Set();
+  let contactItems = [];
   let contactsLoaded = false;
   let contactsIndexLoading = false;
 
@@ -843,6 +844,15 @@
     };
   }
 
+  function contactItemToGroupMember(item) {
+    const title = contactListTitle(item);
+    return {
+      sourceSystem: item.source_system || readSourceSystem(),
+      externalUserID: item.external_user_id || "",
+      title: title
+    };
+  }
+
   function isNewGroupMemberSelected(member) {
     const key = memberKey(member);
     return newGroupSelectedMembers.some(function (item) {
@@ -889,7 +899,7 @@
       return;
     }
     if (!newGroupSearchQuery) {
-      newGroupResultsNode.innerHTML = '<div class="new-group-empty">輸入名稱或帳號搜尋成員</div>';
+      renderNewGroupContactResults(contactItems, contactsIndexLoading);
       return;
     }
     if (loading) {
@@ -918,6 +928,58 @@
         "</button>"
       ].join("");
     }).join("");
+  }
+
+  function renderNewGroupContactResults(items, loading) {
+    if (!newGroupResultsNode) {
+      return;
+    }
+    if (loading) {
+      newGroupResultsNode.innerHTML = '<div class="new-group-empty">載入聯絡人中...</div>';
+      return;
+    }
+    if (!items.length) {
+      newGroupResultsNode.innerHTML = '<div class="new-group-empty">尚未加入聯絡人，可輸入名稱或帳號搜尋成員</div>';
+      return;
+    }
+    newGroupResultsNode.innerHTML = items.map(function (item) {
+      const member = contactItemToGroupMember(item);
+      const selected = isNewGroupMemberSelected(member);
+      const initial = (member.title || member.externalUserID || "U").slice(0, 1).toUpperCase();
+      return [
+        '<button type="button" class="new-group-member' + (selected ? " is-selected" : "") + '"',
+        ' data-new-group-source="' + escapeHTML(member.sourceSystem) + '"',
+        ' data-new-group-id="' + escapeHTML(member.externalUserID) + '"',
+        ' data-new-group-title="' + escapeHTML(member.title) + '">',
+        '<span class="new-group-member-check" aria-hidden="true"></span>',
+        '<span class="new-group-member-avatar">' + escapeHTML(initial) + "</span>",
+        '<span class="new-group-member-text">',
+        "<strong>" + escapeHTML(member.title) + "</strong>",
+        "<small>@" + escapeHTML(member.externalUserID) + "</small>",
+        "</span>",
+        "</button>"
+      ].join("");
+    }).join("");
+  }
+
+  async function renderNewGroupDefaultContacts() {
+    if (newGroupSearchQuery) {
+      return;
+    }
+    if (contactsLoaded) {
+      renderNewGroupContactResults(contactItems, false);
+      return;
+    }
+    renderNewGroupContactResults([], true);
+    const contacts = await fetchContacts(0);
+    if (newGroupSearchQuery) {
+      return;
+    }
+    if (contacts) {
+      renderNewGroupContactResults(contacts, false);
+      return;
+    }
+    renderNewGroupContactResults([], false);
   }
 
   async function searchNewGroupUsers() {
@@ -1153,6 +1215,7 @@
     if (!headers) {
       contactKeys = new Set();
       contactExternalIDs = new Set();
+      contactItems = [];
       contactsLoaded = false;
       contactsIndexLoading = false;
       updateContactActions();
@@ -1179,6 +1242,7 @@
     }
     if (!response.ok || !result.success) {
       contactsIndexLoading = false;
+      contactItems = [];
       if (contactsList && requestToken === contactsLoadToken) {
         contactsList.innerHTML = '<div class="contacts-empty is-error">' + escapeHTML(result.message || "聯絡人載入失敗") + '</div>';
       }
@@ -1186,6 +1250,7 @@
     }
     const data = result.data || {};
     const contacts = data.contacts || [];
+    contactItems = contacts;
     contactKeys = new Set(contacts.map(function (item) {
       return contactKey(item.source_system, item.external_user_id);
     }));
@@ -2430,6 +2495,7 @@
       loadContacts();
     }
     if (detail.view === "new-group" && newGroupSearchInput) {
+      renderNewGroupDefaultContacts();
       window.requestAnimationFrame(function () {
         newGroupSearchInput.focus();
       });
