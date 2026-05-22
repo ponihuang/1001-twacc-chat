@@ -232,6 +232,83 @@ func (s *Service) ListConversationMembers(actor SessionPrincipal, conversationID
 	}, 200, nil
 }
 
+// AddConversationMembers adds members to a group visible to the actor.
+func (s *Service) AddConversationMembers(actor SessionPrincipal, conversationID int64, req AddConversationMembersRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if conversationID <= 0 {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+	conversation, err := s.repo.GetConversationForUser(actor.UserID, conversationID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if conversation.Type != "group" {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+	members := normalizedGroupMembers(req.Members)
+	if len(members) == 0 {
+		return Response{}, statusCode(ErrGroupMemberRequired), ErrGroupMemberRequired
+	}
+	addedIDs, err := s.repo.AddConversationMembers(conversationID, members)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if s.broker != nil && len(addedIDs) > 0 {
+		s.broker.PublishToUsers(addedIDs, RealtimeEvent{
+			EventType:      "conversation.ready",
+			ConversationID: conversationID,
+		})
+	}
+	return s.ListConversationMembers(actor, conversationID)
+}
+
+// RemoveConversationMember removes a member from a group when the actor can manage it.
+func (s *Service) RemoveConversationMember(actor SessionPrincipal, conversationID int64, req RemoveConversationMemberRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if conversationID <= 0 {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+	conversation, err := s.repo.GetConversationForUser(actor.UserID, conversationID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if conversation.Type != "group" {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+	sourceSystem := strings.TrimSpace(req.SourceSystem)
+	externalUserID := strings.TrimSpace(req.ExternalUserID)
+	if sourceSystem == "" || externalUserID == "" {
+		return Response{}, statusCode(ErrTargetUserNotFound), ErrTargetUserNotFound
+	}
+
+	removedID, err := s.repo.RemoveConversationMember(conversationID, actor.UserID, sourceSystem, externalUserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if s.broker != nil {
+		memberIDs, err := s.repo.ListConversationMemberIDs(conversationID)
+		if err != nil {
+			return Response{}, 500, err
+		}
+		memberIDs = append(memberIDs, removedID)
+		s.broker.PublishToUsers(memberIDs, RealtimeEvent{
+			EventType:      "conversation.members.updated",
+			ConversationID: conversationID,
+		})
+	}
+	return s.ListConversationMembers(actor, conversationID)
+}
+
 // SearchUsers returns active users matching the query for direct conversation creation.
 func (s *Service) SearchUsers(actor SessionPrincipal, sourceSystem, query string) (Response, int, error) {
 	if s == nil || s.repo == nil {

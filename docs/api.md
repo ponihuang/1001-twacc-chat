@@ -282,6 +282,61 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 }
 ```
 
+### `POST /api/conversations/{conversation_id}/members`
+
+用途：
+
+- 將聯絡人加入既有群組對話
+- 桌機版群組資訊面板右下角「新增成員」按鈕會開啟成員選擇頁，送出後呼叫此 API
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 必須是該群組成員
+- 目前先允許群組內成員新增其他 active 使用者，後續可再補 owner/admin 權限限制
+- 重複加入既有成員會被忽略，不會重複寫入
+- 新增成功後回傳更新後的成員列表
+
+請求草案：
+
+```json
+{
+  "members": [
+    {
+      "source_system": "erp",
+      "external_user_id": "user_b"
+    }
+  ]
+}
+```
+
+成功回應草案同 `GET /api/conversations/{conversation_id}/members`。
+
+### `DELETE /api/conversations/{conversation_id}/members`
+
+用途：
+
+- 從既有群組對話移除一位成員
+- 桌機版群組資訊面板內，對成員點選右鍵後可執行「從群組中移除」
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 必須是該群組的 `owner` 或 `admin`
+- 不允許移除群組擁有者，也不允許透過此操作移除自己
+- 移除成功後回傳更新後的成員列表
+
+請求草案：
+
+```json
+{
+  "source_system": "erp",
+  "external_user_id": "user_b"
+}
+```
+
+成功回應草案同 `GET /api/conversations/{conversation_id}/members`。
+
 ### `POST /api/contacts`
 
 用途：

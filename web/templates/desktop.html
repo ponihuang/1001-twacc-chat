@@ -9,7 +9,7 @@
   <script defer src="/static/sidebar-nav.js?v=contacts-page-20260516a"></script>
   <script defer src="/static/settings-panel.js?v=folder-save-20260516a"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
-  <script defer src="/static/chat-app.js?v=new-group-contacts-20260520a"></script>
+  <script defer src="/static/chat-app.js?v=group-member-update-20260521a"></script>
 </head>
 <body class="desktop-page" data-require-auth-redirect="/login">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -458,9 +458,9 @@
       <aside class="group-info-panel" data-group-info-panel hidden>
         <header class="group-info-header">
           <button type="button" class="group-info-close" data-group-info-close aria-label="關閉群組資訊">×</button>
-          <strong>群組資訊</strong>
+          <strong data-group-info-heading>群組資訊</strong>
         </header>
-        <section class="group-info-body">
+        <section class="group-info-body" data-group-info-body>
           <div class="group-info-avatar" data-group-info-avatar>G</div>
           <strong data-group-info-title>群組</strong>
           <small data-group-info-count>0 位成員</small>
@@ -470,6 +470,30 @@
           <div class="group-info-members" data-group-info-members>
             <div class="group-info-empty">尚未載入成員</div>
           </div>
+          <button type="button" class="group-info-add-button" data-group-info-add aria-label="新增成員">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M19 8v6"></path>
+              <path d="M22 11h-6"></path>
+            </svg>
+          </button>
+        </section>
+        <section class="group-add-members" data-group-add-members hidden>
+          <div class="group-add-picker">
+            <div class="group-add-selected" data-group-add-selected hidden></div>
+            <label class="group-add-search" aria-label="新增成員">
+              <input type="search" data-group-add-search placeholder="新增人員..." autocomplete="off">
+            </label>
+          </div>
+          <div class="group-add-list" data-group-add-results>
+            <div class="group-info-empty">載入聯絡人中...</div>
+          </div>
+          <button type="button" class="group-add-submit" data-group-add-submit aria-label="新增成員" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m9 18 6-6-6-6"></path>
+            </svg>
+          </button>
         </section>
       </aside>
     </section>

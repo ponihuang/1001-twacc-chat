@@ -41,6 +41,9 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 	mux.HandleFunc("GET /embed/chat", func(w http.ResponseWriter, r *http.Request) {
 		embedHandler(w, r, pages)
 	})
+	mux.HandleFunc("GET /admin/login", adminLoginHandler)
+	mux.HandleFunc("GET /admin/dashboard", adminDashboardHandler)
+	mux.Handle("GET /admin/static/", http.StripPrefix("/admin/static/", http.FileServer(http.Dir("chat_admin/static"))))
 	mux.HandleFunc("GET /healthz", healthHandler)
 	if integrationHandler != nil {
 		mux.HandleFunc("POST /api/erp/register", integrationHandler.Register)
@@ -60,6 +63,8 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 		mux.HandleFunc("GET /api/users/search", chatHandler.SearchUsers)
 		mux.HandleFunc("GET /api/messages/search", chatHandler.SearchMessages)
 		mux.HandleFunc("GET /api/conversations/{conversation_id}/members", chatHandler.ListConversationMembers)
+		mux.HandleFunc("POST /api/conversations/{conversation_id}/members", chatHandler.AddConversationMembers)
+		mux.HandleFunc("DELETE /api/conversations/{conversation_id}/members", chatHandler.RemoveConversationMember)
 		mux.HandleFunc("GET /api/conversations/{conversation_id}/messages", chatHandler.ListMessages)
 		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages", chatHandler.SendMessage)
 		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages/{message_id}/recall", chatHandler.RecallMessage)
@@ -131,4 +136,27 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+func adminLoginHandler(w http.ResponseWriter, _ *http.Request) {
+	data := pageData{Title: "系統管理後台 - 登入"}
+	renderAdminTemplate(w, "admin-login.html", data)
+}
+
+func adminDashboardHandler(w http.ResponseWriter, _ *http.Request) {
+	data := pageData{Title: "管理儀表板"}
+	renderAdminTemplate(w, "admin-dashboard.html", data)
+}
+
+func renderAdminTemplate(w http.ResponseWriter, name string, data pageData) {
+	tmpl, err := template.ParseFiles(filepath.Join("chat_admin", "templates", name))
+	if err != nil {
+		http.Error(w, "template error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		http.Error(w, "render error", http.StatusInternalServerError)
+		return
+	}
 }

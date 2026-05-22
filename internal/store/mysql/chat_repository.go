@@ -397,6 +397,118 @@ func (r *ChatRepository) CreateGroupConversation(actorUserID int64, name string,
 	return r.GetConversationForUser(actorUserID, conversationID)
 }
 
+// AddConversationMembers adds active users to an existing conversation.
+func (r *ChatRepository) AddConversationMembers(conversationID int64, members []chat.GroupMemberRequest) ([]int64, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin add conversation members: %w", err)
+	}
+	defer tx.Rollback()
+
+	addedIDs := make([]int64, 0, len(members))
+	seenIDs := make(map[int64]struct{})
+	for _, member := range members {
+		var userID int64
+		err := tx.QueryRow(`
+			SELECT id
+			  FROM users
+			 WHERE source_system = ?
+			   AND external_user_id = ?
+			   AND status = 'active'
+			 LIMIT 1`, member.SourceSystem, member.ExternalUserID).Scan(&userID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, chat.ErrTargetUserNotFound
+			}
+			return nil, fmt.Errorf("find conversation member: %w", err)
+		}
+		if _, ok := seenIDs[userID]; ok {
+			continue
+		}
+		seenIDs[userID] = struct{}{}
+		result, err := tx.Exec(`
+			INSERT IGNORE INTO conversation_members (conversation_id, user_id, role)
+			VALUES (?, ?, 'member')`, conversationID, userID)
+		if err != nil {
+			return nil, fmt.Errorf("insert conversation member: %w", err)
+		}
+		if rowsAffected, _ := result.RowsAffected(); rowsAffected > 0 {
+			addedIDs = append(addedIDs, userID)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit add conversation members: %w", err)
+	}
+	return addedIDs, nil
+}
+
+// RemoveConversationMember removes a non-owner member when the actor can manage the group.
+func (r *ChatRepository) RemoveConversationMember(conversationID, actorUserID int64, sourceSystem, externalUserID string) (int64, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("begin remove conversation member: %w", err)
+	}
+	defer tx.Rollback()
+
+	var actorRole string
+	if err := tx.QueryRow(`
+		SELECT role
+		  FROM conversation_members
+		 WHERE conversation_id = ?
+		   AND user_id = ?
+		 LIMIT 1`, conversationID, actorUserID).Scan(&actorRole); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, chat.ErrConversationNotFound
+		}
+		return 0, fmt.Errorf("find actor member role: %w", err)
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return 0, chat.ErrInsufficientRole
+	}
+
+	var targetUserID int64
+	var targetRole string
+	if err := tx.QueryRow(`
+		SELECT u.id, cm.role
+		  FROM users u
+		  JOIN conversation_members cm ON cm.user_id = u.id
+		 WHERE cm.conversation_id = ?
+		   AND u.source_system = ?
+		   AND u.external_user_id = ?
+		   AND u.status = 'active'
+		 LIMIT 1`, conversationID, sourceSystem, externalUserID).Scan(&targetUserID, &targetRole); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, chat.ErrTargetUserNotFound
+		}
+		return 0, fmt.Errorf("find target member: %w", err)
+	}
+	if targetUserID == actorUserID || targetRole == "owner" {
+		return 0, chat.ErrInsufficientRole
+	}
+
+	result, err := tx.Exec(`
+		DELETE FROM conversation_members
+		 WHERE conversation_id = ?
+		   AND user_id = ?
+		   AND role <> 'owner'`, conversationID, targetUserID)
+	if err != nil {
+		return 0, fmt.Errorf("remove conversation member: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("remove conversation member rows: %w", err)
+	}
+	if affected == 0 {
+		return 0, chat.ErrTargetUserNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit remove conversation member: %w", err)
+	}
+	return targetUserID, nil
+}
+
 // ListConversationMemberIDs returns all user IDs in a conversation.
 func (r *ChatRepository) ListConversationMemberIDs(conversationID int64) ([]int64, error) {
 	rows, err := r.db.Query(`SELECT user_id FROM conversation_members WHERE conversation_id = ? ORDER BY id ASC`, conversationID)

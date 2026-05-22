@@ -45,10 +45,18 @@
   const groupInfoOpenButton = app.querySelector("[data-group-info-open]");
   const groupInfoPanel = app.querySelector("[data-group-info-panel]");
   const groupInfoClose = app.querySelector("[data-group-info-close]");
+  const groupInfoHeading = app.querySelector("[data-group-info-heading]");
+  const groupInfoBody = app.querySelector("[data-group-info-body]");
   const groupInfoAvatar = app.querySelector("[data-group-info-avatar]");
   const groupInfoTitle = app.querySelector("[data-group-info-title]");
   const groupInfoCount = app.querySelector("[data-group-info-count]");
   const groupInfoMembers = app.querySelector("[data-group-info-members]");
+  const groupInfoAddButton = app.querySelector("[data-group-info-add]");
+  const groupAddMembers = app.querySelector("[data-group-add-members]");
+  const groupAddSelectedNode = app.querySelector("[data-group-add-selected]");
+  const groupAddSearchInput = app.querySelector("[data-group-add-search]");
+  const groupAddResultsNode = app.querySelector("[data-group-add-results]");
+  const groupAddSubmitButton = app.querySelector("[data-group-add-submit]");
   const contactMenuToggle = app.querySelector("[data-contact-menu-toggle]");
   const contactMenu = app.querySelector("[data-contact-menu]");
   const contactPanel = app.querySelector("[data-contact-panel]");
@@ -79,6 +87,14 @@
   const replySenderNode = app.querySelector("[data-reply-sender]");
   const replyExcerptNode = app.querySelector("[data-reply-excerpt]");
   const replyCancelButton = app.querySelector("[data-reply-cancel]");
+  const groupMemberMenu = document.createElement("div");
+  groupMemberMenu.className = "group-member-menu";
+  groupMemberMenu.hidden = true;
+  groupMemberMenu.innerHTML = [
+    '<button type="button" data-group-member-action="message">發送訊息</button>',
+    '<button type="button" data-group-member-action="remove">從群組中移除</button>'
+  ].join("");
+  document.body.appendChild(groupMemberMenu);
 
   let conversations = [];
   let activeConversationID = 0;
@@ -101,6 +117,11 @@
   let replyMessage = null;
   let newGroupSearchQuery = "";
   let newGroupSelectedMembers = [];
+  let groupInfoMemberKeys = new Set();
+  let groupInfoActorRole = "";
+  let groupAddSearchQuery = "";
+  let groupAddSelectedMembers = [];
+  let groupMemberMenuTarget = null;
   let contactsLoadToken = 0;
   let contactKeys = new Set();
   let contactExternalIDs = new Set();
@@ -243,6 +264,28 @@
     }
   }
 
+  function setGroupMemberMenuOpen(isOpen, x, y, target) {
+    if (!isOpen || !target) {
+      groupMemberMenu.hidden = true;
+      groupMemberMenuTarget = null;
+      return;
+    }
+    groupMemberMenuTarget = target;
+    const removeButton = groupMemberMenu.querySelector('[data-group-member-action="remove"]');
+    const canRemove = (groupInfoActorRole === "owner" || groupInfoActorRole === "admin")
+      && target.role !== "owner"
+      && !target.isSelf;
+    if (removeButton) {
+      removeButton.hidden = !canRemove;
+    }
+    groupMemberMenu.hidden = false;
+    const rect = groupMemberMenu.getBoundingClientRect();
+    const left = Math.min(Math.max(8, x), window.innerWidth - rect.width - 8);
+    const top = Math.min(Math.max(8, y), window.innerHeight - rect.height - 8);
+    groupMemberMenu.style.left = left + "px";
+    groupMemberMenu.style.top = top + "px";
+  }
+
   function setGroupInfoPanelOpen(isOpen) {
     if (!groupInfoPanel) {
       return;
@@ -254,6 +297,32 @@
     }
     if (!isOpen) {
       groupInfoLoadToken += 1;
+      setGroupAddMode(false);
+      setGroupMemberMenuOpen(false);
+    }
+  }
+
+  function setGroupAddMode(isOpen) {
+    if (groupInfoClose) {
+      groupInfoClose.textContent = isOpen ? "‹" : "×";
+      groupInfoClose.setAttribute("aria-label", isOpen ? "返回群組資訊" : "關閉群組資訊");
+    }
+    if (groupInfoBody) {
+      groupInfoBody.hidden = Boolean(isOpen);
+    }
+    if (groupAddMembers) {
+      groupAddMembers.hidden = !isOpen;
+    }
+    if (groupInfoHeading) {
+      groupInfoHeading.textContent = isOpen ? "新增成員" : "群組資訊";
+    }
+    if (!isOpen) {
+      groupAddSearchQuery = "";
+      groupAddSelectedMembers = [];
+      if (groupAddSearchInput) {
+        groupAddSearchInput.value = "";
+      }
+      renderGroupAddSelectedMembers();
     }
   }
 
@@ -326,7 +395,7 @@
 
   function memberRoleLabel(role) {
     if (role === "owner") {
-      return "群主";
+      return "擁有者";
     }
     if (role === "admin") {
       return "管理員";
@@ -351,27 +420,58 @@
       return;
     }
     if (!members.length) {
+      groupInfoMemberKeys = new Set();
+      groupInfoActorRole = "";
       groupInfoMembers.innerHTML = '<div class="group-info-empty">目前沒有成員資料</div>';
       return;
     }
+    const actorSource = String(readSourceSystem() || "").trim();
+    const actorExternalID = String(readExternalUserID() || "").trim().toLowerCase();
+    groupInfoActorRole = "";
+    groupInfoMemberKeys = new Set(members.map(function (member) {
+      const memberSource = String(member.source_system || readSourceSystem()).trim();
+      const memberExternalID = String(member.external_user_id || "").trim().toLowerCase();
+      if (memberSource === actorSource && memberExternalID === actorExternalID) {
+        groupInfoActorRole = member.role || "";
+      }
+      return memberKey({
+        sourceSystem: memberSource,
+        externalUserID: member.external_user_id || ""
+      });
+    }));
     groupInfoMembers.innerHTML = members.map(function (member) {
       const name = escapeHTML(member.display_name || member.external_user_id || "成員");
       const account = member.external_user_id ? "@" + member.external_user_id : memberRoleLabel(member.role);
       const initial = (member.display_name || member.external_user_id || "?").slice(0, 1).toUpperCase();
-      return '<button type="button" class="group-info-member" data-group-member-source="' + escapeHTML(member.source_system || readSourceSystem()) + '" data-group-member-external="' + escapeHTML(member.external_user_id || "") + '" data-group-member-title="' + escapeHTML(member.display_name || member.external_user_id || "成員") + '">'
+      const source = member.source_system || readSourceSystem();
+      const externalID = member.external_user_id || "";
+      const isSelf = String(source || "").trim() === actorSource && String(externalID || "").trim().toLowerCase() === actorExternalID;
+      const roleBadge = member.role === "owner"
+        ? '<span class="group-info-member-role">' + escapeHTML(memberRoleLabel(member.role)) + '</span>'
+        : "";
+      return '<button type="button" class="group-info-member" data-group-member-source="' + escapeHTML(source) + '" data-group-member-external="' + escapeHTML(externalID) + '" data-group-member-title="' + escapeHTML(member.display_name || member.external_user_id || "成員") + '" data-group-member-role="' + escapeHTML(member.role || "") + '" data-group-member-self="' + (isSelf ? "1" : "0") + '">'
         + '<div class="group-info-member-avatar">' + escapeHTML(initial) + '</div>'
         + '<div class="group-info-member-text">'
         + '<strong>' + name + '</strong>'
         + '<small>' + escapeHTML(account) + '</small>'
         + '</div>'
+        + roleBadge
         + '</button>';
     }).join("");
   }
 
   function openGroupMemberConversation(button) {
-    const sourceSystem = String(button.dataset.groupMemberSource || readSourceSystem()).trim();
-    const externalUserID = String(button.dataset.groupMemberExternal || "").trim();
-    const title = String(button.dataset.groupMemberTitle || externalUserID || "成員").trim();
+    openGroupMemberDirect({
+      sourceSystem: button.dataset.groupMemberSource || readSourceSystem(),
+      externalUserID: button.dataset.groupMemberExternal || "",
+      title: button.dataset.groupMemberTitle || button.dataset.groupMemberExternal || "成員"
+    });
+  }
+
+  function openGroupMemberDirect(member) {
+    const sourceSystem = String(member.sourceSystem || readSourceSystem()).trim();
+    const externalUserID = String(member.externalUserID || "").trim();
+    const title = String(member.title || externalUserID || "成員").trim();
     if (!externalUserID) {
       return;
     }
@@ -387,6 +487,31 @@
       externalUserID: externalUserID,
       title: title
     });
+  }
+
+  async function removeGroupMember(member) {
+    const headers = authHeaders();
+    const group = activeGroupConversation();
+    if (!headers || !group || !member || !member.externalUserID) {
+      return;
+    }
+    setMessageStatus("移除成員中...", false);
+    const response = await fetch("/api/conversations/" + group.conversation_id + "/members", {
+      method: "DELETE",
+      headers: headers,
+      body: JSON.stringify({
+        source_system: member.sourceSystem || readSourceSystem(),
+        external_user_id: member.externalUserID
+      })
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      setMessageStatus(result.message || "移除成員失敗。", true);
+      return;
+    }
+    renderGroupInfo(result.data || {});
+    setMessageStatus("成員已移除。", false);
+    refreshConversationListOnly();
   }
 
   async function loadGroupInfo() {
@@ -420,6 +545,140 @@
       return;
     }
     renderGroupInfo(result.data || {});
+  }
+
+  function isExistingGroupMember(member) {
+    return groupInfoMemberKeys.has(memberKey(member));
+  }
+
+  function isGroupAddMemberSelected(member) {
+    const key = memberKey(member);
+    return groupAddSelectedMembers.some(function (item) {
+      return memberKey(item) === key;
+    });
+  }
+
+  function updateGroupAddSelectedMember(member, selected) {
+    const key = memberKey(member);
+    groupAddSelectedMembers = groupAddSelectedMembers.filter(function (item) {
+      return memberKey(item) !== key;
+    });
+    if (selected) {
+      groupAddSelectedMembers.push(member);
+    }
+    renderGroupAddSelectedMembers();
+  }
+
+  function renderGroupAddSelectedMembers() {
+    if (!groupAddSelectedNode || !groupAddSubmitButton) {
+      return;
+    }
+    groupAddSelectedNode.hidden = !groupAddSelectedMembers.length;
+    groupAddSubmitButton.disabled = !groupAddSelectedMembers.length;
+    groupAddSelectedNode.innerHTML = groupAddSelectedMembers.map(function (member) {
+      const title = member.title || member.externalUserID || "使用者";
+      const initial = title.slice(0, 1).toUpperCase();
+      return [
+        '<span class="new-group-selected-chip" data-group-add-selected-key="' + escapeHTML(memberKey(member)) + '">',
+        '<span class="new-group-selected-avatar">' + escapeHTML(initial) + "</span>",
+        "<span>" + escapeHTML(title) + "</span>",
+        '<button type="button" aria-label="移除 ' + escapeHTML(title) + '">×</button>',
+        "</span>"
+      ].join("");
+    }).join("");
+  }
+
+  function renderGroupAddResults(items, loading) {
+    if (!groupAddResultsNode) {
+      return;
+    }
+    if (loading) {
+      groupAddResultsNode.innerHTML = '<div class="group-info-empty">載入聯絡人中...</div>';
+      return;
+    }
+    const query = String(groupAddSearchQuery || "").replace(/^@+/, "").trim().toLowerCase();
+    const visibleItems = items.filter(function (item) {
+      const member = contactItemToGroupMember(item);
+      const haystack = [member.title, member.externalUserID].join(" ").toLowerCase();
+      return !isExistingGroupMember(member) && (!query || haystack.includes(query));
+    });
+    if (!visibleItems.length) {
+      groupAddResultsNode.innerHTML = '<div class="group-info-empty">沒有可新增的聯絡人</div>';
+      return;
+    }
+    groupAddResultsNode.innerHTML = visibleItems.map(function (item) {
+      const member = contactItemToGroupMember(item);
+      const selected = isGroupAddMemberSelected(member);
+      const initial = (member.title || member.externalUserID || "U").slice(0, 1).toUpperCase();
+      return [
+        '<button type="button" class="new-group-member' + (selected ? " is-selected" : "") + '"',
+        ' data-group-add-source="' + escapeHTML(member.sourceSystem) + '"',
+        ' data-group-add-id="' + escapeHTML(member.externalUserID) + '"',
+        ' data-group-add-title="' + escapeHTML(member.title) + '">',
+        '<span class="new-group-member-check" aria-hidden="true"></span>',
+        '<span class="new-group-member-avatar">' + escapeHTML(initial) + "</span>",
+        '<span class="new-group-member-text">',
+        "<strong>" + escapeHTML(member.title) + "</strong>",
+        "<small>@" + escapeHTML(member.externalUserID) + "</small>",
+        "</span>",
+        "</button>"
+      ].join("");
+    }).join("");
+  }
+
+  async function openGroupAddMembers() {
+    if (!activeGroupConversation()) {
+      return;
+    }
+    setGroupAddMode(true);
+    renderGroupAddSelectedMembers();
+    renderGroupAddResults(contactItems, !contactsLoaded);
+    const contacts = await fetchContacts(0);
+    if (!groupAddMembers || groupAddMembers.hidden) {
+      return;
+    }
+    renderGroupAddResults(contacts || contactItems, false);
+    if (groupAddSearchInput) {
+      window.requestAnimationFrame(function () {
+        groupAddSearchInput.focus();
+      });
+    }
+  }
+
+  async function addSelectedMembersToActiveGroup() {
+    const headers = authHeaders();
+    const group = activeGroupConversation();
+    if (!headers || !group || !groupAddSelectedMembers.length) {
+      return;
+    }
+    if (groupAddSubmitButton) {
+      groupAddSubmitButton.disabled = true;
+    }
+    setMessageStatus("新增成員中...", false);
+    const response = await fetch("/api/conversations/" + group.conversation_id + "/members", {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify({
+        members: groupAddSelectedMembers.map(function (member) {
+          return {
+            source_system: member.sourceSystem,
+            external_user_id: member.externalUserID
+          };
+        })
+      })
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      setMessageStatus(result.message || "新增成員失敗。", true);
+      renderGroupAddSelectedMembers();
+      return;
+    }
+    groupAddSelectedMembers = [];
+    renderGroupAddSelectedMembers();
+    setGroupAddMode(false);
+    renderGroupInfo(result.data || {});
+    setMessageStatus("成員已新增。", false);
+    refreshConversationListOnly();
   }
 
   function activeConversationTitle() {
@@ -1138,19 +1397,45 @@
       setMessageStatus(result.message || "加入聯絡人失敗。", true);
       return;
     }
-    contactKeys.add(contactKey(peer.sourceSystem, peer.externalUserID));
-    contactExternalIDs.add(String(peer.externalUserID || "").trim().toLowerCase());
-    contactsLoaded = true;
+    rememberContactItem(result.data || {
+      source_system: peer.sourceSystem,
+      external_user_id: peer.externalUserID,
+      display_name: peer.title,
+      alias_name: contactAliasName ? contactAliasName.value.trim() : "",
+      status: "active"
+    });
     setContactPanelOpen(false);
     updateContactActions();
+    const refreshedContacts = await fetchContacts(0);
+    const latestContacts = refreshedContacts || contactItems;
     if (sidebarShell && sidebarShell.dataset.sidebarView === "contacts") {
-      loadContacts();
+      renderContacts(latestContacts, false);
+    }
+    if (groupAddMembers && !groupAddMembers.hidden) {
+      renderGroupAddResults(latestContacts, false);
     }
     setMessageStatus("已加入聯絡人。", false);
   }
 
   function contactListTitle(item) {
     return item.alias_name || item.display_name || item.external_user_id || "聯絡人";
+  }
+
+  function rememberContactItem(item) {
+    if (!item || !item.external_user_id) {
+      return;
+    }
+    const key = contactKey(item.source_system, item.external_user_id);
+    contactItems = contactItems.filter(function (contact) {
+      return contactKey(contact.source_system, contact.external_user_id) !== key;
+    });
+    contactItems.push(item);
+    contactItems.sort(function (a, b) {
+      return contactListTitle(a).localeCompare(contactListTitle(b), "zh-Hant");
+    });
+    contactKeys.add(key);
+    contactExternalIDs.add(String(item.external_user_id || "").trim().toLowerCase());
+    contactsLoaded = true;
   }
 
   function renderContacts(items, loading) {
@@ -1974,6 +2259,30 @@
     renderConversationList(items);
   }
 
+  async function handleConversationMembersUpdated(conversationID) {
+    const updatedConversationID = Number(conversationID || 0);
+    const wasActive = updatedConversationID && updatedConversationID === activeConversationID;
+    const items = await fetchConversationItems();
+    if (!items) {
+      return;
+    }
+    renderConversationList(items);
+    const stillVisible = !updatedConversationID || items.some(function (item) {
+      return Number(item.conversation_id || 0) === updatedConversationID;
+    });
+    if (wasActive && !stillVisible) {
+      closeActiveConversation();
+      setMessageStatus("你已不在此群組。", false);
+      return;
+    }
+    if (wasActive) {
+      await loadMessages(activeConversationID, false);
+    }
+    if (wasActive && groupInfoPanel && !groupInfoPanel.hidden) {
+      loadGroupInfo();
+    }
+  }
+
   async function loadMessages(conversationID, refreshListAfterRead) {
     const headers = authHeaders();
     if (!headers || !conversationID) {
@@ -1994,6 +2303,10 @@
     }
     if (!response.ok || !result.success) {
       setMessageStatus(result.message || "訊息讀取失敗。", true);
+      if (result.code === "CONVERSATION_NOT_FOUND") {
+        closeActiveConversation();
+        setMessageStatus("你已不在此群組。", false);
+      }
       return;
     }
 
@@ -2060,6 +2373,11 @@
 
     if (event.event_type === "conversation.ready") {
       loadConversations();
+      return;
+    }
+
+    if (event.event_type === "conversation.members.updated") {
+      handleConversationMembersUpdated(event.conversation_id);
       return;
     }
 
@@ -2431,8 +2749,58 @@
 
   if (groupInfoClose) {
     groupInfoClose.addEventListener("click", function () {
+      if (groupAddMembers && !groupAddMembers.hidden) {
+        setGroupAddMode(false);
+        return;
+      }
       setGroupInfoPanelOpen(false);
     });
+  }
+
+  if (groupInfoAddButton) {
+    groupInfoAddButton.addEventListener("click", openGroupAddMembers);
+  }
+
+  if (groupAddSearchInput) {
+    groupAddSearchInput.addEventListener("input", function () {
+      groupAddSearchQuery = groupAddSearchInput.value.trim();
+      renderGroupAddResults(contactItems, !contactsLoaded);
+    });
+  }
+
+  if (groupAddResultsNode) {
+    groupAddResultsNode.addEventListener("click", function (event) {
+      const memberButton = event.target.closest("[data-group-add-id]");
+      if (!memberButton) {
+        return;
+      }
+      const member = {
+        sourceSystem: memberButton.dataset.groupAddSource || readSourceSystem(),
+        externalUserID: memberButton.dataset.groupAddId || "",
+        title: memberButton.dataset.groupAddTitle || ""
+      };
+      updateGroupAddSelectedMember(member, !isGroupAddMemberSelected(member));
+      renderGroupAddResults(contactItems, !contactsLoaded);
+    });
+  }
+
+  if (groupAddSelectedNode) {
+    groupAddSelectedNode.addEventListener("click", function (event) {
+      const removeButton = event.target.closest("button");
+      const chip = event.target.closest("[data-group-add-selected-key]");
+      if (!removeButton || !chip) {
+        return;
+      }
+      groupAddSelectedMembers = groupAddSelectedMembers.filter(function (member) {
+        return memberKey(member) !== chip.dataset.groupAddSelectedKey;
+      });
+      renderGroupAddSelectedMembers();
+      renderGroupAddResults(contactItems, !contactsLoaded);
+    });
+  }
+
+  if (groupAddSubmitButton) {
+    groupAddSubmitButton.addEventListener("click", addSelectedMembersToActiveGroup);
   }
 
   if (groupInfoMembers) {
@@ -2441,9 +2809,52 @@
       if (!memberButton || !groupInfoMembers.contains(memberButton)) {
         return;
       }
+      setGroupMemberMenuOpen(false);
       openGroupMemberConversation(memberButton);
     });
+    groupInfoMembers.addEventListener("contextmenu", function (event) {
+      const memberButton = event.target.closest("[data-group-member-external]");
+      if (!memberButton || !groupInfoMembers.contains(memberButton)) {
+        return;
+      }
+      event.preventDefault();
+      setGroupMemberMenuOpen(true, event.clientX + 8, event.clientY + 8, {
+        sourceSystem: memberButton.dataset.groupMemberSource || readSourceSystem(),
+        externalUserID: memberButton.dataset.groupMemberExternal || "",
+        title: memberButton.dataset.groupMemberTitle || memberButton.dataset.groupMemberExternal || "成員",
+        role: memberButton.dataset.groupMemberRole || "",
+        isSelf: memberButton.dataset.groupMemberSelf === "1"
+      });
+    });
   }
+
+  groupMemberMenu.addEventListener("click", function (event) {
+    const actionButton = event.target.closest("[data-group-member-action]");
+    const target = groupMemberMenuTarget;
+    if (!actionButton || !target) {
+      return;
+    }
+    const action = actionButton.dataset.groupMemberAction;
+    setGroupMemberMenuOpen(false);
+    if (action === "message") {
+      openGroupMemberDirect(target);
+    }
+    if (action === "remove") {
+      removeGroupMember(target);
+    }
+  });
+
+  document.addEventListener("click", function (event) {
+    if (!groupMemberMenu.hidden && !groupMemberMenu.contains(event.target)) {
+      setGroupMemberMenuOpen(false);
+    }
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      setGroupMemberMenuOpen(false);
+    }
+  });
 
   if (mobileChatBackButton) {
     mobileChatBackButton.addEventListener("click", function () {

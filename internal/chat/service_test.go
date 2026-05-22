@@ -40,6 +40,13 @@ type mockRepository struct {
 	groupName            string
 	groupMembers         []GroupMemberRequest
 	groupErr             error
+	addedMembers         []GroupMemberRequest
+	addedMemberIDs       []int64
+	addMembersErr        error
+	removedMemberID      int64
+	removedSourceSystem  string
+	removedExternalID    string
+	removeMemberErr      error
 	listMembersID        int64
 	listMembersErr       error
 }
@@ -184,6 +191,29 @@ func (m *mockRepository) CreateGroupConversation(actorUserID int64, name string,
 		return m.groupConversation, nil
 	}
 	return Conversation{ID: 25, Type: "group", Title: name}, nil
+}
+
+func (m *mockRepository) AddConversationMembers(conversationID int64, members []GroupMemberRequest) ([]int64, error) {
+	if m.addMembersErr != nil {
+		return nil, m.addMembersErr
+	}
+	m.listMembersID = conversationID
+	m.addedMembers = append([]GroupMemberRequest(nil), members...)
+	return append([]int64(nil), m.addedMemberIDs...), nil
+}
+
+func (m *mockRepository) RemoveConversationMember(conversationID, actorUserID int64, sourceSystem, externalUserID string) (int64, error) {
+	if m.removeMemberErr != nil {
+		return 0, m.removeMemberErr
+	}
+	m.listMembersID = conversationID
+	m.searchUserID = actorUserID
+	m.removedSourceSystem = sourceSystem
+	m.removedExternalID = externalUserID
+	if m.removedMemberID != 0 {
+		return m.removedMemberID, nil
+	}
+	return 8, nil
 }
 
 func (m *mockRepository) ListConversationMemberIDs(conversationID int64) ([]int64, error) {
@@ -524,6 +554,81 @@ func TestListConversationMembers(t *testing.T) {
 	}
 	if len(data.Members) != 2 || data.Members[0].Role != "owner" || data.Members[1].ExternalUserID != "u8" {
 		t.Fatalf("unexpected members: %+v", data.Members)
+	}
+}
+
+func TestAddConversationMembers(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 31): {ID: 31, Type: "group", Title: "測試群組"},
+		},
+		addedMemberIDs: []int64{8},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "u7", DisplayName: "王小明", Role: "owner"},
+			{UserID: 8, SourceSystem: "erp", ExternalUserID: "u8", DisplayName: "陳小華", Role: "member"},
+		},
+	}
+	broker := &mockBroker{}
+	service := NewService(repo, broker)
+
+	resp, status, err := service.AddConversationMembers(SessionPrincipal{UserID: 7}, 31, AddConversationMembersRequest{
+		Members: []GroupMemberRequest{{SourceSystem: "erp", ExternalUserID: "u8"}},
+	})
+	if err != nil {
+		t.Fatalf("AddConversationMembers returned error: %v", err)
+	}
+	if status != 200 || !resp.Success {
+		t.Fatalf("unexpected response status=%d resp=%+v", status, resp)
+	}
+	if len(repo.addedMembers) != 1 || repo.addedMembers[0].ExternalUserID != "u8" {
+		t.Fatalf("unexpected added members: %+v", repo.addedMembers)
+	}
+	if broker.calls != 1 || len(broker.userIDs) != 1 || broker.userIDs[0] != 8 || broker.event.EventType != "conversation.ready" {
+		t.Fatalf("unexpected broker event: users=%+v event=%+v", broker.userIDs, broker.event)
+	}
+	data, ok := resp.Data.(ConversationMembersData)
+	if !ok || data.MemberCount != 2 {
+		t.Fatalf("unexpected response data: %#v", resp.Data)
+	}
+}
+
+func TestRemoveConversationMember(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 31): {ID: 31, Type: "group", Title: "測試群組"},
+		},
+		removedMemberID: 8,
+		memberIDs:       map[int64][]int64{31: {7, 9}},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "u7", DisplayName: "王小明", Role: "owner"},
+			{UserID: 9, SourceSystem: "erp", ExternalUserID: "u9", DisplayName: "林小美", Role: "member"},
+		},
+	}
+	broker := &mockBroker{}
+	service := NewService(repo, broker)
+
+	resp, status, err := service.RemoveConversationMember(SessionPrincipal{UserID: 7}, 31, RemoveConversationMemberRequest{
+		SourceSystem:   "erp",
+		ExternalUserID: "u8",
+	})
+	if err != nil {
+		t.Fatalf("RemoveConversationMember returned error: %v", err)
+	}
+	if status != 200 || !resp.Success {
+		t.Fatalf("unexpected response status=%d resp=%+v", status, resp)
+	}
+	if repo.removedSourceSystem != "erp" || repo.removedExternalID != "u8" {
+		t.Fatalf("unexpected removed member: source=%q external=%q", repo.removedSourceSystem, repo.removedExternalID)
+	}
+	if broker.calls != 1 || broker.event.EventType != "conversation.members.updated" {
+		t.Fatalf("unexpected broker event: users=%+v event=%+v", broker.userIDs, broker.event)
+	}
+	if len(broker.userIDs) != 3 || broker.userIDs[2] != 8 {
+		t.Fatalf("removed user should be included in broker recipients: %+v", broker.userIDs)
+	}
+	data, ok := resp.Data.(ConversationMembersData)
+	if !ok || data.MemberCount != 2 {
+		t.Fatalf("unexpected response data: %#v", resp.Data)
 	}
 }
 

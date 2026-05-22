@@ -2624,12 +2624,17 @@ strong {
 }
 
 .group-info-body {
+  position: relative;
   display: grid;
   align-content: start;
   justify-items: center;
   min-height: 0;
-  padding-top: 28px;
+  padding: 28px 0 92px;
   overflow-y: auto;
+}
+
+.group-info-body[hidden] {
+  display: none;
 }
 
 .group-info-avatar {
@@ -2688,7 +2693,7 @@ strong {
 
 .group-info-member {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr);
+  grid-template-columns: 46px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   width: 100%;
@@ -2744,9 +2749,153 @@ strong {
   font-size: 0.88rem;
 }
 
+.group-info-member-role {
+  align-self: start;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.group-member-menu {
+  position: fixed;
+  z-index: 80;
+  display: grid;
+  min-width: 180px;
+  padding: 8px;
+  border: 1px solid rgba(92, 75, 57, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 252, 247, 0.98);
+  box-shadow: 0 18px 42px rgba(42, 32, 22, 0.18);
+}
+
+.group-member-menu[hidden] {
+  display: none;
+}
+
+.group-member-menu button {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.group-member-menu button[hidden] {
+  display: none;
+}
+
+.group-member-menu button:hover {
+  background: rgba(51, 144, 236, 0.1);
+}
+
+.group-member-menu button[data-group-member-action="remove"] {
+  color: #b23a2a;
+}
+
 .group-info-empty {
   justify-self: start;
   padding: 18px 20px;
+}
+
+.group-info-add-button,
+.group-add-submit {
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 0;
+  border-radius: 999px;
+  background: #8b6ee8;
+  color: #fff;
+  box-shadow: 0 16px 34px rgba(72, 54, 130, 0.28);
+  cursor: pointer;
+}
+
+.group-info-add-button:hover,
+.group-add-submit:hover {
+  background: #795dd9;
+}
+
+.group-info-add-button svg,
+.group-add-submit svg {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.group-add-submit:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.group-add-members {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  height: 100%;
+  padding-bottom: 92px;
+}
+
+.group-add-members[hidden] {
+  display: none;
+}
+
+.group-add-picker {
+  display: grid;
+  gap: 10px;
+  min-height: 96px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(92, 75, 57, 0.1);
+  background: rgba(255, 249, 241, 0.75);
+}
+
+.group-add-selected {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.group-add-selected[hidden] {
+  display: none;
+}
+
+.group-add-search input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.group-add-search input:focus {
+  outline: 0;
+}
+
+.group-add-search input::placeholder {
+  color: var(--muted);
+}
+
+.group-add-list {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .contact-form {

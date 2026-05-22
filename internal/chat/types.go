@@ -199,6 +199,17 @@ type CreateGroupConversationRequest struct {
 	Members []GroupMemberRequest `json:"members"`
 }
 
+// AddConversationMembersRequest is the HTTP payload for adding members to a group.
+type AddConversationMembersRequest struct {
+	Members []GroupMemberRequest `json:"members"`
+}
+
+// RemoveConversationMemberRequest is the HTTP payload for removing a member from a group.
+type RemoveConversationMemberRequest struct {
+	SourceSystem   string `json:"source_system"`
+	ExternalUserID string `json:"external_user_id"`
+}
+
 // AddContactRequest is the HTTP payload for adding a user to the current user's contacts.
 type AddContactRequest struct {
 	SourceSystem   string `json:"source_system"`
@@ -283,6 +294,8 @@ type Repository interface {
 	ListContacts(actorUserID int64) ([]ContactData, error)
 	CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error)
 	CreateGroupConversation(actorUserID int64, name string, members []GroupMemberRequest) (Conversation, error)
+	AddConversationMembers(conversationID int64, members []GroupMemberRequest) ([]int64, error)
+	RemoveConversationMember(conversationID, actorUserID int64, sourceSystem, externalUserID string) (int64, error)
 	ListConversationMemberIDs(conversationID int64) ([]int64, error)
 	ListConversationMembers(conversationID int64) ([]ConversationMember, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
