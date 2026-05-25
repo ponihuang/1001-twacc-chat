@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>系統管理後台 - 登入</title>
+  <link rel="stylesheet" href="/admin/static/admin.css?v=1">
+</head>
+<body>
+  <div class="redirect-page">
+    <div class="login-panel" data-login-panel>
+      <div style="text-align: center; margin-bottom: 32px;">
+        <h1 style="margin: 0 0 8px 0; font-size: 1.5rem;">系統管理後台</h1>
+        <p style="margin: 0; color: var(--muted); font-size: 0.95rem;">TWACC 聊天系統管理員登入</p>
+      </div>
+
+      <div class="alert alert-info" id="info-message" hidden>
+        <strong>提示：</strong>
+        <span id="info-text"></span>
+      </div>
+
+      <div class="alert alert-danger" id="error-message" hidden>
+        <strong>錯誤：</strong>
+        <span id="error-text"></span>
+      </div>
+
+      <style>
+        /* 縮放登入面板，讓版面不那麼寬 */
+        .login-panel { max-width: 480px; width: 92%; padding: 20px; }
+        .login-panel h1 { font-size: 1.25rem; }
+        .form-group input { padding: 10px 12px; font-size: 0.95rem; }
+        button.btn-primary { padding: 12px; font-size: 0.98rem; }
+      </style>
+
+      <form id="login-form" style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="form-group">
+          <label for="external-user-id">帳號</label>
+          <input 
+            type="text" 
+            id="external-user-id" 
+            placeholder="請輸入帳號" 
+            required
+            autocomplete="username"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="password">密碼</label>
+          <input 
+            type="password" 
+            id="password" 
+            placeholder="請輸入密碼" 
+            required
+            autocomplete="current-password"
+          >
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">
+          <span id="btn-text">登入</span>
+          <span class="loading" id="btn-loading" hidden></span>
+        </button>
+      </form>
+
+      <hr style="margin: 24px 0; border: none; border-top: 1px solid var(--line);">
+
+      <div style="font-size: 0.85rem; color: var(--muted);">
+        <p style="margin: 0 0 8px 0;">
+          <strong>尚未是系統管理員？</strong>
+        </p>
+        <p style="margin: 0;">
+          請聯絡您的系統管理員以申請管理員帳號。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const loginForm = document.getElementById('login-form');
+    const externalUserIdInput = document.getElementById('external-user-id');
+    const passwordInput = document.getElementById('password');
+    const btnText = document.getElementById('btn-text');
+    const btnLoading = document.getElementById('btn-loading');
+    const errorMessage = document.getElementById('error-message');
+    const errorText = document.getElementById('error-text');
+    const infoMessage = document.getElementById('info-message');
+    const infoText = document.getElementById('info-text');
+
+    // 從 localStorage 恢復上次的使用者 ID
+    const savedUserId = localStorage.getItem('admin_external_user_id');
+    if (savedUserId) {
+      externalUserIdInput.value = savedUserId;
+    }
+    // 清除舊的來源系統設定（若有殘留）
+    try { localStorage.removeItem('admin_source_system'); } catch(e) {}
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+        const externalUserId = externalUserIdInput.value.trim();
+        const password = passwordInput.value;
+
+      if (!externalUserId || !password) {
+        showError('請填寫帳號與密碼');
+        return;
+      }
+
+      // 隱藏錯誤訊息
+      errorMessage.hidden = true;
+      infoMessage.hidden = true;
+
+      // 顯示加載狀態
+      btnText.hidden = true;
+      btnLoading.hidden = false;
+      loginForm.style.opacity = '0.6';
+      loginForm.style.pointerEvents = 'none';
+
+      try {
+        // 產生一個裝置 ID 給後端（後台登入只需帳號/密碼，使用隨機裝置 ID 作為占位）
+        const deviceId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('admin-' + Math.random().toString(36).slice(2, 12));
+
+        const response = await fetch('/admin/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            source_system: 'erp',
+            external_user_id: externalUserId,
+            password: password,
+            device_id: deviceId
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          showError(data.message || '登入失敗，請檢查您的認證資訊');
+          return;
+        }
+
+        // 登入成功 — 支援多種回應格式（兼容 top-level token 和 data 下的欄位）
+        const sessionToken = data.token || data.data?.session_token || data.data?.token;
+        const userId = data.data?.user_id || data.user_id || data.data?.userId;
+        const isAdmin = (data.data && (data.data.role === 'system_admin' || data.data.is_system_admin)) || (data.is_system_admin === true);
+
+        if (!sessionToken) {
+          showError('無效的登入回應，請稍後重試');
+          return;
+        }
+
+        if (!isAdmin) {
+          showError('您的帳號不是系統管理員，無法存取此系統');
+          return;
+        }
+
+        // 儲存 session token
+        localStorage.setItem('admin_session_token', sessionToken);
+        localStorage.setItem('admin_user_id', userId);
+        localStorage.setItem('admin_external_user_id', externalUserId);
+
+        // 導向儀表板
+        window.location.href = '/admin/dashboard';
+      } catch (err) {
+        showError('[錯誤] ' + (err.message || '網路連接失敗，請檢查您的連接'));
+      } finally {
+        // 恢復按鈕狀態
+        btnText.hidden = false;
+        btnLoading.hidden = true;
+        loginForm.style.opacity = '1';
+        loginForm.style.pointerEvents = 'auto';
+      }
+    });
+
+    function showError(message) {
+      errorText.textContent = message;
+      errorMessage.hidden = false;
+    }
+
+    // 響應式調整
+    if (window.innerWidth < 600) {
+      loginForm.style.padding = '0';
+    }
+  </script>
+</body>
+</html>
