@@ -1,7 +1,12 @@
 package httpx
 
 import (
+	"bytes"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"html/template"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -21,57 +26,22 @@ func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiCon
 		IntegrationSharedToken: strings.TrimSpace(uiConfig.IntegrationSharedToken),
 	}
 
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
-	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(filepath.Join("web", "uploads")))))
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		rootHandler(w, r, pages)
-	})
-	mux.HandleFunc("GET /home", func(w http.ResponseWriter, r *http.Request) {
-		indexHandler(w, r, pages)
-	})
-	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
-		loginHandler(w, r, pages)
-	})
-	mux.HandleFunc("GET /chat", func(w http.ResponseWriter, r *http.Request) {
-		desktopHandler(w, r, pages)
-	})
-	mux.HandleFunc("GET /m/chat", func(w http.ResponseWriter, r *http.Request) {
-		mobileHandler(w, r, pages)
-	})
-	mux.HandleFunc("GET /embed/chat", func(w http.ResponseWriter, r *http.Request) {
-		embedHandler(w, r, pages)
-	})
-	mux.HandleFunc("GET /admin/login", adminLoginHandler)
-	mux.HandleFunc("GET /admin/dashboard", adminDashboardHandler)
-	mux.Handle("GET /admin/static/", http.StripPrefix("/admin/static/", http.FileServer(http.Dir("chat_admin/static"))))
-	mux.HandleFunc("GET /healthz", healthHandler)
-	if integrationHandler != nil {
-		mux.HandleFunc("POST /api/erp/register", integrationHandler.Register)
-		mux.HandleFunc("POST /api/erp/login", integrationHandler.Login)
-		mux.HandleFunc("GET /api/system-admin/users/{user_id}/devices", integrationHandler.ListDevices)
-		mux.HandleFunc("PUT /api/system-admin/users/{user_id}/ip-whitelist", integrationHandler.UpdateIPWhitelist)
-		mux.HandleFunc("PATCH /api/users/me/profile", integrationHandler.UpdateProfile)
-		mux.HandleFunc("POST /api/users/{user_id}/devices/{device_id}/approve", integrationHandler.ApproveDevice)
-	}
-	if chatHandler != nil {
-		mux.HandleFunc("GET /ws", chatHandler.ServeWebSocket)
-		mux.HandleFunc("GET /api/conversations", chatHandler.ListConversations)
-		mux.HandleFunc("POST /api/conversations/direct", chatHandler.CreateDirectConversation)
-		mux.HandleFunc("POST /api/conversations/group", chatHandler.CreateGroupConversation)
-		mux.HandleFunc("GET /api/contacts", chatHandler.ListContacts)
-		mux.HandleFunc("POST /api/contacts", chatHandler.AddContact)
-		mux.HandleFunc("GET /api/users/search", chatHandler.SearchUsers)
-		mux.HandleFunc("GET /api/messages/search", chatHandler.SearchMessages)
-		mux.HandleFunc("GET /api/conversations/{conversation_id}/members", chatHandler.ListConversationMembers)
-		mux.HandleFunc("POST /api/conversations/{conversation_id}/members", chatHandler.AddConversationMembers)
-		mux.HandleFunc("DELETE /api/conversations/{conversation_id}/members", chatHandler.RemoveConversationMember)
-		mux.HandleFunc("GET /api/conversations/{conversation_id}/messages", chatHandler.ListMessages)
-		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages", chatHandler.SendMessage)
-		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages/{message_id}/recall", chatHandler.RecallMessage)
-		mux.HandleFunc("DELETE /api/conversations/{conversation_id}/messages/{message_id}", chatHandler.DeleteMessage)
-	}
+	// register routes split between chat (frontend/API) and admin
+	registerChatRoutes(mux, integrationHandler, chatHandler, pages)
+	registerAdminRoutes(mux, integrationHandler, pages)
 
 	return mux
+}
+
+func methodHandler(method string, handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != method {
+			w.Header().Set("Allow", method)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		handler(w, r)
+	}
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request, data pageData) {
@@ -136,6 +106,75 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+func adminLoginProxyHandler(handler *erp.Handler, sharedToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Ensure we preserve and possibly augment the JSON request body
+		// so that downstream integration.Login receives a device_id.
+		if r.Body != nil {
+			body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+			_ = r.Body.Close()
+			if err == nil && len(body) > 0 {
+				var payload map[string]any
+				if json.Unmarshal(body, &payload) == nil {
+					if _, ok := payload["device_id"]; !ok {
+						// generate a short random device id
+						b := make([]byte, 8)
+						if _, err := rand.Read(b); err == nil {
+							payload["device_id"] = "admin-" + hex.EncodeToString(b)
+						} else {
+							payload["device_id"] = "admin-unknown"
+						}
+						if nb, err := json.Marshal(payload); err == nil {
+							r.Body = io.NopCloser(bytes.NewReader(nb))
+							r.ContentLength = int64(len(nb))
+						} else {
+							r.Body = io.NopCloser(bytes.NewReader(body))
+						}
+					} else {
+						r.Body = io.NopCloser(bytes.NewReader(body))
+					}
+				} else {
+					// not JSON or unmarshal failed, restore original body
+					r.Body = io.NopCloser(bytes.NewReader(body))
+				}
+			} else {
+				// empty body: create minimal JSON with a device_id
+				payload := map[string]any{"device_id": "admin-unknown"}
+				if nb, err := json.Marshal(payload); err == nil {
+					r.Body = io.NopCloser(bytes.NewReader(nb))
+					r.ContentLength = int64(len(nb))
+				}
+			}
+		}
+
+		if handler == nil {
+			writeJSONResponse(w, http.StatusServiceUnavailable, map[string]any{"success": false, "code": "SERVICE_UNAVAILABLE", "message": "服务尚未完成初始化"})
+			return
+		}
+
+		if strings.TrimSpace(sharedToken) == "" {
+			writeJSONResponse(w, http.StatusInternalServerError, map[string]any{"success": false, "code": "INTEGRATION_TOKEN_MISSING", "message": "服务尚未配置对接凭证"})
+			return
+		}
+
+		r.Header.Set("Authorization", "Bearer "+strings.TrimSpace(sharedToken))
+		handler.Login(w, r)
+	}
+}
+
+func writeJSONResponse(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	if payload == nil {
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	_, _ = w.Write(data)
 }
 
 func adminLoginHandler(w http.ResponseWriter, _ *http.Request) {
