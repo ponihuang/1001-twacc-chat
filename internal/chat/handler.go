@@ -238,6 +238,39 @@ func (h *Handler) ListConversationMembers(w http.ResponseWriter, r *http.Request
 	writeJSON(w, status, resp)
 }
 
+// UpdateConversation handles PATCH /api/conversations/{conversation_id}.
+func (h *Handler) UpdateConversation(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	actor, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	conversationID, err := strconv.ParseInt(strings.TrimSpace(r.PathValue("conversation_id")), 10, 64)
+	if err != nil || conversationID <= 0 {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "conversation_id 格式错误"})
+		return
+	}
+
+	var req UpdateConversationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, svcErr := h.service.UpdateConversation(actor, conversationID, req)
+	if svcErr != nil {
+		writeJSON(w, status, errorResponse(svcErr))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // AddConversationMembers handles POST /api/conversations/{conversation_id}/members.
 func (h *Handler) AddConversationMembers(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {

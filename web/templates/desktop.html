@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=group-member-chat-20260519a">
+  <link rel="stylesheet" href="/static/app.css?v=group-info-actions-20260523a">
   <script defer src="/static/page-auth-guard.js?v=auth-guard-20260511a"></script>
   <script defer src="/static/sidebar-nav.js?v=contacts-page-20260516a"></script>
   <script defer src="/static/settings-panel.js?v=folder-save-20260516a"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
-  <script defer src="/static/chat-app.js?v=group-member-update-20260521a"></script>
+  <script defer src="/static/chat-app.js?v=group-info-actions-20260523a"></script>
 </head>
 <body class="desktop-page" data-require-auth-redirect="/login">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -459,11 +459,28 @@
         <header class="group-info-header">
           <button type="button" class="group-info-close" data-group-info-close aria-label="關閉群組資訊">×</button>
           <strong data-group-info-heading>群組資訊</strong>
+          <button type="button" class="group-info-edit-button" data-group-info-edit aria-label="編輯群組資訊" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path>
+              <path d="m15 5 4 4"></path>
+            </svg>
+          </button>
         </header>
         <section class="group-info-body" data-group-info-body>
           <div class="group-info-avatar" data-group-info-avatar>G</div>
           <strong data-group-info-title>群組</strong>
           <small data-group-info-count>0 位成員</small>
+          <div class="group-info-description" data-group-info-description hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M12 10v6"></path>
+              <path d="M12 7h.01"></path>
+            </svg>
+            <div class="group-info-description-text">
+              <strong data-group-info-description-text></strong>
+              <small>資訊</small>
+            </div>
+          </div>
           <div class="group-info-tabs">
             <button type="button" class="is-active">成員</button>
           </div>
@@ -492,6 +509,23 @@
           <button type="button" class="group-add-submit" data-group-add-submit aria-label="新增成員" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m9 18 6-6-6-6"></path>
+            </svg>
+          </button>
+        </section>
+        <section class="group-edit-panel" data-group-edit-panel hidden>
+          <div class="group-edit-avatar" data-group-edit-avatar>G</div>
+          <label class="group-edit-field">
+            <span>組名</span>
+            <input type="text" data-group-edit-name maxlength="255" autocomplete="off">
+          </label>
+          <label class="group-edit-field">
+            <span>描述</span>
+            <textarea data-group-edit-description maxlength="1000" rows="3" placeholder="描述"></textarea>
+          </label>
+          <p class="group-edit-help">您可以為您的團隊提供可選的描述。</p>
+          <button type="button" class="group-edit-submit" data-group-edit-submit aria-label="儲存群組資訊" hidden disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"></path>
             </svg>
           </button>
         </section>

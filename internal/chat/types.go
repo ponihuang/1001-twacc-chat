@@ -30,9 +30,10 @@ type ConversationSummary struct {
 
 // Conversation stores the minimal metadata needed by the message list response.
 type Conversation struct {
-	ID    int64
-	Type  string
-	Title string
+	ID          int64
+	Type        string
+	Title       string
+	Description string
 }
 
 // Message stores the chat message payload returned from persistence.
@@ -199,6 +200,12 @@ type CreateGroupConversationRequest struct {
 	Members []GroupMemberRequest `json:"members"`
 }
 
+// UpdateConversationRequest is the HTTP payload for updating group conversation metadata.
+type UpdateConversationRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 // AddConversationMembersRequest is the HTTP payload for adding members to a group.
 type AddConversationMembersRequest struct {
 	Members []GroupMemberRequest `json:"members"`
@@ -255,6 +262,7 @@ type ConversationMembersData struct {
 	ConversationID int64                    `json:"conversation_id"`
 	Type           string                   `json:"type"`
 	Title          string                   `json:"title"`
+	Description    string                   `json:"description,omitempty"`
 	MemberCount    int                      `json:"member_count"`
 	Members        []ConversationMemberItem `json:"members"`
 }
@@ -294,6 +302,7 @@ type Repository interface {
 	ListContacts(actorUserID int64) ([]ContactData, error)
 	CreateOrGetDirectConversation(actorUserID int64, sourceSystem, externalUserID string) (Conversation, bool, error)
 	CreateGroupConversation(actorUserID int64, name string, members []GroupMemberRequest) (Conversation, error)
+	UpdateGroupConversation(conversationID, actorUserID int64, name, description string) (Conversation, error)
 	AddConversationMembers(conversationID int64, members []GroupMemberRequest) ([]int64, error)
 	RemoveConversationMember(conversationID, actorUserID int64, sourceSystem, externalUserID string) (int64, error)
 	ListConversationMemberIDs(conversationID int64) ([]int64, error)

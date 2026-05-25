@@ -46,10 +46,13 @@
   const groupInfoPanel = app.querySelector("[data-group-info-panel]");
   const groupInfoClose = app.querySelector("[data-group-info-close]");
   const groupInfoHeading = app.querySelector("[data-group-info-heading]");
+  const groupInfoEditButton = app.querySelector("[data-group-info-edit]");
   const groupInfoBody = app.querySelector("[data-group-info-body]");
   const groupInfoAvatar = app.querySelector("[data-group-info-avatar]");
   const groupInfoTitle = app.querySelector("[data-group-info-title]");
   const groupInfoCount = app.querySelector("[data-group-info-count]");
+  const groupInfoDescription = app.querySelector("[data-group-info-description]");
+  const groupInfoDescriptionText = app.querySelector("[data-group-info-description-text]");
   const groupInfoMembers = app.querySelector("[data-group-info-members]");
   const groupInfoAddButton = app.querySelector("[data-group-info-add]");
   const groupAddMembers = app.querySelector("[data-group-add-members]");
@@ -57,6 +60,11 @@
   const groupAddSearchInput = app.querySelector("[data-group-add-search]");
   const groupAddResultsNode = app.querySelector("[data-group-add-results]");
   const groupAddSubmitButton = app.querySelector("[data-group-add-submit]");
+  const groupEditPanel = app.querySelector("[data-group-edit-panel]");
+  const groupEditAvatar = app.querySelector("[data-group-edit-avatar]");
+  const groupEditNameInput = app.querySelector("[data-group-edit-name]");
+  const groupEditDescriptionInput = app.querySelector("[data-group-edit-description]");
+  const groupEditSubmitButton = app.querySelector("[data-group-edit-submit]");
   const contactMenuToggle = app.querySelector("[data-contact-menu-toggle]");
   const contactMenu = app.querySelector("[data-contact-menu]");
   const contactPanel = app.querySelector("[data-contact-panel]");
@@ -119,6 +127,9 @@
   let newGroupSelectedMembers = [];
   let groupInfoMemberKeys = new Set();
   let groupInfoActorRole = "";
+  let groupInfoMode = "info";
+  let groupInfoData = { title: "", description: "", memberCount: 0 };
+  let groupEditOriginal = { name: "", description: "" };
   let groupAddSearchQuery = "";
   let groupAddSelectedMembers = [];
   let groupMemberMenuTarget = null;
@@ -297,26 +308,36 @@
     }
     if (!isOpen) {
       groupInfoLoadToken += 1;
-      setGroupAddMode(false);
+      setGroupInfoMode("info");
       setGroupMemberMenuOpen(false);
     }
   }
 
-  function setGroupAddMode(isOpen) {
+  function setGroupInfoMode(mode) {
+    groupInfoMode = mode === "add" || mode === "edit" ? mode : "info";
+    const isAdd = groupInfoMode === "add";
+    const isEdit = groupInfoMode === "edit";
+    const isInfo = groupInfoMode === "info";
     if (groupInfoClose) {
-      groupInfoClose.textContent = isOpen ? "‹" : "×";
-      groupInfoClose.setAttribute("aria-label", isOpen ? "返回群組資訊" : "關閉群組資訊");
+      groupInfoClose.textContent = isInfo ? "×" : "‹";
+      groupInfoClose.setAttribute("aria-label", isInfo ? "關閉群組資訊" : "返回群組資訊");
     }
     if (groupInfoBody) {
-      groupInfoBody.hidden = Boolean(isOpen);
+      groupInfoBody.hidden = !isInfo;
     }
     if (groupAddMembers) {
-      groupAddMembers.hidden = !isOpen;
+      groupAddMembers.hidden = !isAdd;
+    }
+    if (groupEditPanel) {
+      groupEditPanel.hidden = !isEdit;
     }
     if (groupInfoHeading) {
-      groupInfoHeading.textContent = isOpen ? "新增成員" : "群組資訊";
+      groupInfoHeading.textContent = isAdd ? "新增成員" : isEdit ? "編輯" : "群組資訊";
     }
-    if (!isOpen) {
+    if (groupInfoEditButton) {
+      groupInfoEditButton.hidden = !isInfo || !canManageActiveGroup();
+    }
+    if (!isAdd) {
       groupAddSearchQuery = "";
       groupAddSelectedMembers = [];
       if (groupAddSearchInput) {
@@ -324,6 +345,18 @@
       }
       renderGroupAddSelectedMembers();
     }
+  }
+
+  function setGroupAddMode(isOpen) {
+    setGroupInfoMode(isOpen ? "add" : "info");
+  }
+
+  function setGroupEditMode(isOpen) {
+    setGroupInfoMode(isOpen ? "edit" : "info");
+  }
+
+  function canManageActiveGroup() {
+    return groupInfoActorRole === "owner" || groupInfoActorRole === "admin";
   }
 
   function updateGroupInfoAction() {
@@ -379,6 +412,7 @@
 
   function renderGroupInfoLoading(group) {
     const title = group ? group.title || "群組" : "群組";
+    groupInfoData = { title: title, description: "", memberCount: 0 };
     if (groupInfoAvatar) {
       groupInfoAvatar.textContent = title.slice(0, 1).toUpperCase() || "G";
     }
@@ -388,8 +422,17 @@
     if (groupInfoCount) {
       groupInfoCount.textContent = "載入成員中...";
     }
+    if (groupInfoDescription) {
+      groupInfoDescription.hidden = true;
+    }
+    if (groupInfoDescriptionText) {
+      groupInfoDescriptionText.textContent = "";
+    }
     if (groupInfoMembers) {
       groupInfoMembers.innerHTML = '<div class="group-info-empty">載入成員中...</div>';
+    }
+    if (groupInfoEditButton) {
+      groupInfoEditButton.hidden = true;
     }
   }
 
@@ -405,8 +448,10 @@
 
   function renderGroupInfo(data) {
     const title = data.title || activeConversationTitle() || "群組";
+    const description = data.description || "";
     const members = Array.isArray(data.members) ? data.members : [];
     const memberCount = data.member_count || members.length || 0;
+    groupInfoData = { title: title, description: description, memberCount: memberCount };
     if (groupInfoAvatar) {
       groupInfoAvatar.textContent = title.slice(0, 1).toUpperCase() || "G";
     }
@@ -416,6 +461,12 @@
     if (groupInfoCount) {
       groupInfoCount.textContent = memberCount + " 位成員";
     }
+    if (groupInfoDescription) {
+      groupInfoDescription.hidden = !description;
+    }
+    if (groupInfoDescriptionText) {
+      groupInfoDescriptionText.textContent = description;
+    }
     if (!groupInfoMembers) {
       return;
     }
@@ -423,6 +474,9 @@
       groupInfoMemberKeys = new Set();
       groupInfoActorRole = "";
       groupInfoMembers.innerHTML = '<div class="group-info-empty">目前沒有成員資料</div>';
+      if (groupInfoEditButton) {
+        groupInfoEditButton.hidden = true;
+      }
       return;
     }
     const actorSource = String(readSourceSystem() || "").trim();
@@ -439,6 +493,9 @@
         externalUserID: member.external_user_id || ""
       });
     }));
+    if (groupInfoEditButton) {
+      groupInfoEditButton.hidden = groupInfoMode !== "info" || !canManageActiveGroup();
+    }
     groupInfoMembers.innerHTML = members.map(function (member) {
       const name = escapeHTML(member.display_name || member.external_user_id || "成員");
       const account = member.external_user_id ? "@" + member.external_user_id : memberRoleLabel(member.role);
@@ -458,6 +515,88 @@
         + roleBadge
         + '</button>';
     }).join("");
+  }
+
+  function fillGroupEditPanel() {
+    const title = groupInfoData.title || activeConversationTitle() || "群組";
+    const description = groupInfoData.description || "";
+    groupEditOriginal = { name: title, description: description };
+    if (groupEditAvatar) {
+      groupEditAvatar.textContent = title.slice(0, 1).toUpperCase() || "G";
+    }
+    if (groupEditNameInput) {
+      groupEditNameInput.value = title;
+    }
+    if (groupEditDescriptionInput) {
+      groupEditDescriptionInput.value = description;
+    }
+    updateGroupEditSubmitState();
+  }
+
+  function updateGroupEditSubmitState() {
+    if (!groupEditSubmitButton) {
+      return;
+    }
+    const name = groupEditNameInput ? groupEditNameInput.value.trim() : "";
+    const description = groupEditDescriptionInput ? groupEditDescriptionInput.value.trim() : "";
+    const dirty = name !== groupEditOriginal.name || description !== groupEditOriginal.description;
+    groupEditSubmitButton.hidden = !dirty;
+    groupEditSubmitButton.disabled = !dirty || !name;
+  }
+
+  function openGroupEditPanel() {
+    if (!activeGroupConversation() || !canManageActiveGroup()) {
+      return;
+    }
+    fillGroupEditPanel();
+    setGroupEditMode(true);
+    if (groupEditNameInput) {
+      window.requestAnimationFrame(function () {
+        groupEditNameInput.focus();
+      });
+    }
+  }
+
+  async function saveGroupEdit() {
+    const headers = authHeaders();
+    const group = activeGroupConversation();
+    const name = groupEditNameInput ? groupEditNameInput.value.trim() : "";
+    const description = groupEditDescriptionInput ? groupEditDescriptionInput.value.trim() : "";
+    if (!headers || !group || !name || (groupEditSubmitButton && groupEditSubmitButton.disabled)) {
+      return;
+    }
+    if (groupEditSubmitButton) {
+      groupEditSubmitButton.disabled = true;
+    }
+    setMessageStatus("更新群組資訊中...", false);
+    const response = await fetch("/api/conversations/" + group.conversation_id, {
+      method: "PATCH",
+      headers: headers,
+      body: JSON.stringify({
+        name: name,
+        description: description
+      })
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      setMessageStatus(result.message || "群組資訊更新失敗。", true);
+      updateGroupEditSubmitState();
+      return;
+    }
+    renderGroupInfo(result.data || {});
+    if (result.data && result.data.title) {
+      const active = activeConversation();
+      if (active && active.type === "group") {
+        active.title = result.data.title;
+      }
+      if (conversationTitle) {
+        conversationTitle.textContent = result.data.title;
+      }
+      renderConversationList(conversations);
+    }
+    setGroupEditMode(false);
+    setMessageStatus("群組資訊已更新。", false);
+    refreshConversationListOnly();
   }
 
   function openGroupMemberConversation(button) {
@@ -2749,16 +2888,32 @@
 
   if (groupInfoClose) {
     groupInfoClose.addEventListener("click", function () {
-      if (groupAddMembers && !groupAddMembers.hidden) {
-        setGroupAddMode(false);
+      if (groupInfoMode !== "info") {
+        setGroupInfoMode("info");
         return;
       }
       setGroupInfoPanelOpen(false);
     });
   }
 
+  if (groupInfoEditButton) {
+    groupInfoEditButton.addEventListener("click", openGroupEditPanel);
+  }
+
   if (groupInfoAddButton) {
     groupInfoAddButton.addEventListener("click", openGroupAddMembers);
+  }
+
+  if (groupEditNameInput) {
+    groupEditNameInput.addEventListener("input", updateGroupEditSubmitState);
+  }
+
+  if (groupEditDescriptionInput) {
+    groupEditDescriptionInput.addEventListener("input", updateGroupEditSubmitState);
+  }
+
+  if (groupEditSubmitButton) {
+    groupEditSubmitButton.addEventListener("click", saveGroupEdit);
   }
 
   if (groupAddSearchInput) {

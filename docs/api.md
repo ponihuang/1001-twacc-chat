@@ -268,6 +268,7 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
     "conversation_id": 123,
     "type": "group",
     "title": "採購小組",
+    "description": "採購相關討論",
     "member_count": 3,
     "members": [
       {
@@ -281,6 +282,33 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
   }
 }
 ```
+
+### `PATCH /api/conversations/{conversation_id}`
+
+用途：
+
+- 更新群組資訊，目前支援群組名稱與描述
+- 桌機版群組資訊面板右上角編輯按鈕會開啟編輯頁，送出後呼叫此 API
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 必須是該群組的 `owner` 或 `admin`
+- 僅支援 `group` 對話，一對一對話不可透過此 API 更新
+- `name` 去除前後空白後不可為空，最長 255 字
+- `description` 可空，最長 1000 字
+- 更新成功後回傳更新後的群組資訊與成員列表
+
+請求草案：
+
+```json
+{
+  "name": "採購小組",
+  "description": "採購相關討論"
+}
+```
+
+成功回應草案同 `GET /api/conversations/{conversation_id}/members`。
 
 ### `POST /api/conversations/{conversation_id}/members`
 

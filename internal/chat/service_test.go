@@ -43,6 +43,10 @@ type mockRepository struct {
 	addedMembers         []GroupMemberRequest
 	addedMemberIDs       []int64
 	addMembersErr        error
+	updatedGroup         Conversation
+	updatedGroupName     string
+	updatedGroupDesc     string
+	updateGroupErr       error
 	removedMemberID      int64
 	removedSourceSystem  string
 	removedExternalID    string
@@ -200,6 +204,23 @@ func (m *mockRepository) AddConversationMembers(conversationID int64, members []
 	m.listMembersID = conversationID
 	m.addedMembers = append([]GroupMemberRequest(nil), members...)
 	return append([]int64(nil), m.addedMemberIDs...), nil
+}
+
+func (m *mockRepository) UpdateGroupConversation(conversationID, actorUserID int64, name, description string) (Conversation, error) {
+	if m.updateGroupErr != nil {
+		return Conversation{}, m.updateGroupErr
+	}
+	m.listMembersID = conversationID
+	m.searchUserID = actorUserID
+	m.updatedGroupName = name
+	m.updatedGroupDesc = description
+	if m.headers != nil {
+		m.headers[conversationKey(actorUserID, conversationID)] = Conversation{ID: conversationID, Type: "group", Title: name, Description: description}
+	}
+	if m.updatedGroup.ID != 0 {
+		return m.updatedGroup, nil
+	}
+	return Conversation{ID: conversationID, Type: "group", Title: name, Description: description}, nil
 }
 
 func (m *mockRepository) RemoveConversationMember(conversationID, actorUserID int64, sourceSystem, externalUserID string) (int64, error) {
@@ -588,6 +609,42 @@ func TestAddConversationMembers(t *testing.T) {
 	}
 	data, ok := resp.Data.(ConversationMembersData)
 	if !ok || data.MemberCount != 2 {
+		t.Fatalf("unexpected response data: %#v", resp.Data)
+	}
+}
+
+func TestUpdateConversationUpdatesGroupMetadata(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 31): {ID: 31, Type: "group", Title: "舊群組", Description: "舊描述"},
+		},
+		memberIDs: map[int64][]int64{31: {7, 8}},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "u7", DisplayName: "王小明", Role: "owner"},
+			{UserID: 8, SourceSystem: "erp", ExternalUserID: "u8", DisplayName: "陳小華", Role: "member"},
+		},
+	}
+	broker := &mockBroker{}
+	service := NewService(repo, broker)
+
+	resp, status, err := service.UpdateConversation(SessionPrincipal{UserID: 7}, 31, UpdateConversationRequest{
+		Name:        "新群組",
+		Description: "新描述",
+	})
+	if err != nil {
+		t.Fatalf("UpdateConversation returned error: %v", err)
+	}
+	if status != 200 || !resp.Success {
+		t.Fatalf("unexpected response status=%d resp=%+v", status, resp)
+	}
+	if repo.updatedGroupName != "新群組" || repo.updatedGroupDesc != "新描述" {
+		t.Fatalf("unexpected updated metadata: name=%q desc=%q", repo.updatedGroupName, repo.updatedGroupDesc)
+	}
+	if broker.calls != 1 || broker.event.EventType != "conversation.members.updated" || len(broker.userIDs) != 2 {
+		t.Fatalf("unexpected broker event: users=%+v event=%+v", broker.userIDs, broker.event)
+	}
+	data, ok := resp.Data.(ConversationMembersData)
+	if !ok || data.Title != "新群組" || data.Description != "新描述" {
 		t.Fatalf("unexpected response data: %#v", resp.Data)
 	}
 }

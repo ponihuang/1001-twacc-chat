@@ -509,6 +509,46 @@ func (r *ChatRepository) RemoveConversationMember(conversationID, actorUserID in
 	return targetUserID, nil
 }
 
+// UpdateGroupConversation updates group metadata when the actor can manage the group.
+func (r *ChatRepository) UpdateGroupConversation(conversationID, actorUserID int64, name, description string) (chat.Conversation, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return chat.Conversation{}, fmt.Errorf("begin update group conversation: %w", err)
+	}
+	defer tx.Rollback()
+
+	var actorRole string
+	if err := tx.QueryRow(`
+		SELECT cm.role
+		  FROM conversation_members cm
+		  JOIN conversations c ON c.id = cm.conversation_id
+		 WHERE cm.conversation_id = ?
+		   AND cm.user_id = ?
+		   AND c.type = 'group'
+		 LIMIT 1`, conversationID, actorUserID).Scan(&actorRole); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return chat.Conversation{}, chat.ErrConversationNotFound
+		}
+		return chat.Conversation{}, fmt.Errorf("find actor group role: %w", err)
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return chat.Conversation{}, chat.ErrInsufficientRole
+	}
+
+	if _, err := tx.Exec(`
+		UPDATE conversations
+		   SET name = ?, description = ?
+		 WHERE id = ?
+		   AND type = 'group'`, name, description, conversationID); err != nil {
+		return chat.Conversation{}, fmt.Errorf("update group conversation: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return chat.Conversation{}, fmt.Errorf("commit update group conversation: %w", err)
+	}
+	return r.GetConversationForUser(actorUserID, conversationID)
+}
+
 // ListConversationMemberIDs returns all user IDs in a conversation.
 func (r *ChatRepository) ListConversationMemberIDs(conversationID int64) ([]int64, error) {
 	rows, err := r.db.Query(`SELECT user_id FROM conversation_members WHERE conversation_id = ? ORDER BY id ASC`, conversationID)
@@ -586,13 +626,14 @@ func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (c
 					COALESCE(NULLIF(c.name, ''), 'Direct Conversation')
 				)
 				ELSE COALESCE(NULLIF(c.name, ''), 'Unnamed Group')
-			END AS title
+			END AS title,
+			COALESCE(c.description, '') AS description
 		  FROM conversation_members cm
 		  JOIN conversations c ON c.id = cm.conversation_id
 		 WHERE cm.user_id = ?
 		   AND c.id = ?
 		 LIMIT 1`, userID, userID, conversationID)
-	if err := row.Scan(&conversation.ID, &conversation.Type, &conversation.Title); err != nil {
+	if err := row.Scan(&conversation.ID, &conversation.Type, &conversation.Title, &conversation.Description); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return chat.Conversation{}, chat.ErrConversationNotFound
 		}

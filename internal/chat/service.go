@@ -226,10 +226,58 @@ func (s *Service) ListConversationMembers(actor SessionPrincipal, conversationID
 			ConversationID: conversation.ID,
 			Type:           conversation.Type,
 			Title:          conversation.Title,
+			Description:    conversation.Description,
 			MemberCount:    len(items),
 			Members:        items,
 		},
 	}, 200, nil
+}
+
+// UpdateConversation updates group metadata when the actor can manage it.
+func (s *Service) UpdateConversation(actor SessionPrincipal, conversationID int64, req UpdateConversationRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if conversationID <= 0 {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+	conversation, err := s.repo.GetConversationForUser(actor.UserID, conversationID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if conversation.Type != "group" {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return Response{}, statusCode(ErrGroupNameRequired), ErrGroupNameRequired
+	}
+	if len([]rune(name)) > 255 {
+		name = string([]rune(name)[:255])
+	}
+	description := strings.TrimSpace(req.Description)
+	if len([]rune(description)) > 1000 {
+		description = string([]rune(description)[:1000])
+	}
+
+	if _, err := s.repo.UpdateGroupConversation(conversationID, actor.UserID, name, description); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if s.broker != nil {
+		memberIDs, err := s.repo.ListConversationMemberIDs(conversationID)
+		if err != nil {
+			return Response{}, 500, err
+		}
+		s.broker.PublishToUsers(memberIDs, RealtimeEvent{
+			EventType:      "conversation.members.updated",
+			ConversationID: conversationID,
+		})
+	}
+	return s.ListConversationMembers(actor, conversationID)
 }
 
 // AddConversationMembers adds members to a group visible to the actor.
