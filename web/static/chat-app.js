@@ -2102,6 +2102,36 @@
     return file && (file.type.indexOf("image/") === 0 || /\.(jpg|jpeg|png)$/.test(name));
   }
 
+  function imageExtensionForMime(type) {
+    const normalized = String(type || "").toLowerCase();
+    if (normalized === "image/jpeg") {
+      return "jpg";
+    }
+    if (normalized === "image/png") {
+      return "png";
+    }
+    return "";
+  }
+
+  function normalizePastedImageFile(file, index) {
+    if (!file || !isImageFile(file)) {
+      return null;
+    }
+    const name = String(file.name || "").trim();
+    if (/\.(jpg|jpeg|png)$/i.test(name)) {
+      return file;
+    }
+    const extension = imageExtensionForMime(file.type);
+    if (!extension || typeof File !== "function") {
+      return file;
+    }
+    const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "");
+    return new File([file], "pasted-image-" + timestamp + "-" + (index + 1) + "." + extension, {
+      type: file.type || "image/" + extension,
+      lastModified: Date.now()
+    });
+  }
+
   function isImageAttachment(attachment) {
     const name = String(attachment && attachment.original_name ? attachment.original_name : "").toLowerCase();
     return !!attachment && ((attachment.mime_type || "").indexOf("image/") === 0 || /\.(jpg|jpeg|png)$/.test(name));
@@ -2261,6 +2291,61 @@
       composerFileInput.value = "";
     }
     openAttachmentDialog(acceptedFiles, kind);
+  }
+
+  function clipboardImageFiles(event) {
+    const clipboard = event.clipboardData;
+    if (!clipboard) {
+      return [];
+    }
+    const itemFiles = clipboard.items ? Array.from(clipboard.items).map(function (item) {
+      if (item.kind !== "file" || String(item.type || "").indexOf("image/") !== 0) {
+        return null;
+      }
+      return item.getAsFile();
+    }).filter(Boolean) : [];
+    const files = itemFiles.length ? itemFiles : Array.from(clipboard.files || []).filter(isImageFile);
+    return files.map(normalizePastedImageFile).filter(Boolean);
+  }
+
+  function isEditableTarget(target) {
+    if (!target || target === document.body) {
+      return false;
+    }
+    if (target.isContentEditable) {
+      return true;
+    }
+    const tagName = String(target.tagName || "").toLowerCase();
+    return tagName === "input" || tagName === "textarea" || tagName === "select";
+  }
+
+  function shouldHandlePasteUpload(target) {
+    if (!activeConversationID || attachmentDialog && !attachmentDialog.hidden) {
+      return false;
+    }
+    if (!app.contains(target)) {
+      return false;
+    }
+    if (isEditableTarget(target) && target !== composerInput) {
+      return false;
+    }
+    return true;
+  }
+
+  function handlePasteUpload(event) {
+    if (!shouldHandlePasteUpload(event.target)) {
+      return;
+    }
+    const files = clipboardImageFiles(event);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    if (composerFileInput) {
+      composerFileInput.value = "";
+    }
+    setAttachmentMenuOpen(false);
+    openAttachmentDialog(files, "photo");
   }
 
   function dragEventHasFiles(event) {
@@ -3198,6 +3283,7 @@
     syncAttachmentCaptionHeight();
   }
   if (chatShell && chatDropOverlay) {
+    chatShell.addEventListener("paste", handlePasteUpload);
     chatShell.addEventListener("dragenter", handleChatDragEnter);
     chatShell.addEventListener("dragover", handleChatDragOver);
     chatShell.addEventListener("dragleave", handleChatDragLeave);

@@ -11,5 +11,9 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# Local environment and build output
+.env
+/1001-twacc-chat
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
