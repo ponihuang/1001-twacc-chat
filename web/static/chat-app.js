@@ -88,6 +88,29 @@
   const attachmentCaption = app.querySelector("[data-attachment-caption]");
   const attachmentClose = app.querySelector("[data-attachment-close]");
   const attachmentSend = app.querySelector("[data-attachment-send]");
+  const photoEditor = app.querySelector("[data-photo-editor]");
+  const photoEditorCanvas = app.querySelector("[data-photo-editor-canvas]");
+  const photoEditorClose = app.querySelector("[data-photo-editor-close]");
+  const photoEditorApply = app.querySelector("[data-photo-editor-apply]");
+  const photoEditorReset = app.querySelector("[data-photo-editor-reset]");
+  const photoEditorUndo = app.querySelector("[data-photo-editor-undo]");
+  const photoEditorRedo = app.querySelector("[data-photo-editor-redo]");
+  const photoEditorConfirm = app.querySelector("[data-photo-editor-confirm]");
+  const photoEditorConfirmCancel = app.querySelector("[data-photo-editor-confirm-cancel]");
+  const photoEditorConfirmDiscard = app.querySelector("[data-photo-editor-confirm-discard]");
+  const photoEditorModeButtons = app.querySelectorAll("[data-photo-editor-mode]");
+  const photoEditorPanels = app.querySelectorAll("[data-photo-editor-panel]");
+  const photoRatioButtons = app.querySelectorAll("[data-photo-ratio]");
+  const photoColorButtons = app.querySelectorAll("[data-photo-color]");
+  const photoCustomColorButton = app.querySelector("[data-photo-color-custom]");
+  const photoCustomColorPanel = app.querySelector("[data-photo-custom-color]");
+  const photoColorHueInput = app.querySelector("[data-photo-color-hue]");
+  const photoColorSV = app.querySelector("[data-photo-color-sv]");
+  const photoColorSVPointer = app.querySelector("[data-photo-color-sv-pointer]");
+  const photoColorHexInput = app.querySelector("[data-photo-color-hex]");
+  const photoColorRGBInput = app.querySelector("[data-photo-color-rgb]");
+  const photoToolButtons = app.querySelectorAll("[data-photo-tool]");
+  const photoBrushSizeInput = app.querySelector("[data-photo-brush-size]");
   const chatDropOverlay = app.querySelector("[data-chat-drop-overlay]");
   const chatDropZones = app.querySelectorAll("[data-drop-kind]");
   const messageContextMenu = app.querySelector("[data-message-context-menu]");
@@ -120,6 +143,7 @@
   let selectedAttachmentKind = "document";
   let selectedAttachmentFiles = [];
   let attachmentPreviewURLs = [];
+  let photoEditorState = null;
   let dragDepth = 0;
   let contextMessage = null;
   let replyMessage = null;
@@ -139,6 +163,13 @@
   let contactItems = [];
   let contactsLoaded = false;
   let contactsIndexLoading = false;
+  const photoToolDefaultColors = {
+    pen: "#ff8a0a",
+    arrow: "#ffd21f",
+    marker: "#ff4b40",
+    blur: "#38d8d3",
+    eraser: "#ff9aa6"
+  };
 
   function readSessionToken() {
     return localStorage.getItem(storageKeys.token) || "";
@@ -2207,15 +2238,31 @@
     return "attachment-photo-grid count-" + Math.min(Math.max(count, 1), 5);
   }
 
+  function renderEditablePhoto(file, index) {
+    const url = URL.createObjectURL(file);
+    attachmentPreviewURLs.push(url);
+    return [
+      '<span class="attachment-photo-editable">',
+      '<img src="' + escapeHTML(url) + '" alt="' + escapeHTML(file.name || "photo") + '">',
+      '<button type="button" class="attachment-photo-edit-button" data-photo-edit-index="' + index + '" aria-label="編輯圖片">',
+      '<svg viewBox="0 0 24 24" aria-hidden="true">',
+      '<path d="M4 7h10"></path>',
+      '<path d="M18 7h2"></path>',
+      '<path d="M4 17h2"></path>',
+      '<path d="M10 17h10"></path>',
+      '<path d="M7 4v6"></path>',
+      '<path d="M17 14v6"></path>',
+      '</svg>',
+      '</button>',
+      '</span>'
+    ].join("");
+  }
+
   function renderAttachmentPhotoGrid(files) {
     return [
       '<div class="' + photoGridClass(files.length) + '">',
-      files.map(function (file) {
-        const url = URL.createObjectURL(file);
-        attachmentPreviewURLs.push(url);
-        return [
-          '<img src="' + escapeHTML(url) + '" alt="' + escapeHTML(file.name || "photo") + '">'
-        ].join("");
+      files.map(function (file, index) {
+        return renderEditablePhoto(file, index);
       }).join(""),
       '</div>'
     ].join("");
@@ -2238,10 +2285,7 @@
       attachmentTitle.textContent = isSingleImage || selectedAttachmentKind === "photo" ? "傳送照片" : "傳送文件";
     }
     if (isSingleImage) {
-      const file = selectedAttachmentFiles[0];
-      const previewURL = URL.createObjectURL(file);
-      attachmentPreviewURLs.push(previewURL);
-      attachmentPreview.innerHTML = '<img src="' + escapeHTML(previewURL) + '" alt="' + escapeHTML(file.name) + '">';
+      attachmentPreview.innerHTML = renderEditablePhoto(selectedAttachmentFiles[0], 0);
     } else if (isPhotoSet) {
       attachmentPreview.innerHTML = renderAttachmentPhotoGrid(selectedAttachmentFiles);
     } else if (selectedAttachmentFiles.length > 1) {
@@ -2346,6 +2390,808 @@
     }
     setAttachmentMenuOpen(false);
     openAttachmentDialog(files, "photo");
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function loadImageFromFile(file) {
+    return new Promise(function (resolve, reject) {
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = function () {
+        URL.revokeObjectURL(url);
+        resolve(image);
+      };
+      image.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error("image load failed"));
+      };
+      image.src = url;
+    });
+  }
+
+  function resetPhotoEditorAnnotation(state) {
+    state.annotationCanvas = document.createElement("canvas");
+    state.annotationCanvas.width = state.image.naturalWidth;
+    state.annotationCanvas.height = state.image.naturalHeight;
+    state.markerCanvas = document.createElement("canvas");
+    state.markerCanvas.width = state.image.naturalWidth;
+    state.markerCanvas.height = state.image.naturalHeight;
+  }
+
+  function photoEditorCanvasImageData(canvas) {
+    return canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+  }
+
+  function photoEditorSnapshot() {
+    const state = photoEditorState;
+    if (!state) {
+      return null;
+    }
+    return {
+      crop: Object.assign({}, state.crop),
+      ratio: state.ratio,
+      annotation: photoEditorCanvasImageData(state.annotationCanvas),
+      marker: state.markerCanvas ? photoEditorCanvasImageData(state.markerCanvas) : null
+    };
+  }
+
+  function restorePhotoEditorSnapshot(snapshot) {
+    const state = photoEditorState;
+    if (!state || !snapshot) {
+      return;
+    }
+    state.crop = Object.assign({}, snapshot.crop);
+    state.ratio = snapshot.ratio;
+    state.annotationCanvas.getContext("2d").putImageData(snapshot.annotation, 0, 0);
+    if (snapshot.marker && state.markerCanvas) {
+      state.markerCanvas.getContext("2d").putImageData(snapshot.marker, 0, 0);
+    }
+    photoRatioButtons.forEach(function (button) {
+      button.classList.toggle("is-active", button.dataset.photoRatio === state.ratio);
+    });
+    renderPhotoEditor();
+    updatePhotoEditorHistoryButtons();
+  }
+
+  function updatePhotoEditorHistoryButtons() {
+    if (photoEditorUndo) {
+      photoEditorUndo.disabled = !photoEditorState || !photoEditorState.undoStack.length;
+    }
+    if (photoEditorRedo) {
+      photoEditorRedo.disabled = !photoEditorState || !photoEditorState.redoStack.length;
+    }
+  }
+
+  function updatePhotoToolIcons() {
+    if (!photoEditor || !photoEditorState) {
+      return;
+    }
+    photoEditor.style.setProperty("--photo-tool-color", photoEditorState.color || "#ff4b40");
+  }
+
+  function updatePhotoBrushRange() {
+    if (!photoBrushSizeInput) {
+      return;
+    }
+    const min = Number(photoBrushSizeInput.min || 0);
+    const max = Number(photoBrushSizeInput.max || 100);
+    const value = Number(photoBrushSizeInput.value || min);
+    const progress = max > min ? ((value - min) / (max - min)) * 100 : 0;
+    photoBrushSizeInput.style.setProperty("--range-progress", Math.min(Math.max(progress, 0), 100) + "%");
+  }
+
+  function hsvToRGB(hue, saturation, value) {
+    const chroma = value * saturation;
+    const section = hue / 60;
+    const x = chroma * (1 - Math.abs(section % 2 - 1));
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    if (section >= 0 && section < 1) {
+      red = chroma;
+      green = x;
+    } else if (section < 2) {
+      red = x;
+      green = chroma;
+    } else if (section < 3) {
+      green = chroma;
+      blue = x;
+    } else if (section < 4) {
+      green = x;
+      blue = chroma;
+    } else if (section < 5) {
+      red = x;
+      blue = chroma;
+    } else {
+      red = chroma;
+      blue = x;
+    }
+    const match = value - chroma;
+    return {
+      red: Math.round((red + match) * 255),
+      green: Math.round((green + match) * 255),
+      blue: Math.round((blue + match) * 255)
+    };
+  }
+
+  function componentToHex(value) {
+    return value.toString(16).padStart(2, "0");
+  }
+
+  function rgbToHex(rgb) {
+    return "#" + componentToHex(rgb.red) + componentToHex(rgb.green) + componentToHex(rgb.blue);
+  }
+
+  function hexToRGB(hex) {
+    const normalized = String(hex || "").trim().replace(/^#/, "");
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+      return null;
+    }
+    return {
+      red: parseInt(normalized.slice(0, 2), 16),
+      green: parseInt(normalized.slice(2, 4), 16),
+      blue: parseInt(normalized.slice(4, 6), 16)
+    };
+  }
+
+  function rgbToHSV(rgb) {
+    const red = rgb.red / 255;
+    const green = rgb.green / 255;
+    const blue = rgb.blue / 255;
+    const max = Math.max(red, green, blue);
+    const min = Math.min(red, green, blue);
+    const delta = max - min;
+    let hue = 0;
+    if (delta) {
+      if (max === red) {
+        hue = 60 * (((green - blue) / delta) % 6);
+      } else if (max === green) {
+        hue = 60 * ((blue - red) / delta + 2);
+      } else {
+        hue = 60 * ((red - green) / delta + 4);
+      }
+    }
+    if (hue < 0) {
+      hue += 360;
+    }
+    return {
+      hue: Math.round(hue),
+      saturation: max ? delta / max : 0,
+      value: max
+    };
+  }
+
+  function setPhotoEditorColor(color, options) {
+    if (!photoEditorState) {
+      return;
+    }
+    photoEditorState.color = color;
+    if (photoEditorState.toolColors && photoEditorState.tool) {
+      photoEditorState.toolColors[photoEditorState.tool] = color;
+    }
+    updatePhotoToolIcons();
+    photoColorButtons.forEach(function (item) {
+      item.classList.toggle("is-active", item.dataset.photoColor === color && !(options && options.custom));
+    });
+    if (photoCustomColorButton) {
+      photoCustomColorButton.classList.toggle("is-active", Boolean(options && options.custom));
+      photoCustomColorButton.style.setProperty("--swatch", color);
+    }
+  }
+
+  function updateCustomColorUI(color) {
+    const rgb = hexToRGB(color);
+    if (!rgb) {
+      return;
+    }
+    const hsv = rgbToHSV(rgb);
+    if (photoColorHueInput) {
+      photoColorHueInput.value = String(hsv.hue);
+      photoColorHueInput.style.setProperty("--photo-color-hue", hsv.hue);
+    }
+    if (photoColorSV) {
+      photoColorSV.style.setProperty("--photo-color-hue", hsv.hue);
+      photoColorSV.style.setProperty("--photo-color-saturation", Math.round(hsv.saturation * 100));
+      photoColorSV.style.setProperty("--photo-color-value", Math.round(hsv.value * 100));
+    }
+    if (photoColorHexInput) {
+      photoColorHexInput.value = color;
+    }
+    if (photoColorRGBInput) {
+      photoColorRGBInput.value = rgb.red + ", " + rgb.green + ", " + rgb.blue;
+    }
+  }
+
+  function applyCustomHSV(saturation, value) {
+    const hue = Number(photoColorHueInput ? photoColorHueInput.value : 0);
+    const rgb = hsvToRGB(hue, saturation, value);
+    const color = rgbToHex(rgb);
+    updateCustomColorUI(color);
+    setPhotoEditorColor(color, { custom: true });
+  }
+
+  function pushPhotoEditorHistory() {
+    const state = photoEditorState;
+    const snapshot = photoEditorSnapshot();
+    if (!state || !snapshot) {
+      return;
+    }
+    state.undoStack.push(snapshot);
+    if (state.undoStack.length > 30) {
+      state.undoStack.shift();
+    }
+    state.redoStack = [];
+    state.hasChanges = true;
+    updatePhotoEditorHistoryButtons();
+  }
+
+  function undoPhotoEditorChange() {
+    const state = photoEditorState;
+    if (!state || !state.undoStack.length) {
+      return;
+    }
+    const current = photoEditorSnapshot();
+    const previous = state.undoStack.pop();
+    if (current) {
+      state.redoStack.push(current);
+    }
+    restorePhotoEditorSnapshot(previous);
+  }
+
+  function redoPhotoEditorChange() {
+    const state = photoEditorState;
+    if (!state || !state.redoStack.length) {
+      return;
+    }
+    const current = photoEditorSnapshot();
+    const next = state.redoStack.pop();
+    if (current) {
+      state.undoStack.push(current);
+    }
+    restorePhotoEditorSnapshot(next);
+  }
+
+  function isPhotoEditorOpen() {
+    return Boolean(photoEditor && !photoEditor.hidden && photoEditorState);
+  }
+
+  function ratioNumber(ratio) {
+    if (!photoEditorState || ratio === "free") {
+      return 0;
+    }
+    if (ratio === "original") {
+      return photoEditorState.image.naturalWidth / photoEditorState.image.naturalHeight;
+    }
+    const parts = ratio.split(":");
+    return Number(parts[0]) / Number(parts[1]);
+  }
+
+  function setPhotoEditorCropForRatio(ratio) {
+    const state = photoEditorState;
+    if (!state) {
+      return;
+    }
+    state.ratio = ratio;
+    const width = state.image.naturalWidth;
+    const height = state.image.naturalHeight;
+    const aspect = ratioNumber(ratio);
+    let cropWidth = width;
+    let cropHeight = height;
+    if (aspect > 0) {
+      if (cropWidth / cropHeight > aspect) {
+        cropWidth = cropHeight * aspect;
+      } else {
+        cropHeight = cropWidth / aspect;
+      }
+    }
+    state.crop = {
+      x: (width - cropWidth) / 2,
+      y: (height - cropHeight) / 2,
+      width: cropWidth,
+      height: cropHeight
+    };
+    renderPhotoEditor();
+    updatePhotoEditorHistoryButtons();
+  }
+
+  function setPhotoEditorMode(mode) {
+    const state = photoEditorState;
+    if (!state) {
+      return;
+    }
+    state.mode = mode === "draw" ? "draw" : "crop";
+    photoEditorModeButtons.forEach(function (button) {
+      button.classList.toggle("is-active", button.dataset.photoEditorMode === state.mode);
+    });
+    photoEditorPanels.forEach(function (panel) {
+      panel.hidden = panel.dataset.photoEditorPanel !== state.mode;
+    });
+    if (photoEditorCanvas) {
+      photoEditorCanvas.style.cursor = state.mode === "draw" ? "crosshair" : "move";
+    }
+    renderPhotoEditor();
+  }
+
+  function imagePointFromEvent(event) {
+    const rect = photoEditorCanvas.getBoundingClientRect();
+    return {
+      x: clamp((event.clientX - rect.left) * (photoEditorCanvas.width / rect.width), 0, photoEditorCanvas.width),
+      y: clamp((event.clientY - rect.top) * (photoEditorCanvas.height / rect.height), 0, photoEditorCanvas.height)
+    };
+  }
+
+  function drawCropOverlay(ctx, crop) {
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.beginPath();
+    ctx.rect(0, 0, photoEditorCanvas.width, photoEditorCanvas.height);
+    ctx.rect(crop.x, crop.y, crop.width, crop.height);
+    ctx.fill("evenodd");
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.lineWidth = Math.max(2, photoEditorCanvas.width / 900);
+    ctx.strokeRect(crop.x, crop.y, crop.width, crop.height);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.32)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 3; i += 1) {
+      const x = crop.x + crop.width * i / 3;
+      const y = crop.y + crop.height * i / 3;
+      ctx.beginPath();
+      ctx.moveTo(x, crop.y);
+      ctx.lineTo(x, crop.y + crop.height);
+      ctx.moveTo(crop.x, y);
+      ctx.lineTo(crop.x + crop.width, y);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#ffffff";
+    [[crop.x, crop.y], [crop.x + crop.width, crop.y], [crop.x, crop.y + crop.height], [crop.x + crop.width, crop.y + crop.height]].forEach(function (point) {
+      ctx.beginPath();
+      ctx.arc(point[0], point[1], Math.max(5, photoEditorCanvas.width / 220), 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  function renderPhotoEditor() {
+    const state = photoEditorState;
+    if (!state || !photoEditorCanvas) {
+      return;
+    }
+    photoEditorCanvas.width = state.image.naturalWidth;
+    photoEditorCanvas.height = state.image.naturalHeight;
+    const ctx = photoEditorCanvas.getContext("2d");
+    ctx.clearRect(0, 0, photoEditorCanvas.width, photoEditorCanvas.height);
+    ctx.drawImage(state.image, 0, 0);
+    ctx.drawImage(state.annotationCanvas, 0, 0);
+    if (state.markerCanvas) {
+      ctx.save();
+      ctx.globalAlpha = 0.34;
+      ctx.drawImage(state.markerCanvas, 0, 0);
+      ctx.restore();
+    }
+    if (state.mode === "crop") {
+      drawCropOverlay(ctx, state.crop);
+    }
+  }
+
+  function cropContainsPoint(crop, point) {
+    return point.x >= crop.x && point.x <= crop.x + crop.width && point.y >= crop.y && point.y <= crop.y + crop.height;
+  }
+
+  function cropCoversFullImage(state) {
+    if (!state || !state.crop || !state.image) {
+      return false;
+    }
+    return state.crop.x <= 0
+      && state.crop.y <= 0
+      && state.crop.width >= state.image.naturalWidth
+      && state.crop.height >= state.image.naturalHeight;
+  }
+
+  function moveCropBy(deltaX, deltaY) {
+    const state = photoEditorState;
+    const crop = state.crop;
+    crop.x = clamp(crop.x + deltaX, 0, state.image.naturalWidth - crop.width);
+    crop.y = clamp(crop.y + deltaY, 0, state.image.naturalHeight - crop.height);
+  }
+
+  function updateFreeCrop(start, point) {
+    const state = photoEditorState;
+    const minSize = 32;
+    const x = Math.min(start.x, point.x);
+    const y = Math.min(start.y, point.y);
+    const width = Math.max(minSize, Math.abs(point.x - start.x));
+    const height = Math.max(minSize, Math.abs(point.y - start.y));
+    state.crop = {
+      x: clamp(x, 0, state.image.naturalWidth - minSize),
+      y: clamp(y, 0, state.image.naturalHeight - minSize),
+      width: Math.min(width, state.image.naturalWidth - x),
+      height: Math.min(height, state.image.naturalHeight - y)
+    };
+  }
+
+  function drawBlurLine(from, to) {
+    const state = photoEditorState;
+    const brushWidth = state.brushSize;
+    const blurAmount = Math.max(4, state.brushSize * 0.42);
+    const padding = brushWidth + blurAmount * 2;
+    const left = Math.max(0, Math.floor(Math.min(from.x, to.x) - padding));
+    const top = Math.max(0, Math.floor(Math.min(from.y, to.y) - padding));
+    const right = Math.min(state.image.naturalWidth, Math.ceil(Math.max(from.x, to.x) + padding));
+    const bottom = Math.min(state.image.naturalHeight, Math.ceil(Math.max(from.y, to.y) + padding));
+    const width = Math.max(1, right - left);
+    const height = Math.max(1, bottom - top);
+
+    const blurred = document.createElement("canvas");
+    blurred.width = width;
+    blurred.height = height;
+    const blurredCtx = blurred.getContext("2d");
+    blurredCtx.filter = "blur(" + blurAmount + "px)";
+    blurredCtx.drawImage(state.image, left, top, width, height, 0, 0, width, height);
+
+    const mask = document.createElement("canvas");
+    mask.width = width;
+    mask.height = height;
+    const maskCtx = mask.getContext("2d");
+    maskCtx.lineCap = "round";
+    maskCtx.lineJoin = "round";
+    maskCtx.lineWidth = brushWidth;
+    maskCtx.strokeStyle = "#fff";
+    maskCtx.beginPath();
+    maskCtx.moveTo(from.x - left, from.y - top);
+    maskCtx.lineTo(to.x - left, to.y - top);
+    maskCtx.stroke();
+
+    blurredCtx.globalCompositeOperation = "destination-in";
+    blurredCtx.drawImage(mask, 0, 0);
+
+    const ctx = state.annotationCanvas.getContext("2d");
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(blurred, left, top);
+    ctx.restore();
+  }
+
+  function drawEditorLine(from, to) {
+    const state = photoEditorState;
+    if (state.tool === "blur") {
+      drawBlurLine(from, to);
+      return;
+    }
+    const targetCanvas = state.tool === "marker" && state.markerCanvas ? state.markerCanvas : state.annotationCanvas;
+    const ctx = targetCanvas.getContext("2d");
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = state.brushSize;
+    if (state.tool === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.strokeStyle = "rgba(0, 0, 0, 1)";
+    } else if (state.tool === "marker") {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = state.color;
+    } else {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = state.color;
+    }
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.restore();
+
+    if (state.tool === "eraser" && state.markerCanvas) {
+      const markerCtx = state.markerCanvas.getContext("2d");
+      markerCtx.save();
+      markerCtx.lineCap = "round";
+      markerCtx.lineJoin = "round";
+      markerCtx.lineWidth = state.brushSize;
+      markerCtx.globalCompositeOperation = "destination-out";
+      markerCtx.beginPath();
+      markerCtx.moveTo(from.x, from.y);
+      markerCtx.lineTo(to.x, to.y);
+      markerCtx.stroke();
+      markerCtx.restore();
+    }
+  }
+
+  function drawContinuousEditorLine(from, to) {
+    const state = photoEditorState;
+    if (state.tool === "blur") {
+      drawEditorLine(from, to);
+      return;
+    }
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
+    const step = Math.max(4, state.brushSize * 0.45);
+    const segments = Math.max(1, Math.ceil(distance / step));
+    let previous = from;
+    for (let index = 1; index <= segments; index += 1) {
+      const point = {
+        x: from.x + (to.x - from.x) * index / segments,
+        y: from.y + (to.y - from.y) * index / segments
+      };
+      drawEditorLine(previous, point);
+      previous = point;
+    }
+  }
+
+  function drawArrowHeadOnContext(ctx, from, to, color, size) {
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
+    if (distance < 4) {
+      return;
+    }
+    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+    const headLength = Math.min(Math.max(size * 3.5, 30), Math.max(distance * 0.65, size * 2.4));
+    const wingAngle = Math.PI / 4.2;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = size;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - headLength * Math.cos(angle - wingAngle), to.y - headLength * Math.sin(angle - wingAngle));
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - headLength * Math.cos(angle + wingAngle), to.y - headLength * Math.sin(angle + wingAngle));
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawEditorArrow(from, to) {
+    const state = photoEditorState;
+    const ctx = state.annotationCanvas.getContext("2d");
+    drawArrowHeadOnContext(ctx, from, to, state.color, state.brushSize);
+  }
+
+  function arrowHeadDirectionPoint(points, endPoint) {
+    for (let index = points.length - 2; index >= 0; index -= 1) {
+      const point = points[index];
+      if (Math.hypot(endPoint.x - point.x, endPoint.y - point.y) >= Math.max(12, photoEditorState.brushSize * 1.4)) {
+        return point;
+      }
+    }
+    return points[0] || endPoint;
+  }
+
+  async function openPhotoEditor(index) {
+    const file = selectedAttachmentFiles[index];
+    if (!file || !isImageFile(file) || !photoEditor || !photoEditorCanvas) {
+      return;
+    }
+    try {
+      const image = await loadImageFromFile(file);
+      photoEditorState = {
+        fileIndex: index,
+        file: file,
+        image: image,
+        mode: "crop",
+        ratio: "free",
+        crop: { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight },
+        color: photoToolDefaultColors.pen,
+        toolColors: Object.assign({}, photoToolDefaultColors),
+        brushSize: 18,
+        tool: "pen",
+        pointerMode: "",
+        pointerStart: null,
+        previewPoint: null,
+        arrowPoints: [],
+        lastPoint: null,
+        undoStack: [],
+        redoStack: [],
+        hasChanges: false
+      };
+      resetPhotoEditorAnnotation(photoEditorState);
+      photoRatioButtons.forEach(function (button) {
+        button.classList.toggle("is-active", button.dataset.photoRatio === "free");
+      });
+      photoColorButtons.forEach(function (button) {
+        button.classList.toggle("is-active", button.dataset.photoColor === photoEditorState.color);
+      });
+      if (photoCustomColorButton) {
+        photoCustomColorButton.classList.remove("is-active");
+      }
+      if (photoCustomColorPanel) {
+        photoCustomColorPanel.hidden = true;
+      }
+      updateCustomColorUI("#ffd21f");
+      photoToolButtons.forEach(function (button) {
+        button.classList.toggle("is-active", button.dataset.photoTool === photoEditorState.tool);
+      });
+      if (photoBrushSizeInput) {
+        photoBrushSizeInput.value = String(photoEditorState.brushSize);
+        updatePhotoBrushRange();
+      }
+      if (photoEditor.parentElement !== document.body) {
+        document.body.appendChild(photoEditor);
+      }
+      photoEditor.hidden = false;
+      updatePhotoToolIcons();
+      setPhotoEditorMode("crop");
+      setPhotoEditorCropForRatio("free");
+      updatePhotoEditorHistoryButtons();
+    } catch (_) {
+      setMessageStatus("圖片讀取失敗，請重新選擇圖片。", true);
+    }
+  }
+
+  function hidePhotoEditorConfirm() {
+    if (photoEditorConfirm) {
+      photoEditorConfirm.hidden = true;
+    }
+  }
+
+  function showPhotoEditorConfirm() {
+    if (photoEditorConfirm) {
+      photoEditorConfirm.hidden = false;
+    }
+  }
+
+  function closePhotoEditor() {
+    if (photoEditor) {
+      photoEditor.hidden = true;
+    }
+    hidePhotoEditorConfirm();
+    if (photoEditorState) {
+      photoEditorState.pointerMode = "";
+      photoEditorState.pointerStart = null;
+      photoEditorState.previewPoint = null;
+      photoEditorState.arrowPoints = [];
+      photoEditorState.lastPoint = null;
+      photoEditorState.cropStart = null;
+    }
+    photoEditorState = null;
+    updatePhotoEditorHistoryButtons();
+  }
+
+  function requestClosePhotoEditor() {
+    if (photoEditorState && photoEditorState.hasChanges) {
+      showPhotoEditorConfirm();
+      return;
+    }
+    closePhotoEditor();
+  }
+
+  function resetPhotoEditor() {
+    if (!photoEditorState) {
+      return;
+    }
+    pushPhotoEditorHistory();
+    resetPhotoEditorAnnotation(photoEditorState);
+    setPhotoEditorCropForRatio(photoEditorState.ratio);
+  }
+
+  function handlePhotoEditorPointerDown(event) {
+    if (!photoEditorState || !photoEditorCanvas) {
+      return;
+    }
+    event.preventDefault();
+    photoEditorCanvas.setPointerCapture(event.pointerId);
+    const point = imagePointFromEvent(event);
+    if (photoEditorState.mode === "draw") {
+      pushPhotoEditorHistory();
+      photoEditorState.pointerMode = "draw";
+      photoEditorState.pointerStart = point;
+      photoEditorState.previewPoint = null;
+      photoEditorState.arrowPoints = photoEditorState.tool === "arrow" ? [point] : [];
+      photoEditorState.lastPoint = point;
+      if (photoEditorState.tool !== "arrow") {
+        drawEditorLine(point, point);
+      }
+      renderPhotoEditor();
+      return;
+    }
+    pushPhotoEditorHistory();
+    if (photoEditorState.ratio === "free" && (cropCoversFullImage(photoEditorState) || !cropContainsPoint(photoEditorState.crop, point))) {
+      photoEditorState.pointerMode = "select-crop";
+      photoEditorState.cropStart = point;
+      updateFreeCrop(point, point);
+    } else {
+      photoEditorState.pointerMode = "move-crop";
+      photoEditorState.lastPoint = point;
+      if (!cropContainsPoint(photoEditorState.crop, point)) {
+        moveCropBy(point.x - (photoEditorState.crop.x + photoEditorState.crop.width / 2), point.y - (photoEditorState.crop.y + photoEditorState.crop.height / 2));
+      }
+    }
+    renderPhotoEditor();
+  }
+
+  function handlePhotoEditorPointerMove(event) {
+    if (!photoEditorState || !photoEditorState.pointerMode) {
+      return;
+    }
+    event.preventDefault();
+    const point = imagePointFromEvent(event);
+    if (photoEditorState.pointerMode === "draw") {
+      if (photoEditorState.tool === "arrow") {
+        drawContinuousEditorLine(photoEditorState.lastPoint, point);
+        photoEditorState.arrowPoints.push(point);
+        photoEditorState.lastPoint = point;
+        renderPhotoEditor();
+      } else {
+        drawContinuousEditorLine(photoEditorState.lastPoint, point);
+        photoEditorState.lastPoint = point;
+        renderPhotoEditor();
+      }
+      return;
+    } else if (photoEditorState.pointerMode === "select-crop") {
+      updateFreeCrop(photoEditorState.cropStart, point);
+    } else if (photoEditorState.pointerMode === "move-crop") {
+      moveCropBy(point.x - photoEditorState.lastPoint.x, point.y - photoEditorState.lastPoint.y);
+      photoEditorState.lastPoint = point;
+    }
+    renderPhotoEditor();
+  }
+
+  function handlePhotoEditorPointerUp(event) {
+    if (!photoEditorState || !photoEditorCanvas) {
+      return;
+    }
+    const point = imagePointFromEvent(event);
+    if (photoEditorState.pointerMode === "draw" && photoEditorState.tool === "arrow" && photoEditorState.arrowPoints.length) {
+      const from = arrowHeadDirectionPoint(photoEditorState.arrowPoints, point);
+      drawEditorArrow(from, point);
+      photoEditorState.previewPoint = null;
+      renderPhotoEditor();
+    }
+    photoEditorCanvas.releasePointerCapture(event.pointerId);
+    photoEditorState.pointerMode = "";
+    photoEditorState.pointerStart = null;
+    photoEditorState.previewPoint = null;
+    photoEditorState.arrowPoints = [];
+    photoEditorState.lastPoint = null;
+    photoEditorState.cropStart = null;
+  }
+
+  function canvasToBlob(canvas, type, quality) {
+    return new Promise(function (resolve) {
+      canvas.toBlob(resolve, type, quality);
+    });
+  }
+
+  function editedFileName(file, type) {
+    const extension = type === "image/png" ? "png" : "jpg";
+    const base = String(file.name || "image").replace(/\.[^.]+$/, "");
+    return base + "-edited." + extension;
+  }
+
+  async function applyPhotoEditor() {
+    const state = photoEditorState;
+    if (!state) {
+      return;
+    }
+    const crop = {
+      x: Math.round(state.crop.x),
+      y: Math.round(state.crop.y),
+      width: Math.max(1, Math.round(state.crop.width)),
+      height: Math.max(1, Math.round(state.crop.height))
+    };
+    const output = document.createElement("canvas");
+    output.width = crop.width;
+    output.height = crop.height;
+    const ctx = output.getContext("2d");
+    ctx.drawImage(state.image, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    ctx.drawImage(state.annotationCanvas, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    if (state.markerCanvas) {
+      ctx.save();
+      ctx.globalAlpha = 0.34;
+      ctx.drawImage(state.markerCanvas, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+      ctx.restore();
+    }
+    const type = state.file.type === "image/png" ? "image/png" : "image/jpeg";
+    const blob = await canvasToBlob(output, type, 0.92);
+    if (!blob) {
+      setMessageStatus("圖片編輯套用失敗。", true);
+      return;
+    }
+    selectedAttachmentFiles[state.fileIndex] = new File([blob], editedFileName(state.file, type), {
+      type: type,
+      lastModified: Date.now()
+    });
+    closePhotoEditor();
+    openAttachmentDialog(selectedAttachmentFiles, "photo");
   }
 
   function dragEventHasFiles(event) {
@@ -3223,6 +4069,28 @@
   });
   syncComposerInputHeight();
 	  document.addEventListener("keydown", function (event) {
+    if (isPhotoEditorOpen()) {
+      const key = String(event.key || "").toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undoPhotoEditorChange();
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && (key === "y" || key === "z" && event.shiftKey)) {
+        event.preventDefault();
+        redoPhotoEditorChange();
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (photoEditorConfirm && !photoEditorConfirm.hidden) {
+          hidePhotoEditorConfirm();
+        } else {
+          requestClosePhotoEditor();
+        }
+        return;
+      }
+    }
 	    if (event.key === "Escape") {
       closeMessageContextMenu();
       setConversationCreateMenuOpen(false);
@@ -3256,6 +4124,9 @@
       setAttachmentMenuOpen(false);
     });
     document.addEventListener("keydown", function (event) {
+      if (isPhotoEditorOpen()) {
+        return;
+      }
       if (event.key === "Escape") {
         setAttachmentMenuOpen(false);
         closeAttachmentDialog(true);
@@ -3274,6 +4145,15 @@
       }
     });
   }
+  if (attachmentPreview) {
+    attachmentPreview.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-photo-edit-index]");
+      if (!button) {
+        return;
+      }
+      openPhotoEditor(Number(button.dataset.photoEditIndex || 0));
+    });
+  }
   if (attachmentSend) {
     attachmentSend.addEventListener("click", sendAttachmentFromDialog);
   }
@@ -3281,6 +4161,141 @@
     attachmentCaption.addEventListener("input", syncAttachmentCaptionHeight);
     attachmentCaption.addEventListener("keydown", handleAttachmentCaptionKeydown);
     syncAttachmentCaptionHeight();
+  }
+  if (photoEditorClose) {
+    photoEditorClose.addEventListener("click", requestClosePhotoEditor);
+  }
+  if (photoEditorUndo) {
+    photoEditorUndo.addEventListener("click", undoPhotoEditorChange);
+  }
+  if (photoEditorRedo) {
+    photoEditorRedo.addEventListener("click", redoPhotoEditorChange);
+  }
+  if (photoEditorConfirmCancel) {
+    photoEditorConfirmCancel.addEventListener("click", hidePhotoEditorConfirm);
+  }
+  if (photoEditorConfirmDiscard) {
+    photoEditorConfirmDiscard.addEventListener("click", closePhotoEditor);
+  }
+  if (photoEditorApply) {
+    photoEditorApply.addEventListener("click", applyPhotoEditor);
+  }
+  if (photoEditorReset) {
+    photoEditorReset.addEventListener("click", resetPhotoEditor);
+  }
+  if (photoEditorCanvas) {
+    photoEditorCanvas.addEventListener("pointerdown", handlePhotoEditorPointerDown);
+    photoEditorCanvas.addEventListener("pointermove", handlePhotoEditorPointerMove);
+    photoEditorCanvas.addEventListener("pointerup", handlePhotoEditorPointerUp);
+    photoEditorCanvas.addEventListener("pointercancel", handlePhotoEditorPointerUp);
+  }
+  photoEditorModeButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      setPhotoEditorMode(button.dataset.photoEditorMode || "crop");
+    });
+  });
+  photoRatioButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      pushPhotoEditorHistory();
+      photoRatioButtons.forEach(function (item) {
+        item.classList.toggle("is-active", item === button);
+      });
+      setPhotoEditorCropForRatio(button.dataset.photoRatio || "free");
+    });
+  });
+  photoColorButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      if (!photoEditorState) {
+        return;
+      }
+      if (photoCustomColorPanel) {
+        photoCustomColorPanel.hidden = true;
+      }
+      setPhotoEditorColor(button.dataset.photoColor || "#ff4b40");
+    });
+  });
+  if (photoCustomColorButton) {
+    photoCustomColorButton.addEventListener("click", function () {
+      if (!photoEditorState) {
+        return;
+      }
+      if (photoCustomColorPanel) {
+        photoCustomColorPanel.hidden = !photoCustomColorPanel.hidden;
+      }
+      const color = photoColorHexInput && hexToRGB(photoColorHexInput.value) ? photoColorHexInput.value : "#ffd21f";
+      updateCustomColorUI(color);
+      setPhotoEditorColor(color, { custom: true });
+    });
+  }
+  if (photoColorHueInput) {
+    photoColorHueInput.addEventListener("input", function () {
+      const saturation = Number(photoColorSV ? photoColorSV.style.getPropertyValue("--photo-color-saturation") : 100) / 100 || 1;
+      const value = Number(photoColorSV ? photoColorSV.style.getPropertyValue("--photo-color-value") : 100) / 100 || 1;
+      applyCustomHSV(saturation, value);
+    });
+  }
+  if (photoColorSV) {
+    photoColorSV.addEventListener("pointerdown", function (event) {
+      event.preventDefault();
+      photoColorSV.setPointerCapture(event.pointerId);
+      const updateFromEvent = function (pointerEvent) {
+        const rect = photoColorSV.getBoundingClientRect();
+        const saturation = Math.min(Math.max((pointerEvent.clientX - rect.left) / rect.width, 0), 1);
+        const value = 1 - Math.min(Math.max((pointerEvent.clientY - rect.top) / rect.height, 0), 1);
+        applyCustomHSV(saturation, value);
+      };
+      updateFromEvent(event);
+      const handleMove = function (moveEvent) {
+        updateFromEvent(moveEvent);
+      };
+      const handleUp = function (upEvent) {
+        updateFromEvent(upEvent);
+        photoColorSV.releasePointerCapture(upEvent.pointerId);
+        photoColorSV.removeEventListener("pointermove", handleMove);
+        photoColorSV.removeEventListener("pointerup", handleUp);
+        photoColorSV.removeEventListener("pointercancel", handleUp);
+      };
+      photoColorSV.addEventListener("pointermove", handleMove);
+      photoColorSV.addEventListener("pointerup", handleUp);
+      photoColorSV.addEventListener("pointercancel", handleUp);
+    });
+  }
+  if (photoColorHexInput) {
+    photoColorHexInput.addEventListener("change", function () {
+      const rgb = hexToRGB(photoColorHexInput.value);
+      if (!rgb) {
+        updateCustomColorUI(photoEditorState ? photoEditorState.color : "#ffd21f");
+        return;
+      }
+      const color = rgbToHex(rgb);
+      updateCustomColorUI(color);
+      setPhotoEditorColor(color, { custom: true });
+    });
+  }
+  photoToolButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      if (!photoEditorState) {
+        return;
+      }
+      const tool = button.dataset.photoTool || "pen";
+      photoToolButtons.forEach(function (item) {
+        item.classList.toggle("is-active", item === button);
+      });
+      photoEditorState.tool = tool;
+      photoEditorState.color = photoEditorState.toolColors && photoEditorState.toolColors[tool]
+        ? photoEditorState.toolColors[tool]
+        : photoToolDefaultColors[tool] || photoEditorState.color || photoToolDefaultColors.pen;
+      setPhotoEditorColor(photoEditorState.color);
+    });
+  });
+  if (photoBrushSizeInput) {
+    updatePhotoBrushRange();
+    photoBrushSizeInput.addEventListener("input", function () {
+      if (photoEditorState) {
+        photoEditorState.brushSize = Number(photoBrushSizeInput.value || 18);
+      }
+      updatePhotoBrushRange();
+    });
   }
   if (chatShell && chatDropOverlay) {
     chatShell.addEventListener("paste", handlePasteUpload);

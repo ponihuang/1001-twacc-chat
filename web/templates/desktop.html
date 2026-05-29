@@ -425,6 +425,151 @@
             </footer>
           </section>
         </div>
+        <div class="photo-editor-backdrop" data-photo-editor hidden>
+          <section class="photo-editor" role="dialog" aria-modal="true" aria-labelledby="photo-editor-title">
+            <div class="photo-editor-stage">
+              <canvas class="photo-editor-canvas" data-photo-editor-canvas></canvas>
+            </div>
+            <aside class="photo-editor-sidebar">
+              <header class="photo-editor-header">
+                <button type="button" class="photo-editor-close" data-photo-editor-close aria-label="關閉">×</button>
+                <strong id="photo-editor-title">編輯</strong>
+                <span class="photo-editor-history">
+                  <button type="button" data-photo-editor-undo aria-label="上一步" disabled>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 10H5V6"></path>
+                      <path d="M5 10c2.2-2.4 5.8-3.2 8.9-2a7 7 0 0 1 4.4 7.6"></path>
+                    </svg>
+                  </button>
+                  <button type="button" data-photo-editor-redo aria-label="下一步" disabled>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M15 10h4V6"></path>
+                      <path d="M19 10c-2.2-2.4-5.8-3.2-8.9-2a7 7 0 0 0-4.4 7.6"></path>
+                    </svg>
+                  </button>
+                </span>
+              </header>
+              <div class="photo-editor-tabs" role="tablist" aria-label="圖片編輯工具">
+                <button type="button" class="is-active" data-photo-editor-mode="crop">裁切</button>
+                <button type="button" data-photo-editor-mode="draw">畫筆</button>
+              </div>
+              <section class="photo-editor-panel" data-photo-editor-panel="crop">
+                <strong>長寬比</strong>
+                <div class="photo-editor-ratios">
+                  <button type="button" class="is-active" data-photo-ratio="free">自由的</button>
+                  <button type="button" data-photo-ratio="original">原來的</button>
+                  <button type="button" data-photo-ratio="1:1">方塊</button>
+                  <button type="button" data-photo-ratio="4:3">4:3</button>
+                  <button type="button" data-photo-ratio="3:4">3:4</button>
+                  <button type="button" data-photo-ratio="16:9">16:9</button>
+                  <button type="button" data-photo-ratio="9:16">9:16</button>
+                </div>
+              </section>
+              <section class="photo-editor-panel" data-photo-editor-panel="draw" hidden>
+                <strong>顏色</strong>
+                <div class="photo-editor-colors">
+                  <button type="button" data-photo-color="#ffffff" style="--swatch:#ffffff"></button>
+                  <button type="button" data-photo-color="#ff4b40" style="--swatch:#ff4b40"></button>
+                  <button type="button" class="is-active" data-photo-color="#ff8a0a" style="--swatch:#ff8a0a"></button>
+                  <button type="button" data-photo-color="#ffd21f" style="--swatch:#ffd21f"></button>
+                  <button type="button" data-photo-color="#2bd66f" style="--swatch:#2bd66f"></button>
+                  <button type="button" data-photo-color="#38d8d3" style="--swatch:#38d8d3"></button>
+                  <button type="button" data-photo-color="#2f8cff" style="--swatch:#2f8cff"></button>
+                  <button type="button" data-photo-color="#a855f7" style="--swatch:#a855f7"></button>
+                  <button type="button" class="photo-editor-color-custom-button" data-photo-color-custom style="--swatch:#ffd21f" aria-label="自訂顏色"></button>
+                </div>
+                <section class="photo-editor-custom-color" data-photo-custom-color hidden>
+                  <label class="photo-editor-hue">
+                    <input type="range" min="0" max="360" value="51" data-photo-color-hue>
+                  </label>
+                  <div class="photo-editor-color-picker">
+                    <button type="button" class="photo-editor-sv" data-photo-color-sv aria-label="選擇顏色明暗">
+                      <span data-photo-color-sv-pointer></span>
+                    </button>
+                    <div class="photo-editor-color-values">
+                      <label>
+                        <span>HEX</span>
+                        <input type="text" value="#ffd21f" data-photo-color-hex maxlength="7">
+                      </label>
+                      <label>
+                        <span>RGB</span>
+                        <input type="text" value="255, 210, 31" data-photo-color-rgb readonly>
+                      </label>
+                    </div>
+                  </div>
+                </section>
+                <label class="photo-editor-size">
+                  <span>尺寸</span>
+                  <input type="range" min="4" max="48" value="18" data-photo-brush-size>
+                </label>
+                <div class="photo-editor-tools">
+                  <button type="button" class="is-active" data-photo-tool="pen">
+                    <span class="photo-tool-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                      </svg>
+                    </span>
+                    <span>筆</span>
+                  </button>
+                  <button type="button" data-photo-tool="arrow">
+                    <span class="photo-tool-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M5 12h14"></path>
+                        <path d="m13 6 6 6-6 6"></path>
+                      </svg>
+                    </span>
+                    <span>箭</span>
+                  </button>
+                  <button type="button" data-photo-tool="marker">
+                    <span class="photo-tool-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="m9 11-6 6v4h4l6-6"></path>
+                        <path d="m22 12-7-7-6 6 7 7Z"></path>
+                        <path d="M14 6 18 2"></path>
+                      </svg>
+                    </span>
+                    <span>標記</span>
+                  </button>
+                  <button type="button" data-photo-tool="blur">
+                    <span class="photo-tool-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M12 3.5S6 10 6 14a6 6 0 0 0 12 0c0-4-6-10.5-6-10.5Z"></path>
+                        <path d="M9 14.5c1.8 1.1 4.2 1.1 6 0"></path>
+                        <path d="M9.5 18c1.5.7 3.5.7 5 0"></path>
+                      </svg>
+                    </span>
+                    <span>模糊</span>
+                  </button>
+                  <button type="button" data-photo-tool="eraser">
+                    <span class="photo-tool-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="m7 21-4.3-4.3a2.4 2.4 0 0 1 0-3.4L13.3 2.7a2.4 2.4 0 0 1 3.4 0l4.6 4.6a2.4 2.4 0 0 1 0 3.4L11 21Z"></path>
+                        <path d="M22 21H7"></path>
+                        <path d="m5 11 8 8"></path>
+                      </svg>
+                    </span>
+                    <span>橡皮擦</span>
+                  </button>
+                </div>
+              </section>
+              <footer class="photo-editor-actions">
+                <button type="button" data-photo-editor-reset>重設</button>
+                <button type="button" class="photo-editor-apply" data-photo-editor-apply aria-label="套用">✓</button>
+              </footer>
+            </aside>
+          </section>
+          <div class="photo-editor-confirm" data-photo-editor-confirm hidden>
+            <section role="dialog" aria-modal="true" aria-labelledby="photo-editor-confirm-title">
+              <strong id="photo-editor-confirm-title">放棄變更</strong>
+              <p>確定要取消這次圖片編輯嗎？</p>
+              <footer>
+                <button type="button" data-photo-editor-confirm-cancel>取消</button>
+                <button type="button" data-photo-editor-confirm-discard>放棄</button>
+              </footer>
+            </section>
+          </div>
+        </div>
       </section>
       <aside class="contact-panel" data-contact-panel hidden>
         <header class="contact-panel-header">
