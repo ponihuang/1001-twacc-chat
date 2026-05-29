@@ -3766,7 +3766,7 @@ strong {
   left: 50%;
   bottom: 12px;
   z-index: 2;
-  display: grid;
+  display: none;
   place-items: center;
   width: 34px;
   height: 34px;
@@ -3786,8 +3786,8 @@ strong {
   pointer-events: none;
 }
 
-.attachment-photo-editable:hover .attachment-photo-edit-button,
-.attachment-photo-edit-button:focus-visible {
+.attachment-photo-editable:hover .attachment-photo-edit-button {
+  display: grid;
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%);
