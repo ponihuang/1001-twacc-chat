@@ -3770,21 +3770,28 @@ strong {
   place-items: center;
   width: 34px;
   height: 34px;
+  padding: 0;
   border: 0;
+  outline: 0;
   border-radius: 0;
   background: transparent;
   color: #ffffff;
   opacity: 0;
+  visibility: hidden;
+  appearance: none;
   transform: translateX(-50%) translateY(6px);
   transition: opacity 0.16s ease, transform 0.16s ease;
   cursor: pointer;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+  pointer-events: none;
 }
 
 .attachment-photo-editable:hover .attachment-photo-edit-button,
 .attachment-photo-edit-button:focus-visible {
   opacity: 1;
+  visibility: visible;
   transform: translateX(-50%);
+  pointer-events: auto;
 }
 
 .attachment-photo-edit-button svg {
