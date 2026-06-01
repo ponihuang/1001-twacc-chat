@@ -188,6 +188,11 @@ type CreateMessageRequest struct {
 	Attachments []AttachmentInput `json:"-"`
 }
 
+// MarkConversationReadRequest is the HTTP payload for updating the read marker.
+type MarkConversationReadRequest struct {
+	LastReadMessageID int64 `json:"last_read_message_id"`
+}
+
 // CreateDirectConversationRequest is the HTTP payload for creating/loading a direct conversation.
 type CreateDirectConversationRequest struct {
 	SourceSystem   string `json:"source_system"`
@@ -312,6 +317,7 @@ type Repository interface {
 	FirstUnreadMessageID(userID, conversationID int64) (int64, error)
 	SearchMessages(userID int64, query string, limit int) ([]Message, error)
 	MarkConversationRead(userID, conversationID int64) error
+	MarkConversationReadUntil(userID, conversationID, messageID int64) error
 	CreateMessage(input CreateMessageInput) (Message, error)
 	DeleteMessage(conversationID, messageID, actorUserID int64) error
 }

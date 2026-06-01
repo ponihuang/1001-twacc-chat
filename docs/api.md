@@ -449,7 +449,8 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 
 - 取得對話訊息列表
 - 回傳前會依目前使用者的 `conversation_reads.last_read_message_id` 找出第一筆未讀訊息，放在 `first_unread_message_id`
-- 回傳成功後，後端會將該對話標記為已讀；前端可用 `first_unread_message_id` 將畫面定位到第一筆未讀訊息，並在該訊息前顯示「未讀訊息」分隔提示
+- 回傳成功後不會自動標記整個對話已讀；前端可用 `first_unread_message_id` 將畫面定位到第一筆未讀訊息，並在該訊息前顯示「未讀訊息」分隔提示
+- 前端應在使用者實際看到訊息後呼叫 `POST /api/conversations/{conversation_id}/read` 更新已讀位置
 
 成功回應草案：
 
@@ -480,6 +481,37 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 目前限制：
 
 - 訊息列表目前載入最近 `100` 筆；若第一筆未讀早於這批訊息，前端會找不到該訊息並退回定位到最新訊息。
+
+### `POST /api/conversations/{conversation_id}/read`
+
+用途：
+
+- 更新目前使用者在對話中的已讀位置
+- 建議由前端在訊息進入可視範圍後呼叫，避免只打開聊天室就全部已讀
+
+請求草案：
+
+```json
+{
+  "last_read_message_id": 456
+}
+```
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 必須是該對話成員
+- 後端只會往較新的訊息更新，不會把已讀位置往回退
+
+成功回應草案：
+
+```json
+{
+  "success": true,
+  "code": "CONVERSATION_READ_OK",
+  "message": "已讀狀態已更新"
+}
+```
 
 ### `POST /api/conversations/{conversation_id}/messages`
 

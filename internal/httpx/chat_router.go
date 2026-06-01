@@ -45,6 +45,7 @@ func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, cha
 		mux.HandleFunc("DELETE /api/conversations/{conversation_id}/members", chatHandler.RemoveConversationMember)
 		mux.HandleFunc("GET /api/conversations/{conversation_id}/messages", chatHandler.ListMessages)
 		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages", chatHandler.SendMessage)
+		mux.HandleFunc("POST /api/conversations/{conversation_id}/read", chatHandler.MarkConversationRead)
 		mux.HandleFunc("POST /api/conversations/{conversation_id}/messages/{message_id}/recall", chatHandler.RecallMessage)
 		mux.HandleFunc("DELETE /api/conversations/{conversation_id}/messages/{message_id}", chatHandler.DeleteMessage)
 	}

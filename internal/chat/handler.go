@@ -99,6 +99,39 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// MarkConversationRead handles POST /api/conversations/{conversation_id}/read.
+func (h *Handler) MarkConversationRead(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	actor, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	conversationID, err := strconv.ParseInt(strings.TrimSpace(r.PathValue("conversation_id")), 10, 64)
+	if err != nil || conversationID <= 0 {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "conversation_id 格式错误"})
+		return
+	}
+
+	var req MarkConversationReadRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, svcErr := h.service.MarkConversationRead(conversationID, actor, req)
+	if svcErr != nil {
+		writeJSON(w, status, errorResponse(svcErr))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // SearchMessages handles GET /api/messages/search?q=...
 func (h *Handler) SearchMessages(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {

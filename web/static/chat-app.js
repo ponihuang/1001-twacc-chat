@@ -173,6 +173,10 @@
   let mentionMenuActiveIndex = 0;
   let mentionQueryRange = null;
   let mentionLoadToken = 0;
+  let readUpdateTimer = 0;
+  let readUpdateInFlight = false;
+  let pendingReadMessageID = 0;
+  let lastReportedReadMessageID = 0;
   const photoToolDefaultColors = {
     pen: "#ff8a0a",
     arrow: "#ffd21f",
@@ -1056,6 +1060,8 @@
       return;
     }
     clearMentionMenu();
+    lastReportedReadMessageID = 0;
+    pendingReadMessageID = 0;
     const key = accountStorageKey(storageKeys.activeConversationID);
     if (key) {
       localStorage.setItem(key, String(activeConversationID));
@@ -1147,6 +1153,8 @@
     clearMentionMenu();
     pendingDirectTarget = null;
     activeConversationID = 0;
+    lastReportedReadMessageID = 0;
+    pendingReadMessageID = 0;
     const key = accountStorageKey(storageKeys.activeConversationID);
     if (key) {
       localStorage.removeItem(key);
@@ -1955,10 +1963,13 @@
     return quote + body;
   }
 
-  function renderMessages(data) {
+  function renderMessages(data, options) {
+    options = options || {};
     if (!data.messages || !data.messages.length) {
       messageBoard.innerHTML = "";
-      scrollMessageBoardToLatest();
+      if (!options.preserveScroll) {
+        scrollMessageBoardToLatest();
+      }
       return;
     }
 
@@ -1995,9 +2006,14 @@
         "</div>"
       ].join("");
     }).join("");
-    if (!scrollMessageBoardToUnreadDivider() && !scrollMessageBoardToMessage(firstUnreadMessageID)) {
+    if (options.preserveScroll && options.scrollAnchor) {
+      restoreMessageScrollAnchor(options.scrollAnchor);
+    } else if (options.forceBottom || options.stickToBottom) {
+      scrollMessageBoardToLatest();
+    } else if (!scrollMessageBoardToUnreadDivider() && !scrollMessageBoardToMessage(firstUnreadMessageID)) {
       scrollMessageBoardToLatest();
     }
+    scheduleVisibleReadUpdate();
   }
 
   function closeMessageContextMenu() {
@@ -2124,6 +2140,48 @@
   function scrollMessageBoardToLatest() {
     window.requestAnimationFrame(function () {
       messageBoard.scrollTop = messageBoard.scrollHeight;
+      scheduleVisibleReadUpdate();
+    });
+  }
+
+  function isMessageBoardNearBottom() {
+    if (!messageBoard) {
+      return true;
+    }
+    return messageBoard.scrollHeight - messageBoard.scrollTop - messageBoard.clientHeight < 72;
+  }
+
+  function captureMessageScrollAnchor() {
+    if (!messageBoard) {
+      return null;
+    }
+    const boardRect = messageBoard.getBoundingClientRect();
+    const rows = Array.from(messageBoard.querySelectorAll("[data-message-id]"));
+    for (const row of rows) {
+      const rect = row.getBoundingClientRect();
+      if (rect.bottom >= boardRect.top + 8) {
+        return {
+          messageID: row.dataset.messageId || "",
+          offset: rect.top - boardRect.top
+        };
+      }
+    }
+    return null;
+  }
+
+  function restoreMessageScrollAnchor(anchor) {
+    if (!messageBoard || !anchor || !anchor.messageID) {
+      return;
+    }
+    window.requestAnimationFrame(function () {
+      const target = messageBoard.querySelector('[data-message-id="' + CSS.escape(String(anchor.messageID)) + '"]');
+      if (!target) {
+        return;
+      }
+      const boardRect = messageBoard.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
+      messageBoard.scrollTop += rect.top - boardRect.top - anchor.offset;
+      scheduleVisibleReadUpdate();
     });
   }
 
@@ -2138,6 +2196,7 @@
     window.requestAnimationFrame(function () {
       const row = target.closest(".message-row") || target;
       messageBoard.scrollTop = Math.max(0, row.offsetTop - 16);
+      scheduleVisibleReadUpdate();
     });
     return true;
   }
@@ -2152,8 +2211,76 @@
     }
     window.requestAnimationFrame(function () {
       messageBoard.scrollTop = Math.max(0, target.offsetTop - 12);
+      scheduleVisibleReadUpdate();
     });
     return true;
+  }
+
+  function highestVisibleIncomingMessageID() {
+    if (!messageBoard || !activeConversationID) {
+      return 0;
+    }
+    const boardRect = messageBoard.getBoundingClientRect();
+    let highest = 0;
+    messageBoard.querySelectorAll(".message-bubble[data-message-id]").forEach(function (bubble) {
+      if (bubble.dataset.outgoing === "true") {
+        return;
+      }
+      const rect = bubble.getBoundingClientRect();
+      const visibleHeight = Math.min(rect.bottom, boardRect.bottom) - Math.max(rect.top, boardRect.top);
+      const requiredHeight = Math.min(48, Math.max(20, rect.height * 0.45));
+      if (visibleHeight >= requiredHeight) {
+        highest = Math.max(highest, Number(bubble.dataset.messageId || 0));
+      }
+    });
+    return highest;
+  }
+
+  function scheduleVisibleReadUpdate() {
+    if (readUpdateTimer) {
+      window.clearTimeout(readUpdateTimer);
+    }
+    readUpdateTimer = window.setTimeout(reportVisibleReadMessage, 180);
+  }
+
+  async function reportVisibleReadMessage() {
+    readUpdateTimer = 0;
+    const messageID = highestVisibleIncomingMessageID();
+    if (!messageID || messageID <= lastReportedReadMessageID) {
+      return;
+    }
+    pendingReadMessageID = Math.max(pendingReadMessageID, messageID);
+    if (readUpdateInFlight) {
+      return;
+    }
+    const conversationID = activeConversationID;
+    const headers = authHeaders();
+    if (!headers || !conversationID) {
+      return;
+    }
+
+    readUpdateInFlight = true;
+    const readMessageID = pendingReadMessageID;
+    pendingReadMessageID = 0;
+    try {
+      const response = await fetch("/api/conversations/" + conversationID + "/read", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({ last_read_message_id: readMessageID })
+      });
+      const result = await parseJSON(response);
+      if (response.ok && result.success && conversationID === activeConversationID) {
+        lastReportedReadMessageID = Math.max(lastReportedReadMessageID, readMessageID);
+        refreshConversationListOnly();
+      }
+    } catch (_) {
+      pendingReadMessageID = Math.max(pendingReadMessageID, readMessageID);
+    } finally {
+      readUpdateInFlight = false;
+      if (pendingReadMessageID > lastReportedReadMessageID) {
+        scheduleVisibleReadUpdate();
+      }
+    }
   }
 
   function displayMessageContent(message) {
@@ -3517,17 +3644,21 @@
     }
   }
 
-  async function loadMessages(conversationID, refreshListAfterRead) {
+  async function loadMessages(conversationID, refreshListAfterRead, options) {
+    options = options || {};
     const headers = authHeaders();
     if (!headers || !conversationID) {
       return;
     }
 
+    const scrollAnchor = options.preserveScroll ? captureMessageScrollAnchor() : null;
     const requestToken = ++messageLoadToken;
     setConversationUIActive(true);
     setMessageStatus("正在載入訊息...", false);
     setConversationTitle(activeConversationTitle());
-    renderLoadingConversationState();
+    if (!options.preserveScroll) {
+      renderLoadingConversationState();
+    }
     const response = await fetch("/api/conversations/" + conversationID + "/messages", {
       headers: { Authorization: headers.Authorization }
     });
@@ -3546,7 +3677,12 @@
 
     const data = result.data || {};
     setConversationTitle(data.title || activeConversationTitle() || "目前對話");
-    renderMessages(data);
+    renderMessages(data, {
+      forceBottom: Boolean(options.forceBottom),
+      preserveScroll: Boolean(options.preserveScroll),
+      scrollAnchor: scrollAnchor,
+      stickToBottom: Boolean(options.stickToBottom)
+    });
     setMessageStatus("已載入訊息。", false);
     if (refreshListAfterRead !== false) {
       await refreshConversationListOnly();
@@ -3616,17 +3752,21 @@
     }
 
     if (event.event_type === "message.created") {
-      loadConversations();
+      refreshConversationListOnly();
       if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
-        loadMessages(activeConversationID);
+        const stickToBottom = isMessageBoardNearBottom();
+        loadMessages(activeConversationID, false, {
+          stickToBottom: stickToBottom,
+          preserveScroll: !stickToBottom
+        });
       }
       return;
     }
 
     if (event.event_type === "message.recalled" || event.event_type === "message.deleted") {
-      loadConversations();
+      refreshConversationListOnly();
       if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
-        loadMessages(activeConversationID);
+        loadMessages(activeConversationID, false, { preserveScroll: true });
       }
     }
   }
@@ -3685,6 +3825,8 @@
     }
 
     activeConversationID = 0;
+    lastReportedReadMessageID = 0;
+    pendingReadMessageID = 0;
     pendingDirectTarget = {
       sourceSystem: sourceSystem,
       externalUserID: externalUserID,
@@ -3806,8 +3948,8 @@
     setReplyMessage(null);
     updateSelectedFileState();
     closeAttachmentDialog(false);
-    await loadMessages(activeConversationID);
-    await loadConversations();
+    await loadMessages(activeConversationID, false, { forceBottom: true });
+    await refreshConversationListOnly();
     setMessageStatus("訊息已送出。", false);
   }
 
@@ -4236,7 +4378,10 @@
     }
     openMessageContextMenu(event, bubble);
   }, true);
-  messageBoard.addEventListener("scroll", closeMessageContextMenu, { passive: true });
+  messageBoard.addEventListener("scroll", function () {
+    closeMessageContextMenu();
+    scheduleVisibleReadUpdate();
+  }, { passive: true });
   messageBoard.addEventListener("wheel", closeMessageContextMenu, { passive: true });
   if (messageContextMenu) {
     messageContextMenu.addEventListener("click", function (event) {

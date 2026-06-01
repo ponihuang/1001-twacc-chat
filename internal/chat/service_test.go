@@ -58,6 +58,7 @@ type mockRepository struct {
 type readMarker struct {
 	userID         int64
 	conversationID int64
+	messageID      int64
 }
 
 func (m *mockRepository) IsSystemAdmin(userID int64) (bool, error) {
@@ -136,6 +137,11 @@ func (m *mockRepository) FirstUnreadMessageID(userID, conversationID int64) (int
 
 func (m *mockRepository) MarkConversationRead(userID, conversationID int64) error {
 	m.markedReads = append(m.markedReads, readMarker{userID: userID, conversationID: conversationID})
+	return nil
+}
+
+func (m *mockRepository) MarkConversationReadUntil(userID, conversationID, messageID int64) error {
+	m.markedReads = append(m.markedReads, readMarker{userID: userID, conversationID: conversationID, messageID: messageID})
 	return nil
 }
 
@@ -530,7 +536,27 @@ func TestListMessages(t *testing.T) {
 	if data.FirstUnreadMessageID != 2 {
 		t.Fatalf("first unread message id = %d, want 2", data.FirstUnreadMessageID)
 	}
-	if len(repo.markedReads) != 1 || repo.markedReads[0] != (readMarker{userID: 7, conversationID: 9}) {
+	if len(repo.markedReads) != 0 {
+		t.Fatalf("unexpected read markers: %+v", repo.markedReads)
+	}
+}
+
+func TestMarkConversationRead(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 9): {ID: 9, Type: "direct", Title: "王小明"},
+		},
+	}
+	service := NewService(repo, nil)
+
+	resp, status, err := service.MarkConversationRead(9, SessionPrincipal{UserID: 7}, MarkConversationReadRequest{LastReadMessageID: 22})
+	if err != nil {
+		t.Fatalf("MarkConversationRead returned error: %v", err)
+	}
+	if status != 200 || !resp.Success {
+		t.Fatalf("unexpected response status=%d resp=%+v", status, resp)
+	}
+	if len(repo.markedReads) != 1 || repo.markedReads[0] != (readMarker{userID: 7, conversationID: 9, messageID: 22}) {
 		t.Fatalf("unexpected read markers: %+v", repo.markedReads)
 	}
 }

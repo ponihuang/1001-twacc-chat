@@ -853,6 +853,39 @@ func (r *ChatRepository) MarkConversationRead(userID, conversationID int64) erro
 	return nil
 }
 
+// MarkConversationReadUntil stores the latest message the user has actually reached.
+func (r *ChatRepository) MarkConversationReadUntil(userID, conversationID, messageID int64) error {
+	var latestMessageID sql.NullInt64
+	row := r.db.QueryRow(`
+		SELECT MAX(m.id)
+		  FROM conversation_members cm
+		  JOIN messages m ON m.conversation_id = cm.conversation_id
+		 WHERE cm.user_id = ?
+		   AND cm.conversation_id = ?
+		   AND m.id <= ?
+		   AND m.is_recalled = FALSE`, userID, conversationID, messageID)
+	if err := row.Scan(&latestMessageID); err != nil {
+		return fmt.Errorf("load visible read marker: %w", err)
+	}
+	if !latestMessageID.Valid {
+		return chat.ErrMessageNotFound
+	}
+
+	if _, err := r.db.Exec(`
+		INSERT INTO conversation_reads (conversation_id, user_id, last_read_message_id, last_read_at)
+		VALUES (?, ?, ?, NOW())
+		ON DUPLICATE KEY UPDATE
+			last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), VALUES(last_read_message_id)),
+			last_read_at = CASE
+				WHEN COALESCE(last_read_message_id, 0) < VALUES(last_read_message_id) THEN VALUES(last_read_at)
+				ELSE last_read_at
+			END`, conversationID, userID, latestMessageID.Int64); err != nil {
+		return fmt.Errorf("mark conversation read until message: %w", err)
+	}
+
+	return nil
+}
+
 // CreateMessage inserts a new message for a conversation member and returns the stored row.
 func (r *ChatRepository) CreateMessage(input chat.CreateMessageInput) (chat.Message, error) {
 	tx, err := r.db.Begin()

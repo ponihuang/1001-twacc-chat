@@ -482,9 +482,6 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 	if err != nil {
 		return Response{}, 500, err
 	}
-	if err := s.repo.MarkConversationRead(actor.UserID, conversationID); err != nil {
-		return Response{}, 500, err
-	}
 
 	items := make([]MessageItem, 0, len(messages))
 	for _, message := range messages {
@@ -511,6 +508,31 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 			FirstUnreadMessageID: firstUnreadMessageID,
 			Messages:             items,
 		},
+	}, 200, nil
+}
+
+// MarkConversationRead records the latest visible message the actor has actually reached.
+func (s *Service) MarkConversationRead(conversationID int64, actor SessionPrincipal, req MarkConversationReadRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if conversationID <= 0 || req.LastReadMessageID <= 0 {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if _, err := s.repo.GetConversationForUser(actor.UserID, conversationID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if err := s.repo.MarkConversationReadUntil(actor.UserID, conversationID, req.LastReadMessageID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "CONVERSATION_READ_OK",
+		Message: "已讀狀態已更新",
 	}, 200, nil
 }
 
