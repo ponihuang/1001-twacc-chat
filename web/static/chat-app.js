@@ -126,6 +126,11 @@
     '<button type="button" data-group-member-action="remove">從群組中移除</button>'
   ].join("");
   document.body.appendChild(groupMemberMenu);
+  const composerMentionMenu = document.createElement("div");
+  composerMentionMenu.className = "composer-mention-menu";
+  composerMentionMenu.hidden = true;
+  composerMentionMenu.setAttribute("role", "listbox");
+  messageForm.querySelector(".composer-fields").appendChild(composerMentionMenu);
 
   let conversations = [];
   let activeConversationID = 0;
@@ -163,6 +168,11 @@
   let contactItems = [];
   let contactsLoaded = false;
   let contactsIndexLoading = false;
+  let mentionMembersCache = new Map();
+  let mentionMenuItems = [];
+  let mentionMenuActiveIndex = 0;
+  let mentionQueryRange = null;
+  let mentionLoadToken = 0;
   const photoToolDefaultColors = {
     pen: "#ff8a0a",
     arrow: "#ffd21f",
@@ -236,6 +246,8 @@
     const escaped = escapeHTML(value);
     return escaped.replace(/\bhttps?:\/\/[^\s<]+/gi, function (url) {
       return '<a href="' + url + '" target="_blank" rel="noreferrer noopener">' + url + "</a>";
+    }).replace(/(^|\s)(@(ALL|[^\s@<]+))/g, function (_, prefix, mention) {
+      return prefix + '<span class="message-mention">' + mention + '</span>';
     });
   }
 
@@ -889,6 +901,129 @@
     };
   }
 
+  function clearMentionMenu() {
+    composerMentionMenu.hidden = true;
+    composerMentionMenu.innerHTML = "";
+    mentionMenuItems = [];
+    mentionMenuActiveIndex = 0;
+    mentionQueryRange = null;
+  }
+
+  function mentionTitle(member) {
+    return String(member.display_name || member.external_user_id || "").trim();
+  }
+
+  async function loadMentionMembers(conversationID) {
+    const id = Number(conversationID || 0);
+    const headers = authHeaders();
+    if (!id || !headers) {
+      return [];
+    }
+    if (mentionMembersCache.has(id)) {
+      return mentionMembersCache.get(id);
+    }
+    const response = await fetch("/api/conversations/" + id + "/members", {
+      headers: { Authorization: headers.Authorization }
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      return [];
+    }
+    const members = Array.isArray(result.data && result.data.members) ? result.data.members : [];
+    mentionMembersCache.set(id, members);
+    return members;
+  }
+
+  function currentMentionQuery() {
+    if (!composerInput || composerInput.selectionStart !== composerInput.selectionEnd) {
+      return null;
+    }
+    const caret = composerInput.selectionStart;
+    const beforeCaret = composerInput.value.slice(0, caret);
+    const match = beforeCaret.match(/(^|\s)@([^\s@]*)$/);
+    if (!match) {
+      return null;
+    }
+    return {
+      start: caret - match[2].length - 1,
+      end: caret,
+      query: match[2] || ""
+    };
+  }
+
+  function renderMentionMenu(items) {
+    mentionMenuItems = items;
+    mentionMenuActiveIndex = Math.min(mentionMenuActiveIndex, Math.max(items.length - 1, 0));
+    if (!items.length) {
+      clearMentionMenu();
+      return;
+    }
+    composerMentionMenu.innerHTML = items.map(function (item, index) {
+      const active = index === mentionMenuActiveIndex ? " is-active" : "";
+      const initial = item.kind === "all" ? "@" : (item.title || "?").slice(0, 1).toUpperCase();
+      const subtitle = item.kind === "all" ? "標註所有成員" : "@" + item.externalUserID;
+      return [
+        '<button type="button" class="composer-mention-item' + active + '" data-mention-index="' + index + '" role="option">',
+        '<span class="composer-mention-avatar">' + escapeHTML(initial) + "</span>",
+        "<span>",
+        "<strong>" + escapeHTML(item.title) + "</strong>",
+        "<small>" + escapeHTML(subtitle) + "</small>",
+        "</span>",
+        "</button>"
+      ].join("");
+    }).join("");
+    composerMentionMenu.hidden = false;
+  }
+
+  async function updateMentionMenu() {
+    const queryInfo = currentMentionQuery();
+    if (!queryInfo || !activeConversationID) {
+      clearMentionMenu();
+      return;
+    }
+    mentionQueryRange = queryInfo;
+    const token = ++mentionLoadToken;
+    const members = await loadMentionMembers(activeConversationID);
+    if (token !== mentionLoadToken || !mentionQueryRange) {
+      return;
+    }
+    const query = queryInfo.query.toLowerCase();
+    const allItem = { kind: "all", title: "ALL", value: "@ALL" };
+    const memberItems = members.map(function (member) {
+      const title = mentionTitle(member);
+      return {
+        kind: "member",
+        title: title || member.external_user_id || "使用者",
+        externalUserID: member.external_user_id || "",
+        value: "@" + (title || member.external_user_id || "")
+      };
+    }).filter(function (item) {
+      const text = (item.title + " " + item.externalUserID).toLowerCase();
+      return !query || text.indexOf(query) >= 0;
+    });
+    const items = [allItem].concat(memberItems).filter(function (item) {
+      const text = (item.title + " " + (item.externalUserID || "")).toLowerCase();
+      return !query || text.indexOf(query) >= 0;
+    }).slice(0, 8);
+    mentionMenuActiveIndex = 0;
+    renderMentionMenu(items);
+  }
+
+  function insertMentionItem(item) {
+    if (!composerInput || !mentionQueryRange || !item) {
+      return;
+    }
+    const before = composerInput.value.slice(0, mentionQueryRange.start);
+    const after = composerInput.value.slice(mentionQueryRange.end);
+    const insertion = item.value + " ";
+    composerInput.value = before + insertion + after;
+    const caret = before.length + insertion.length;
+    composerInput.setSelectionRange(caret, caret);
+    clearMentionMenu();
+    syncComposerInputHeight();
+    composerInput.focus();
+  }
+
   function contactKey(sourceSystem, externalUserID) {
     return String(sourceSystem || readSourceSystem()).trim() + ":" + String(externalUserID || "").trim().toLowerCase();
   }
@@ -920,6 +1055,7 @@
     if (!activeConversationID) {
       return;
     }
+    clearMentionMenu();
     const key = accountStorageKey(storageKeys.activeConversationID);
     if (key) {
       localStorage.setItem(key, String(activeConversationID));
@@ -1008,6 +1144,7 @@
     if (!activeConversationID && !pendingDirectTarget) {
       return;
     }
+    clearMentionMenu();
     pendingDirectTarget = null;
     activeConversationID = 0;
     const key = accountStorageKey(storageKeys.activeConversationID);
@@ -3355,6 +3492,9 @@
 
   async function handleConversationMembersUpdated(conversationID) {
     const updatedConversationID = Number(conversationID || 0);
+    if (updatedConversationID) {
+      mentionMembersCache.delete(updatedConversationID);
+    }
     const wasActive = updatedConversationID && updatedConversationID === activeConversationID;
     const items = await fetchConversationItems();
     if (!items) {
@@ -3658,6 +3798,7 @@
 
     composerInput.value = "";
     syncComposerInputHeight();
+    clearMentionMenu();
     if (composerFileInput) {
       composerFileInput.value = "";
     }
@@ -3671,6 +3812,31 @@
   }
 
   function handleComposerKeydown(event) {
+    if (!composerMentionMenu.hidden) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        mentionMenuActiveIndex = (mentionMenuActiveIndex + 1) % mentionMenuItems.length;
+        renderMentionMenu(mentionMenuItems);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        mentionMenuActiveIndex = (mentionMenuActiveIndex - 1 + mentionMenuItems.length) % mentionMenuItems.length;
+        renderMentionMenu(mentionMenuItems);
+        return;
+      }
+      if ((event.key === "Enter" || event.key === "Tab") && !event.isComposing) {
+        event.preventDefault();
+        insertMentionItem(mentionMenuItems[mentionMenuActiveIndex]);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        clearMentionMenu();
+        return;
+      }
+    }
+
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
       return;
     }
@@ -4044,7 +4210,24 @@
   });
 
   messageForm.addEventListener("submit", sendMessage);
-  composerInput.addEventListener("input", syncComposerInputHeight);
+  composerMentionMenu.addEventListener("mousedown", function (event) {
+    event.preventDefault();
+  });
+  composerMentionMenu.addEventListener("click", function (event) {
+    const button = event.target.closest("[data-mention-index]");
+    if (!button) {
+      return;
+    }
+    insertMentionItem(mentionMenuItems[Number(button.dataset.mentionIndex || 0)]);
+  });
+  composerInput.addEventListener("input", function () {
+    syncComposerInputHeight();
+    updateMentionMenu();
+  });
+  composerInput.addEventListener("click", updateMentionMenu);
+  composerInput.addEventListener("blur", function () {
+    window.setTimeout(clearMentionMenu, 120);
+  });
   composerInput.addEventListener("keydown", handleComposerKeydown);
   messageBoard.addEventListener("contextmenu", function (event) {
     const bubble = bubbleFromContextEvent(event);
