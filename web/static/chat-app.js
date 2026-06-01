@@ -969,7 +969,7 @@
       return [
         '<button type="button" class="composer-mention-item' + active + '" data-mention-index="' + index + '" role="option">',
         '<span class="composer-mention-avatar">' + escapeHTML(initial) + "</span>",
-        "<span>",
+        '<span class="composer-mention-line">',
         "<strong>" + escapeHTML(item.title) + "</strong>",
         "<small>" + escapeHTML(subtitle) + "</small>",
         "</span>",
