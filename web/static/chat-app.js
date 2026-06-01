@@ -2239,11 +2239,9 @@
   }
 
   function renderEditablePhoto(file, index) {
-    const url = URL.createObjectURL(file);
-    attachmentPreviewURLs.push(url);
     return [
       '<span class="attachment-photo-editable">',
-      '<img src="' + escapeHTML(url) + '" alt="' + escapeHTML(file.name || "photo") + '">',
+      '<canvas class="attachment-photo-canvas" data-attachment-photo-canvas="' + index + '" aria-label="' + escapeHTML(file.name || "photo") + '"></canvas>',
       '<button type="button" class="attachment-photo-edit-button" data-photo-edit-index="' + index + '" aria-label="編輯圖片">',
       '<svg viewBox="0 0 24 24" aria-hidden="true">',
       '<path d="M4 7h10"></path>',
@@ -2256,6 +2254,31 @@
       '</button>',
       '</span>'
     ].join("");
+  }
+
+  function drawAttachmentPhotoCanvas(canvas, file) {
+    if (!canvas || !file) {
+      return;
+    }
+    loadImageFromFile(file).then(function (image) {
+      const ctx = canvas.getContext("2d");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(image, 0, 0);
+    }).catch(function () {
+      canvas.hidden = true;
+    });
+  }
+
+  function renderAttachmentPhotoCanvases() {
+    if (!attachmentPreview) {
+      return;
+    }
+    attachmentPreview.querySelectorAll("[data-attachment-photo-canvas]").forEach(function (canvas) {
+      const index = Number(canvas.dataset.attachmentPhotoCanvas || 0);
+      drawAttachmentPhotoCanvas(canvas, selectedAttachmentFiles[index]);
+    });
   }
 
   function renderAttachmentPhotoGrid(files) {
@@ -2300,6 +2323,7 @@
         '</div>'
       ].join("");
     }
+    renderAttachmentPhotoCanvases();
     attachmentDialog.hidden = false;
     if (attachmentCaption) {
       syncAttachmentCaptionHeight();

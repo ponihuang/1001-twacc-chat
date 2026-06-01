@@ -3742,7 +3742,8 @@ strong {
   overflow: auto;
 }
 
-.attachment-dialog-preview img {
+.attachment-dialog-preview img,
+.attachment-dialog-preview canvas {
   display: block;
   max-width: 100%;
   max-height: min(420px, 50vh);
@@ -3757,7 +3758,8 @@ strong {
   max-width: 100%;
 }
 
-.attachment-photo-editable img {
+.attachment-photo-editable img,
+.attachment-photo-editable canvas {
   grid-area: 1 / 1;
 }
 
@@ -3935,6 +3937,7 @@ strong {
 }
 
 .attachment-photo-grid img,
+.attachment-photo-grid canvas,
 .message-photo-grid img {
   display: block;
   width: 100%;
@@ -3947,7 +3950,8 @@ strong {
   overflow: hidden;
 }
 
-.attachment-photo-grid > .attachment-photo-editable img {
+.attachment-photo-grid > .attachment-photo-editable img,
+.attachment-photo-grid > .attachment-photo-editable canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -3961,7 +3965,8 @@ strong {
   grid-template-columns: 1fr;
 }
 
-.attachment-photo-grid.count-1 img {
+.attachment-photo-grid.count-1 img,
+.attachment-photo-grid.count-1 canvas {
   height: auto;
   max-height: 520px;
 }
@@ -3978,7 +3983,8 @@ strong {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.attachment-photo-grid.count-2 img {
+.attachment-photo-grid.count-2 img,
+.attachment-photo-grid.count-2 canvas {
   height: 280px;
 }
 
@@ -3999,7 +4005,8 @@ strong {
   grid-column: span 2;
 }
 
-.attachment-photo-grid.count-3 > .attachment-photo-editable:first-child img {
+.attachment-photo-grid.count-3 > .attachment-photo-editable:first-child img,
+.attachment-photo-grid.count-3 > .attachment-photo-editable:first-child canvas {
   height: 260px;
 }
 
@@ -4008,7 +4015,9 @@ strong {
 }
 
 .attachment-photo-grid.count-3 > .attachment-photo-editable:not(:first-child) img,
-.attachment-photo-grid.count-4 > .attachment-photo-editable img {
+.attachment-photo-grid.count-3 > .attachment-photo-editable:not(:first-child) canvas,
+.attachment-photo-grid.count-4 > .attachment-photo-editable img,
+.attachment-photo-grid.count-4 > .attachment-photo-editable canvas {
   height: 180px;
 }
 
@@ -4030,7 +4039,8 @@ strong {
   grid-column: span 3;
 }
 
-.attachment-photo-grid.count-5 > .attachment-photo-editable:nth-child(-n + 2) img {
+.attachment-photo-grid.count-5 > .attachment-photo-editable:nth-child(-n + 2) img,
+.attachment-photo-grid.count-5 > .attachment-photo-editable:nth-child(-n + 2) canvas {
   height: 230px;
 }
 
@@ -4046,7 +4056,8 @@ strong {
   grid-column: span 2;
 }
 
-.attachment-photo-grid.count-5 > .attachment-photo-editable:nth-child(n + 3) img {
+.attachment-photo-grid.count-5 > .attachment-photo-editable:nth-child(n + 3) img,
+.attachment-photo-grid.count-5 > .attachment-photo-editable:nth-child(n + 3) canvas {
   height: 160px;
 }
 
