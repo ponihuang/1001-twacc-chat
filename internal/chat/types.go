@@ -26,6 +26,7 @@ type ConversationSummary struct {
 	LastMessagePreview string
 	LastMessageAt      time.Time
 	UnreadCount        int
+	HasUnreadMention   bool
 }
 
 // Conversation stores the minimal metadata needed by the message list response.
@@ -60,6 +61,12 @@ type CreateMessageInput struct {
 	Attachments    []AttachmentInput
 }
 
+// MessageMentionInput stores one mention target for a message.
+type MessageMentionInput struct {
+	UserID      int64
+	MentionType string
+}
+
 // Attachment stores metadata for a single uploaded file.
 type Attachment struct {
 	ID           int64
@@ -89,6 +96,7 @@ type ConversationItem struct {
 	LastMessagePreview string `json:"last_message_preview,omitempty"`
 	LastMessageAt      string `json:"last_message_at,omitempty"`
 	UnreadCount        int    `json:"unread_count"`
+	HasUnreadMention   bool   `json:"has_unread_mention"`
 }
 
 // DirectConversationData is the API-facing payload for a direct conversation create/load request.
@@ -318,6 +326,7 @@ type Repository interface {
 	SearchMessages(userID int64, query string, limit int) ([]Message, error)
 	MarkConversationRead(userID, conversationID int64) error
 	MarkConversationReadUntil(userID, conversationID, messageID int64) error
+	CreateMessageMentions(messageID, conversationID int64, mentions []MessageMentionInput) error
 	CreateMessage(input CreateMessageInput) (Message, error)
 	DeleteMessage(conversationID, messageID, actorUserID int64) error
 }

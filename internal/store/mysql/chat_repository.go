@@ -125,11 +125,28 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 						   AND cr.user_id = ?
 						 LIMIT 1
 				   ), 0)
-			) AS unread_count
+			) AS unread_count,
+			EXISTS (
+				SELECT 1
+				  FROM message_mentions mm
+				  JOIN messages m_mention ON m_mention.id = mm.message_id
+				 WHERE mm.conversation_id = c.id
+				   AND mm.mentioned_user_id = ?
+				   AND m_mention.is_recalled = FALSE
+				   AND m_mention.sender_id <> ?
+				   AND mm.message_id > COALESCE((
+						SELECT cr.last_read_message_id
+						  FROM conversation_reads cr
+						 WHERE cr.conversation_id = c.id
+						   AND cr.user_id = ?
+						 LIMIT 1
+				   ), 0)
+				 LIMIT 1
+			) AS has_unread_mention
 		  FROM conversation_members cm
 		  JOIN conversations c ON c.id = cm.conversation_id
 		 WHERE cm.user_id = ?
-		 ORDER BY COALESCE(last_message_at, c.created_at) DESC, c.id DESC`, userID, userID, userID, userID, userID, userID)
+		 ORDER BY COALESCE(last_message_at, c.created_at) DESC, c.id DESC`, userID, userID, userID, userID, userID, userID, userID, userID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list conversations: %w", err)
 	}
@@ -150,6 +167,7 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 			&item.LastMessagePreview,
 			&lastMessageAt,
 			&item.UnreadCount,
+			&item.HasUnreadMention,
 		); err != nil {
 			return nil, fmt.Errorf("scan conversation summary: %w", err)
 		}
@@ -881,6 +899,35 @@ func (r *ChatRepository) MarkConversationReadUntil(userID, conversationID, messa
 				ELSE last_read_at
 			END`, conversationID, userID, latestMessageID.Int64); err != nil {
 		return fmt.Errorf("mark conversation read until message: %w", err)
+	}
+
+	return nil
+}
+
+// CreateMessageMentions stores mention targets for a message.
+func (r *ChatRepository) CreateMessageMentions(messageID, conversationID int64, mentions []chat.MessageMentionInput) error {
+	if len(mentions) == 0 {
+		return nil
+	}
+	stmt, err := r.db.Prepare(`
+		INSERT IGNORE INTO message_mentions (message_id, conversation_id, mentioned_user_id, mention_type)
+		VALUES (?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare message mentions: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, mention := range mentions {
+		if mention.UserID <= 0 {
+			continue
+		}
+		mentionType := mention.MentionType
+		if mentionType == "" {
+			mentionType = "user"
+		}
+		if _, err := stmt.Exec(messageID, conversationID, mention.UserID, mentionType); err != nil {
+			return fmt.Errorf("create message mention: %w", err)
+		}
 	}
 
 	return nil

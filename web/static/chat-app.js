@@ -977,6 +977,12 @@
       ].join("");
     }).join("");
     composerMentionMenu.hidden = false;
+    window.requestAnimationFrame(function () {
+      const activeItem = composerMentionMenu.querySelector(".composer-mention-item.is-active");
+      if (activeItem) {
+        activeItem.scrollIntoView({ block: "nearest" });
+      }
+    });
   }
 
   async function updateMentionMenu() {
@@ -999,7 +1005,7 @@
         kind: "member",
         title: title || member.external_user_id || "使用者",
         externalUserID: member.external_user_id || "",
-        value: "@" + (title || member.external_user_id || "")
+        value: "@" + (member.external_user_id || title || "")
       };
     }).filter(function (item) {
       const text = (item.title + " " + item.externalUserID).toLowerCase();
@@ -1196,12 +1202,15 @@
       const active = item.conversation_id === activeConversationID ? " is-active" : "";
       const preview = conversationPreviewExcerpt(item);
       const meta = formatTime(item.last_message_at) || (item.member_count + " 位成員");
+      const mention = item.has_unread_mention
+        ? '<span class="conversation-mention-badge" aria-label="有標註你的未讀訊息">@</span>'
+        : "";
       const unread = item.unread_count > 0
         ? ('<span class="conversation-unread-badge" aria-label="未讀訊息 ' + item.unread_count + ' 則">' + item.unread_count + "</span>")
         : "";
       return [
         '<button type="button" class="conversation-card conversation-button' + active + '" data-conversation-id="' + item.conversation_id + '">',
-        '<span class="conversation-card-header"><strong>' + escapeHTML(item.title) + "</strong>" + unread + "</span>",
+        '<span class="conversation-card-header"><strong>' + escapeHTML(item.title) + '</strong><span class="conversation-badges">' + mention + unread + "</span></span>",
         "<span>" + escapeHTML(preview) + "</span>",
         "<small>" + escapeHTML(meta) + "</small>",
         "</button>"

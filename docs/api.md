@@ -170,6 +170,7 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 - 需帶 `Authorization: Bearer <session-token>`
 - 回應項目包含 `conversation_id`、`type`、`title`、`member_count`
 - 若已有最後一則訊息，會附帶 `last_message_type`、`last_message_preview`、`last_message_at`
+- `unread_count` 為一般未讀數；`has_unread_mention` 代表未讀訊息中有標註目前使用者或 `@ALL`
 
 ### `POST /api/conversations/direct`
 

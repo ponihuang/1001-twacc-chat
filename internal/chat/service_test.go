@@ -21,6 +21,7 @@ type mockRepository struct {
 	searchLimit          int
 	memberIDs            map[int64][]int64
 	markedReads          []readMarker
+	createdMentions      []MessageMentionInput
 	createdMessages      []CreateMessageInput
 	createMessageResult  Message
 	createMessageErr     error
@@ -142,6 +143,11 @@ func (m *mockRepository) MarkConversationRead(userID, conversationID int64) erro
 
 func (m *mockRepository) MarkConversationReadUntil(userID, conversationID, messageID int64) error {
 	m.markedReads = append(m.markedReads, readMarker{userID: userID, conversationID: conversationID, messageID: messageID})
+	return nil
+}
+
+func (m *mockRepository) CreateMessageMentions(messageID, conversationID int64, mentions []MessageMentionInput) error {
+	m.createdMentions = append([]MessageMentionInput(nil), mentions...)
 	return nil
 }
 
@@ -302,7 +308,7 @@ func conversationKey(userID, conversationID int64) string {
 func TestListConversations(t *testing.T) {
 	repo := &mockRepository{
 		conversations: map[int64][]ConversationSummary{
-			7: {{ConversationID: 9, Type: "direct", Title: "採購小組", DirectSourceSystem: "erp", DirectExternalID: "user_b", MemberCount: 3, LastMessageType: "text", LastMessagePreview: "hello", LastMessageAt: time.Date(2026, 4, 7, 1, 2, 3, 0, time.UTC), UnreadCount: 2}},
+			7: {{ConversationID: 9, Type: "direct", Title: "採購小組", DirectSourceSystem: "erp", DirectExternalID: "user_b", MemberCount: 3, LastMessageType: "text", LastMessagePreview: "hello", LastMessageAt: time.Date(2026, 4, 7, 1, 2, 3, 0, time.UTC), UnreadCount: 2, HasUnreadMention: true}},
 		},
 		firstUnreadMessageID: 2,
 	}
@@ -328,6 +334,9 @@ func TestListConversations(t *testing.T) {
 	}
 	if items[0].UnreadCount != 2 {
 		t.Fatalf("unread_count = %d, want 2", items[0].UnreadCount)
+	}
+	if !items[0].HasUnreadMention {
+		t.Fatalf("has_unread_mention = false, want true")
 	}
 	if items[0].DirectSourceSystem != "erp" || items[0].DirectExternalID != "user_b" {
 		t.Fatalf("unexpected direct peer fields: %+v", items[0])
@@ -836,6 +845,43 @@ func TestSendMessage(t *testing.T) {
 	}
 	if broker.event.EventType != "message.created" || broker.event.ConversationID != 9 {
 		t.Fatalf("unexpected realtime event: %+v", broker.event)
+	}
+}
+
+func TestSendMessageCreatesMentions(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 9): {ID: 9, Type: "group", Title: "測試群組"},
+		},
+		memberIDs: map[int64][]int64{
+			9: {7, 8, 9},
+		},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "sender", DisplayName: "Sender"},
+			{UserID: 8, SourceSystem: "erp", ExternalUserID: "etest01", DisplayName: "E Test"},
+			{UserID: 9, SourceSystem: "erp", ExternalUserID: "elva", DisplayName: "Elva"},
+		},
+		createMessageResult: Message{
+			ID:             33,
+			ConversationID: 9,
+			SenderID:       7,
+			SenderName:     "Sender",
+			MessageType:    "text",
+			Content:        "@etest01 hello",
+			CreatedAt:      time.Date(2026, 4, 7, 1, 2, 0, 0, time.UTC),
+		},
+	}
+	service := NewService(repo, nil)
+
+	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "text", Content: "@etest01 hello"})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+	if len(repo.createdMentions) != 1 || repo.createdMentions[0] != (MessageMentionInput{UserID: 8, MentionType: "user"}) {
+		t.Fatalf("unexpected mentions: %+v", repo.createdMentions)
 	}
 }
 

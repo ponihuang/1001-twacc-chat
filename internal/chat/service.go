@@ -3,6 +3,7 @@ package chat
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -33,6 +34,8 @@ var (
 	ErrMessageNotFound           = errors.New("message not found")
 	ErrMessageRecallForbidden    = errors.New("message recall forbidden")
 )
+
+var mentionPattern = regexp.MustCompile(`(?:^|\s)@([A-Za-z0-9_.-]+|ALL)\b`)
 
 // Service implements chat list and message list rules.
 type Service struct {
@@ -176,6 +179,7 @@ func (s *Service) ListConversations(actor SessionPrincipal) (Response, int, erro
 			LastMessageType:    conversation.LastMessageType,
 			LastMessagePreview: conversation.LastMessagePreview,
 			UnreadCount:        conversation.UnreadCount,
+			HasUnreadMention:   conversation.HasUnreadMention,
 		}
 		if !conversation.LastMessageAt.IsZero() {
 			item.LastMessageAt = conversation.LastMessageAt.Format(time.RFC3339)
@@ -625,6 +629,13 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
+	if mentions, err := s.messageMentions(conversationID, actor.UserID, content); err != nil {
+		return Response{}, 500, err
+	} else if len(mentions) > 0 {
+		if err := s.repo.CreateMessageMentions(created.ID, conversationID, mentions); err != nil {
+			return Response{}, 500, err
+		}
+	}
 
 	item := MessageItem{
 		MessageID:   created.ID,
@@ -658,6 +669,68 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 			Message:        item,
 		},
 	}, 201, nil
+}
+
+func (s *Service) messageMentions(conversationID, actorUserID int64, content string) ([]MessageMentionInput, error) {
+	tokens := mentionTokens(content)
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+	members, err := s.repo.ListConversationMembers(conversationID)
+	if err != nil {
+		return nil, err
+	}
+
+	hasAll := false
+	wanted := make(map[string]bool)
+	for _, token := range tokens {
+		if strings.EqualFold(token, "ALL") {
+			hasAll = true
+			continue
+		}
+		wanted[strings.ToLower(token)] = true
+	}
+
+	seen := make(map[int64]bool)
+	mentions := make([]MessageMentionInput, 0)
+	for _, member := range members {
+		if member.UserID == actorUserID || member.UserID == 0 || seen[member.UserID] {
+			continue
+		}
+		mentionType := ""
+		if hasAll {
+			mentionType = "all"
+		} else {
+			externalID := strings.ToLower(strings.TrimSpace(member.ExternalUserID))
+			displayName := strings.ToLower(strings.TrimSpace(member.DisplayName))
+			if wanted[externalID] || (displayName != "" && wanted[displayName]) {
+				mentionType = "user"
+			}
+		}
+		if mentionType == "" {
+			continue
+		}
+		seen[member.UserID] = true
+		mentions = append(mentions, MessageMentionInput{UserID: member.UserID, MentionType: mentionType})
+	}
+	return mentions, nil
+}
+
+func mentionTokens(content string) []string {
+	matches := mentionPattern.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	tokens := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) > 1 {
+			token := strings.TrimSpace(match[1])
+			if token != "" {
+				tokens = append(tokens, token)
+			}
+		}
+	}
+	return tokens
 }
 
 // DeleteMessage recalls a message sent by the current user.
