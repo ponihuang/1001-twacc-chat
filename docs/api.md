@@ -533,6 +533,7 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 
 - 需帶 `Authorization: Bearer <session-token>`
 - JSON 請求可傳 `type = text`
+- 文字訊息支援 `@ALL` 與 `@使用者帳號` 標註；後端會依目前對話成員建立標註提醒
 - `multipart/form-data` 可上傳圖片或一般檔案，欄位使用 `file` 與可選的 `content`
 - 目前支援 `.jpg`、`.jpeg`、`.png`、`.doc`、`.pdf`、`.xlsx`
 - 單檔大小上限 `40MB`

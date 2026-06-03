@@ -171,9 +171,27 @@
 說明：
 
 - 用於計算每個使用者在各對話的未讀數。
-- 訊息列表 API 會在標記已讀前，依此表找出第一筆未讀訊息並回傳 `first_unread_message_id`，讓前端可定位到未讀起點。
+- 訊息列表 API 會依此表找出第一筆未讀訊息並回傳 `first_unread_message_id`，讓前端可定位到未讀起點。
+- 前端會在使用者實際看到訊息後呼叫已讀 API 更新 `last_read_message_id`。
 
-## 11. `user_contacts`
+## 11. `message_mentions`
+
+欄位草案：
+
+- `id`
+- `message_id`
+- `conversation_id`
+- `mentioned_user_id`
+- `mention_type`
+- `created_at`
+
+說明：
+
+- 用於記錄文字訊息中的 `@使用者` 與 `@ALL` 標註目標。
+- `mention_type` 可為 `user` 或 `all`。
+- 對話列表會搭配 `conversation_reads.last_read_message_id` 判斷目前使用者是否有未讀標註，並回傳 `has_unread_mention`。
+
+## 12. `user_contacts`
 
 欄位草案：
 
