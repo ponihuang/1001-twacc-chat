@@ -1544,8 +1544,8 @@ strong {
   align-content: start;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 4px;
-  padding-bottom: 116px;
+  padding-right: 2px;
+  padding-bottom: 1px;
 }
 
 .conversation-search-panel {
