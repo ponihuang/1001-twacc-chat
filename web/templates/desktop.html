@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=group-info-actions-20260523a">
+  <link rel="stylesheet" href="/static/app.css?v=sidebar-bottom-nav-20260603a">
   <script defer src="/static/page-auth-guard.js?v=auth-guard-20260511a"></script>
   <script defer src="/static/sidebar-nav.js?v=contacts-page-20260516a"></script>
   <script defer src="/static/settings-panel.js?v=folder-save-20260516a"></script>
   <script defer src="/static/auth.js?v=global-search-20260508g"></script>
-  <script defer src="/static/chat-app.js?v=group-info-actions-20260523a"></script>
+  <script defer src="/static/chat-app.js?v=sidebar-bottom-nav-20260603a"></script>
 </head>
 <body class="desktop-page" data-require-auth-redirect="/login">
   <main class="desktop-shell" data-auth-app data-logout-redirect="/login">
@@ -314,6 +314,31 @@
           </section>
         </section>
       </section>
+
+      <nav class="sidebar-bottom-nav" data-auth-required hidden aria-label="主要導覽">
+        <button type="button" class="sidebar-bottom-nav-button sidebar-bottom-nav-contacts" data-sidebar-open="contacts" aria-label="好友列表">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8" r="4"></circle>
+            <path d="M4 21a8 8 0 0 1 16 0"></path>
+          </svg>
+          <span>好友</span>
+        </button>
+        <button type="button" class="sidebar-bottom-nav-button sidebar-bottom-nav-chat" data-sidebar-open="home" aria-label="聊天列表">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 18.5A7.5 7.5 0 0 1 12.5 5h1A6.5 6.5 0 0 1 20 11.5v.5a6.5 6.5 0 0 1-6.5 6.5H11l-4.5 3v-3z"></path>
+            <path d="M8 10.5h8"></path>
+            <path d="M8 14h5"></path>
+          </svg>
+          <span>聊天</span>
+        </button>
+        <button type="button" class="sidebar-bottom-nav-button sidebar-bottom-nav-settings" data-sidebar-open="settings" aria-label="設定功能">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z"></path>
+            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 0 1-2.83 2.83l-.04-.04A1.7 1.7 0 0 0 15 19.36a1.7 1.7 0 0 0-1 .58V20a2 2 0 0 1-4 0v-.06a1.7 1.7 0 0 0-1-.58 1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 0 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-.58-1H4a2 2 0 0 1 0-4h.06a1.7 1.7 0 0 0 .58-1 1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 0 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-.58V4a2 2 0 0 1 4 0v.06a1.7 1.7 0 0 0 1 .58 1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 0 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.36 9a1.7 1.7 0 0 0 .58 1H20a2 2 0 0 1 0 4h-.06a1.7 1.7 0 0 0-.54 1z"></path>
+          </svg>
+          <span>設定</span>
+        </button>
+      </nav>
 
     </aside>
 
