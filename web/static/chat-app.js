@@ -114,6 +114,10 @@
   const chatDropOverlay = app.querySelector("[data-chat-drop-overlay]");
   const chatDropZones = app.querySelectorAll("[data-drop-kind]");
   const messageContextMenu = app.querySelector("[data-message-context-menu]");
+  const conversationContextMenu = document.createElement("div");
+  conversationContextMenu.className = "conversation-context-menu";
+  conversationContextMenu.hidden = true;
+  document.body.appendChild(conversationContextMenu);
   const replyPreview = app.querySelector("[data-reply-preview]");
   const replySenderNode = app.querySelector("[data-reply-sender]");
   const replyExcerptNode = app.querySelector("[data-reply-excerpt]");
@@ -162,6 +166,7 @@
   let groupAddSearchQuery = "";
   let groupAddSelectedMembers = [];
   let groupMemberMenuTarget = null;
+  let conversationContextTarget = null;
   let contactsLoadToken = 0;
   let contactKeys = new Set();
   let contactExternalIDs = new Set();
@@ -1093,6 +1098,148 @@
     } catch (_) {
       return [];
     }
+  }
+
+  function customFolderCategories() {
+    return readFolderCategories().filter(function (folder) {
+      return folder && String(folder.name || "").trim().toUpperCase() !== "ALL";
+    });
+  }
+
+  function saveFolderCategories(folders) {
+    const key = accountStorageKey(storageKeys.folderCategories);
+    if (!key) {
+      return [];
+    }
+    const normalized = Array.isArray(folders) ? folders.map(function (folder) {
+      return {
+        id: String(folder.id || ""),
+        name: String(folder.name || "").trim(),
+        conversation_ids: Array.isArray(folder.conversation_ids)
+          ? folder.conversation_ids.map(String)
+          : []
+      };
+    }).filter(function (folder) {
+      return folder.id && folder.name;
+    }) : [];
+    localStorage.setItem(key, JSON.stringify(normalized));
+    document.dispatchEvent(new CustomEvent("twacc:folders-updated", {
+      detail: { folders: normalized }
+    }));
+    return normalized;
+  }
+
+  function folderIconSVG(checked) {
+    if (checked) {
+      return [
+        '<svg viewBox="0 0 24 24" aria-hidden="true">',
+        '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>',
+        '<path d="m9 13 2 2 4-5"></path>',
+        "</svg>"
+      ].join("");
+    }
+    return [
+      '<svg viewBox="0 0 24 24" aria-hidden="true">',
+      '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>',
+      "</svg>"
+    ].join("");
+  }
+
+  function closeConversationContextMenu() {
+    conversationContextMenu.hidden = true;
+    conversationContextTarget = null;
+  }
+
+  function positionConversationContextMenu(event) {
+    conversationContextMenu.hidden = false;
+    const rect = conversationContextMenu.getBoundingClientRect();
+    const margin = 10;
+    const left = Math.max(margin, Math.min(event.clientX + 2, window.innerWidth - rect.width - margin));
+    const top = Math.max(margin, Math.min(event.clientY + 2, window.innerHeight - rect.height - margin));
+    conversationContextMenu.style.left = left + "px";
+    conversationContextMenu.style.top = top + "px";
+  }
+
+  function renderConversationContextMenu(conversationID) {
+    const folders = customFolderCategories();
+    const id = String(conversationID || "");
+    const folderItems = folders.length ? folders.map(function (folder) {
+      const ids = Array.isArray(folder.conversation_ids) ? folder.conversation_ids.map(String) : [];
+      const checked = ids.indexOf(id) >= 0;
+      return [
+        '<button type="button" class="conversation-context-folder' + (checked ? " is-checked" : "") + '" data-context-folder-id="' + escapeHTML(folder.id) + '">',
+        folderIconSVG(checked),
+        "<span>" + escapeHTML(folder.name) + "</span>",
+        "</button>"
+      ].join("");
+    }).join("") : [
+      '<div class="conversation-context-empty">尚無可加入分類</div>'
+    ].join("");
+
+    conversationContextMenu.innerHTML = [
+      '<div class="conversation-context-actions">',
+      '<button type="button" class="conversation-context-action" data-context-action="folders" aria-expanded="false">',
+      '<svg viewBox="0 0 24 24" aria-hidden="true">',
+      '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>',
+      "</svg>",
+      "<span>加入分類</span>",
+      '<svg class="conversation-context-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>',
+      "</button>",
+      "</div>",
+      '<div class="conversation-context-folders" hidden>',
+      folderItems,
+      "</div>"
+    ].join("");
+  }
+
+  function setConversationContextFoldersOpen(open) {
+    const folderPanel = conversationContextMenu.querySelector(".conversation-context-folders");
+    const folderAction = conversationContextMenu.querySelector('[data-context-action="folders"]');
+    if (!folderPanel || !folderAction) {
+      return;
+    }
+    folderPanel.hidden = !open;
+    folderAction.classList.toggle("is-active", Boolean(open));
+    folderAction.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function openConversationContextMenu(event, button) {
+    if (!button) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    closeMessageContextMenu();
+    setConversationCreateMenuOpen(false);
+    conversationContextTarget = {
+      conversationID: String(button.dataset.conversationId || "")
+    };
+    renderConversationContextMenu(conversationContextTarget.conversationID);
+    positionConversationContextMenu(event);
+  }
+
+  function toggleConversationFolder(folderIDValue) {
+    if (!conversationContextTarget || !conversationContextTarget.conversationID) {
+      return;
+    }
+    const conversationID = String(conversationContextTarget.conversationID);
+    const folders = readFolderCategories();
+    const target = folders.find(function (folder) {
+      return String(folder.id || "") === String(folderIDValue || "");
+    });
+    if (!target || String(target.name || "").trim().toUpperCase() === "ALL") {
+      return;
+    }
+    const ids = new Set(Array.isArray(target.conversation_ids) ? target.conversation_ids.map(String) : []);
+    if (ids.has(conversationID)) {
+      ids.delete(conversationID);
+    } else {
+      ids.add(conversationID);
+    }
+    target.conversation_ids = Array.from(ids);
+    saveFolderCategories(folders);
+    renderConversationList(conversations);
+    closeConversationContextMenu();
   }
 
   function filteredConversations(items) {
@@ -4126,6 +4273,10 @@
     }
   });
 
+  document.addEventListener("twacc:folders-updated", function () {
+    renderConversationList(conversations);
+  });
+
   if (conversationSearchInput) {
     conversationSearchInput.addEventListener("focus", function () {
       conversationSearchQuery = conversationSearchInput.value.trim();
@@ -4466,6 +4617,14 @@
     window.setTimeout(clearMentionMenu, 120);
   });
   composerInput.addEventListener("keydown", handleComposerKeydown);
+  conversationList.addEventListener("contextmenu", function (event) {
+    const button = event.target.closest("[data-conversation-id]");
+    if (!button || !conversationList.contains(button)) {
+      return;
+    }
+    openConversationContextMenu(event, button);
+  });
+  conversationList.addEventListener("scroll", closeConversationContextMenu, { passive: true });
   messageBoard.addEventListener("contextmenu", function (event) {
     const bubble = bubbleFromContextEvent(event);
     if (!bubble) {
@@ -4496,6 +4655,29 @@
       }
     });
   }
+  conversationContextMenu.addEventListener("click", function (event) {
+    const actionButton = event.target.closest("[data-context-action]");
+    if (actionButton && actionButton.dataset.contextAction === "folders") {
+      event.preventDefault();
+      setConversationContextFoldersOpen(actionButton.getAttribute("aria-expanded") !== "true");
+      return;
+    }
+    const folderButton = event.target.closest("[data-context-folder-id]");
+    if (!folderButton) {
+      return;
+    }
+    toggleConversationFolder(folderButton.dataset.contextFolderId || "");
+  });
+  conversationContextMenu.addEventListener("pointerover", function (event) {
+    const actionButton = event.target.closest("[data-context-action]");
+    if (!actionButton || actionButton.dataset.contextAction !== "folders") {
+      return;
+    }
+    setConversationContextFoldersOpen(true);
+  });
+  conversationContextMenu.addEventListener("pointerleave", function () {
+    setConversationContextFoldersOpen(false);
+  });
   if (replyCancelButton) {
     replyCancelButton.addEventListener("click", function () {
       setReplyMessage(null);
@@ -4508,6 +4690,9 @@
 	    }
     if (contactMenu && contactMenuToggle && !contactMenu.hidden && !contactMenu.contains(event.target) && !contactMenuToggle.contains(event.target)) {
       setContactMenuOpen(false);
+    }
+    if (!conversationContextMenu.hidden && !conversationContextMenu.contains(event.target)) {
+      closeConversationContextMenu();
     }
 	    if (!messageContextMenu || messageContextMenu.hidden || messageContextMenu.contains(event.target)) {
 	      return;
@@ -4540,6 +4725,7 @@
     }
 	    if (event.key === "Escape") {
       closeMessageContextMenu();
+      closeConversationContextMenu();
       setConversationCreateMenuOpen(false);
       setContactMenuOpen(false);
       setContactPanelOpen(false);

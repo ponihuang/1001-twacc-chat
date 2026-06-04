@@ -875,6 +875,7 @@
   }
 
   document.addEventListener("twacc:session-changed", renderSettingsForSession);
+  document.addEventListener("twacc:folders-updated", renderFolders);
 
   renderSettingsForSession();
   setSubview("main");
