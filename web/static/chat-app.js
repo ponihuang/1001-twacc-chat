@@ -177,6 +177,8 @@
   let readUpdateInFlight = false;
   let pendingReadMessageID = 0;
   let lastReportedReadMessageID = 0;
+  let notificationAudioContext = null;
+  let notificationAudioUnlocked = false;
   const photoToolDefaultColors = {
     pen: "#ff8a0a",
     arrow: "#ffd21f",
@@ -1908,6 +1910,87 @@
     const displayName = String(localStorage.getItem("twacc_chat_display_name") || "").trim();
     const externalUserID = String(readExternalUserID() || "").trim();
     return senderName === displayName || senderName === externalUserID;
+  }
+
+  function notificationAudioAPI() {
+    return window.AudioContext || window.webkitAudioContext || null;
+  }
+
+  function getNotificationAudioContext() {
+    const AudioContextConstructor = notificationAudioAPI();
+    if (!AudioContextConstructor) {
+      return null;
+    }
+    if (!notificationAudioContext) {
+      notificationAudioContext = new AudioContextConstructor();
+    }
+    return notificationAudioContext;
+  }
+
+  function unlockNotificationAudio() {
+    const context = getNotificationAudioContext();
+    if (!context) {
+      return;
+    }
+    const markUnlocked = function () {
+      notificationAudioUnlocked = true;
+    };
+    if (context.state === "suspended" && context.resume) {
+      context.resume().then(markUnlocked).catch(function () {});
+      return;
+    }
+    markUnlocked();
+  }
+
+  function setupNotificationAudioUnlock() {
+    const unlock = function () {
+      unlockNotificationAudio();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("touchstart", unlock, { once: true });
+  }
+
+  function playIncomingMessageSound() {
+    const context = getNotificationAudioContext();
+    if (!context) {
+      return;
+    }
+    if (context.state === "suspended") {
+      if (!notificationAudioUnlocked) {
+        return;
+      }
+      context.resume().catch(function () {});
+    }
+
+    const startedAt = context.currentTime;
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, startedAt);
+    gain.gain.exponentialRampToValueAtTime(0.045, startedAt + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startedAt + 0.22);
+    gain.connect(context.destination);
+
+    [
+      { frequency: 880, start: 0, duration: 0.11 },
+      { frequency: 1174.66, start: 0.08, duration: 0.12 }
+    ].forEach(function (tone) {
+      const oscillator = context.createOscillator();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(tone.frequency, startedAt + tone.start);
+      oscillator.connect(gain);
+      oscillator.start(startedAt + tone.start);
+      oscillator.stop(startedAt + tone.start + tone.duration);
+    });
+  }
+
+  function shouldPlayIncomingMessageSound(event) {
+    if (!event || event.event_type !== "message.created") {
+      return false;
+    }
+    return !isOutgoingMessage(event.message || {});
   }
 
   function trimMessageExcerpt(text) {
@@ -3761,6 +3844,9 @@
     }
 
     if (event.event_type === "message.created") {
+      if (shouldPlayIncomingMessageSound(event)) {
+        playIncomingMessageSound();
+      }
       refreshConversationListOnly();
       if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
         const stickToBottom = isMessageBoardNearBottom();
@@ -4677,6 +4763,7 @@
     });
   }
 
+  setupNotificationAudioUnlock();
   connectRealtime();
   loadConversations();
 })();
