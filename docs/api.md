@@ -535,7 +535,9 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 - JSON 請求可傳 `type = text`
 - 文字訊息支援 `@ALL` 與 `@使用者帳號` 標註；後端會依目前對話成員建立標註提醒
 - `multipart/form-data` 可上傳圖片或一般檔案，欄位使用 `file` 與可選的 `content`
-- 目前支援 `.jpg`、`.jpeg`、`.png`、`.doc`、`.pdf`、`.xlsx`
+- 目前支援圖片 `.jpg`、`.jpeg`、`.png`、`.webp`、`.gif`、`.heic`、`.heif`
+- 目前支援文件 `.doc`、`.docx`、`.xls`、`.xlsx`、`.ppt`、`.pptx`、`.pdf`、`.txt`、`.csv`、`.rtf`、`.md`、`.odt`、`.ods`、`.odp`、`.pages`、`.numbers`、`.key`
+- 目前支援壓縮檔 `.zip`、`.rar`、`.7z`
 - 單檔大小上限 `40MB`
 - 純文字訊息的 `content` 去除前後空白後不可為空
 - 圖片 / 檔案訊息若未輸入文字，可只送附件
@@ -714,7 +716,9 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 規則草案：
 
 - 單檔上限 `40MB`
-- 允許 `.jpg`、`.png`、`.doc`、`.pdf`、`.xlsx`
+- 允許圖片 `.jpg`、`.jpeg`、`.png`、`.webp`、`.gif`、`.heic`、`.heif`
+- 允許文件 `.doc`、`.docx`、`.xls`、`.xlsx`、`.ppt`、`.pptx`、`.pdf`、`.txt`、`.csv`、`.rtf`、`.md`、`.odt`、`.ods`、`.odp`、`.pages`、`.numbers`、`.key`
+- 允許壓縮檔 `.zip`、`.rar`、`.7z`
 
 ## 6. 管理與安全功能
 

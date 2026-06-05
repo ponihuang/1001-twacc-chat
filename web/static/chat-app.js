@@ -184,6 +184,35 @@
   let lastReportedReadMessageID = 0;
   let notificationAudioContext = null;
   let notificationAudioUnlocked = false;
+  const allowedImageExtensions = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"];
+  const allowedDocumentExtensions = [
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+    "ppt",
+    "pptx",
+    "pdf",
+    "txt",
+    "csv",
+    "rtf",
+    "md",
+    "odt",
+    "ods",
+    "odp",
+    "pages",
+    "numbers",
+    "key",
+    "zip",
+    "rar",
+    "7z"
+  ];
+  const allowedAttachmentExtensions = allowedImageExtensions.concat(allowedDocumentExtensions);
+  const allowedImageExtensionPattern = new RegExp("\\.(" + allowedImageExtensions.join("|") + ")$", "i");
+  const allowedAttachmentExtensionPattern = new RegExp("\\.(" + allowedAttachmentExtensions.join("|") + ")$", "i");
+  const photoAcceptValue = allowedImageExtensions.map(function (ext) { return "." + ext; }).join(",");
+  const documentAcceptValue = allowedDocumentExtensions.map(function (ext) { return "." + ext; }).join(",");
+  const attachmentAcceptValue = allowedAttachmentExtensions.map(function (ext) { return "." + ext; }).join(",");
   const photoToolDefaultColors = {
     pen: "#ff8a0a",
     arrow: "#ffd21f",
@@ -2617,9 +2646,9 @@
     }
     selectedAttachmentKind = kind === "photo" ? "photo" : "document";
     if (kind === "photo") {
-      composerFileInput.accept = ".jpg,.jpeg,.png";
+      composerFileInput.accept = photoAcceptValue;
     } else {
-      composerFileInput.accept = ".doc,.docx,.pdf,.xlsx";
+      composerFileInput.accept = documentAcceptValue;
     }
     composerFileInput.multiple = true;
     setAttachmentMenuOpen(false);
@@ -2633,7 +2662,7 @@
 
   function isImageFile(file) {
     const name = String(file && file.name ? file.name : "").toLowerCase();
-    return file && (file.type.indexOf("image/") === 0 || /\.(jpg|jpeg|png)$/.test(name));
+    return file && (file.type.indexOf("image/") === 0 || allowedImageExtensionPattern.test(name));
   }
 
   function imageExtensionForMime(type) {
@@ -2652,7 +2681,7 @@
       return null;
     }
     const name = String(file.name || "").trim();
-    if (/\.(jpg|jpeg|png)$/i.test(name)) {
+    if (allowedImageExtensionPattern.test(name)) {
       return file;
     }
     const extension = imageExtensionForMime(file.type);
@@ -2668,7 +2697,7 @@
 
   function isImageAttachment(attachment) {
     const name = String(attachment && attachment.original_name ? attachment.original_name : "").toLowerCase();
-    return !!attachment && ((attachment.mime_type || "").indexOf("image/") === 0 || /\.(jpg|jpeg|png)$/.test(name));
+    return !!attachment && ((attachment.mime_type || "").indexOf("image/") === 0 || allowedImageExtensionPattern.test(name));
   }
 
   function allFilesAreImages(files) {
@@ -2680,9 +2709,8 @@
   }
 
   function allowedAttachmentFiles(files) {
-    const allowedAttachmentPattern = /\.(jpg|jpeg|png|doc|docx|pdf|xlsx)$/i;
     return files.filter(function (file) {
-      return allowedAttachmentPattern.test(file.name || "");
+      return allowedAttachmentExtensionPattern.test(file.name || "");
     });
   }
 
@@ -2855,7 +2883,7 @@
   function openDraggedFiles(files, kind) {
     const acceptedFiles = allowedAttachmentFiles(Array.from(files || []));
     if (!acceptedFiles.length) {
-      setMessageStatus("請拖放 jpg、png、doc、docx、pdf 或 xlsx 檔案。", true);
+      setMessageStatus("請拖放支援的圖片、文件或壓縮檔。", true);
       return;
     }
     if (composerFileInput) {

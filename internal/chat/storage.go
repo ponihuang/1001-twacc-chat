@@ -15,15 +15,35 @@ const maxAttachmentSize = 40 << 20
 
 var (
 	allowedImageExts = map[string]string{
+		".gif":  "image",
+		".heic": "image",
+		".heif": "image",
 		".jpg":  "image",
 		".jpeg": "image",
 		".png":  "image",
+		".webp": "image",
 	}
 	allowedFileExts = map[string]string{
-		".doc":  "file",
-		".docx": "file",
-		".pdf":  "file",
-		".xlsx": "file",
+		".7z":      "file",
+		".csv":     "file",
+		".doc":     "file",
+		".docx":    "file",
+		".key":     "file",
+		".md":      "file",
+		".numbers": "file",
+		".odp":     "file",
+		".ods":     "file",
+		".odt":     "file",
+		".pages":   "file",
+		".pdf":     "file",
+		".ppt":     "file",
+		".pptx":    "file",
+		".rar":     "file",
+		".rtf":     "file",
+		".txt":     "file",
+		".xls":     "file",
+		".xlsx":    "file",
+		".zip":     "file",
 	}
 )
 
