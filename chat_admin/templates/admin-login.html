@@ -25,11 +25,43 @@
       </div>
 
       <style>
-        /* 縮放登入面板，讓版面不那麼寬 */
+        .redirect-page {
+          min-height: 100vh;
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
+          padding: 30vh 20px 32px;
+        }
+
         .login-panel { max-width: 480px; width: 92%; padding: 20px; }
         .login-panel h1 { font-size: 1.25rem; }
-        .form-group input { padding: 10px 12px; font-size: 0.95rem; }
-        button.btn-primary { padding: 12px; font-size: 0.98rem; }
+        #login-form {
+          width: min(360px, 100%);
+          margin: 0 auto;
+        }
+        .form-group input {
+          padding: 12px 14px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.75);
+          font-size: 0.95rem;
+        }
+        .form-group input::placeholder { color: rgba(107, 98, 88, 0.56); }
+        .form-group input:focus {
+          border-color: rgba(165, 63, 43, 0.45);
+          box-shadow: 0 0 0 3px rgba(165, 63, 43, 0.08);
+        }
+        .login-submit {
+          align-self: center;
+          justify-content: center;
+          width: 180px;
+          padding: 12px;
+          font-size: 0.98rem;
+        }
+
+        @media (max-width: 480px) {
+          .redirect-page { padding-top: 18vh; }
+          .login-submit { width: 100%; }
+        }
       </style>
 
       <form id="login-form" style="display: flex; flex-direction: column; gap: 14px;">
@@ -55,22 +87,22 @@
           >
         </div>
 
-        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">
+        <button type="submit" class="btn btn-primary login-submit">
           <span id="btn-text">登入</span>
           <span class="loading" id="btn-loading" hidden></span>
         </button>
       </form>
 
-      <hr style="margin: 24px 0; border: none; border-top: 1px solid var(--line);">
+      <!-- <hr style="margin: 24px 0; border: none; border-top: 1px solid var(--line);"> -->
 
-      <div style="font-size: 0.85rem; color: var(--muted);">
+      <!-- <div style="font-size: 0.85rem; color: var(--muted);">
         <p style="margin: 0 0 8px 0;">
           <strong>尚未是系統管理員？</strong>
         </p>
         <p style="margin: 0;">
           請聯絡您的系統管理員以申請管理員帳號。
         </p>
-      </div>
+      </div> -->
     </div>
   </div>
 
