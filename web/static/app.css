@@ -612,7 +612,8 @@ strong {
 .desktop-sidebar[data-sidebar-view="login"] .sidebar-bottom-nav,
 .desktop-sidebar[data-sidebar-view="status"] .sidebar-bottom-nav,
 .desktop-sidebar[data-sidebar-view="new-group"] .sidebar-bottom-nav,
-.desktop-sidebar[data-sidebar-view="new-group-details"] .sidebar-bottom-nav {
+.desktop-sidebar[data-sidebar-view="new-group-details"] .sidebar-bottom-nav,
+.desktop-sidebar[data-sidebar-view="settings"][data-settings-view="folders"] .sidebar-bottom-nav {
   display: none !important;
 }
 
@@ -1025,6 +1026,11 @@ strong {
   min-height: 0;
 }
 
+.settings-folder-edit-view {
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  height: 100%;
+}
+
 .settings-folder-list-view {
   align-content: start;
 }
@@ -1321,6 +1327,7 @@ strong {
 .settings-folder-chat-list {
   display: grid;
   gap: 8px;
+  align-content: start;
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
