@@ -3471,6 +3471,7 @@ strong {
   z-index: 90;
   display: grid;
   grid-template-columns: minmax(160px, max-content) minmax(140px, max-content);
+  align-items: start;
   gap: 0;
   color: #171717;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
