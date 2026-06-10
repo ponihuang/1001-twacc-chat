@@ -10,7 +10,8 @@
     activeConversationID: "twacc_chat_active_conversation_id",
     activeFolderID: "twacc_chat_active_folder_tab_id",
     folderCategories: "twacc_chat_folder_categories",
-    conversationCatalog: "twacc_chat_conversation_catalog"
+    conversationCatalog: "twacc_chat_conversation_catalog",
+    notificationPermissionAsked: "twacc_chat_notification_permission_asked"
   };
   const baseDocumentTitle = document.title || "TWACC Chat";
   const titleBlinkIntervalMs = 1200;
@@ -185,6 +186,8 @@
   let pendingReadMessageID = 0;
   let lastReportedReadMessageID = 0;
   let notificationAudioContext = null;
+  let notificationAudioElement = null;
+  let notificationSoundURL = "";
   let notificationAudioUnlocked = false;
   let notificationAudioPrimed = false;
   let documentUnreadCount = 0;
@@ -192,7 +195,8 @@
   let unreadTitleBlinkAlternate = false;
   let faviconLink = document.querySelector("link[rel~='icon']");
   let originalFaviconHref = faviconLink ? faviconLink.href : "";
-  const notificationSoundVolume = 0.18;
+  let desktopNotificationPermissionRequested = localStorage.getItem(storageKeys.notificationPermissionAsked) === "1";
+  const notificationSoundVolume = 0.42;
   const allowedImageExtensions = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"];
   const allowedDocumentExtensions = [
     "doc",
@@ -2294,6 +2298,111 @@
     return Promise.resolve(markUnlocked());
   }
 
+  function writeWAVString(view, offset, value) {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  }
+
+  function notificationEnvelope(time, duration) {
+    const attack = 0.012;
+    const release = 0.05;
+    if (time < attack) {
+      return time / attack;
+    }
+    if (time > duration - release) {
+      return Math.max(0, (duration - time) / release);
+    }
+    return 1;
+  }
+
+  function createNotificationSoundURL() {
+    if (notificationSoundURL) {
+      return notificationSoundURL;
+    }
+    if (!window.Blob || !window.URL || !window.URL.createObjectURL) {
+      return "";
+    }
+    const sampleRate = 44100;
+    const duration = 0.32;
+    const samples = Math.floor(sampleRate * duration);
+    const buffer = new ArrayBuffer(44 + samples * 2);
+    const view = new DataView(buffer);
+    writeWAVString(view, 0, "RIFF");
+    view.setUint32(4, 36 + samples * 2, true);
+    writeWAVString(view, 8, "WAVE");
+    writeWAVString(view, 12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeWAVString(view, 36, "data");
+    view.setUint32(40, samples * 2, true);
+
+    for (let index = 0; index < samples; index += 1) {
+      const time = index / sampleRate;
+      const firstTone = time <= 0.16 ? Math.sin(2 * Math.PI * 880 * time) : 0;
+      const secondTone = time >= 0.08 ? Math.sin(2 * Math.PI * 1174.66 * time) : 0;
+      const envelope = notificationEnvelope(time, duration);
+      const sample = Math.max(-1, Math.min(1, (firstTone * 0.6 + secondTone * 0.5) * envelope));
+      view.setInt16(44 + index * 2, sample * 32767, true);
+    }
+
+    notificationSoundURL = window.URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
+    return notificationSoundURL;
+  }
+
+  function getNotificationAudioElement() {
+    if (notificationAudioElement) {
+      return notificationAudioElement;
+    }
+    const soundURL = createNotificationSoundURL();
+    if (!soundURL) {
+      return null;
+    }
+    notificationAudioElement = document.createElement("audio");
+    notificationAudioElement.preload = "auto";
+    notificationAudioElement.src = soundURL;
+    notificationAudioElement.volume = notificationSoundVolume;
+    notificationAudioElement.setAttribute("aria-hidden", "true");
+    notificationAudioElement.style.display = "none";
+    document.body.appendChild(notificationAudioElement);
+    return notificationAudioElement;
+  }
+
+  function unlockNotificationAudioElement() {
+    const audio = getNotificationAudioElement();
+    if (!audio) {
+      return Promise.resolve(false);
+    }
+    try {
+      const originalVolume = audio.volume;
+      audio.volume = 0.01;
+      audio.currentTime = 0;
+      const playPromise = audio.play();
+      const markUnlocked = function () {
+        window.setTimeout(function () {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.volume = originalVolume;
+        }, 30);
+        return true;
+      };
+      if (playPromise && typeof playPromise.then === "function") {
+        return playPromise.then(markUnlocked).catch(function () {
+          audio.volume = originalVolume;
+          return false;
+        });
+      }
+      return Promise.resolve(markUnlocked());
+    } catch (_) {
+      return Promise.resolve(false);
+    }
+  }
+
   function setupNotificationAudioUnlock() {
     const removeUnlockListeners = function () {
       window.removeEventListener("pointerdown", unlock);
@@ -2303,11 +2412,12 @@
       window.removeEventListener("click", unlock);
     };
     const unlock = function () {
-      unlockNotificationAudio().then(function (unlocked) {
-        if (unlocked) {
+      requestDesktopNotificationPermission();
+      Promise.all([unlockNotificationAudio(), unlockNotificationAudioElement()]).then(function (results) {
+        if (results.some(Boolean)) {
           removeUnlockListeners();
         }
-      });
+      }).catch(function () {});
     };
     window.addEventListener("pointerdown", unlock);
     window.addEventListener("mousedown", unlock);
@@ -2337,7 +2447,34 @@
     });
   }
 
+  function playIncomingMessageAudioElement() {
+    const audio = getNotificationAudioElement();
+    if (!audio) {
+      return false;
+    }
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = notificationSoundVolume;
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.then === "function") {
+        playPromise.catch(function () {
+          const context = getNotificationAudioContext();
+          if (context && context.state !== "suspended") {
+            playIncomingMessageSoundNow(context);
+          }
+        });
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function playIncomingMessageSound() {
+    if (playIncomingMessageAudioElement()) {
+      return;
+    }
     const context = getNotificationAudioContext();
     if (!context) {
       return;
@@ -2364,6 +2501,70 @@
       return false;
     }
     return !isOutgoingMessage(event.message || {});
+  }
+
+  function canUseDesktopNotifications() {
+    return "Notification" in window && window.isSecureContext;
+  }
+
+  function requestDesktopNotificationPermission() {
+    if (!canUseDesktopNotifications() || desktopNotificationPermissionRequested || Notification.permission !== "default") {
+      return;
+    }
+    desktopNotificationPermissionRequested = true;
+    localStorage.setItem(storageKeys.notificationPermissionAsked, "1");
+    try {
+      const permission = Notification.requestPermission();
+      if (permission && typeof permission.then === "function") {
+        permission.catch(function () {});
+      }
+    } catch (_) {}
+  }
+
+  function shouldShowDesktopNotification(event) {
+    return canUseDesktopNotifications()
+      && Notification.permission === "granted"
+      && shouldPlayIncomingMessageSound(event)
+      && (document.visibilityState === "hidden" || !document.hasFocus());
+  }
+
+  function conversationTitleForNotification(conversationID) {
+    const id = Number(conversationID || 0);
+    const item = conversations.find(function (conversation) {
+      return Number(conversation.conversation_id || 0) === id;
+    });
+    return item ? item.title : baseDocumentTitle;
+  }
+
+  function messageNotificationBody(message) {
+    const sender = String(message && message.sender_name ? message.sender_name : "新訊息").trim();
+    let text = currentMessageBodyText(message && message.content ? message.content : "");
+    if (!text && message && message.attachment) {
+      text = message.attachment.kind === "image" ? "傳送了圖片" : "傳送了附件";
+    }
+    return sender + "： " + trimMessageExcerpt(text || "傳送了新訊息");
+  }
+
+  function showDesktopNotification(event) {
+    if (!shouldShowDesktopNotification(event)) {
+      return;
+    }
+    try {
+      const conversationID = Number(event.conversation_id || 0);
+      const notification = new Notification(conversationTitleForNotification(conversationID), {
+        body: messageNotificationBody(event.message || {}),
+        icon: faviconLink ? faviconLink.href : "",
+        tag: "twacc-chat-conversation-" + conversationID,
+        renotify: true
+      });
+      notification.onclick = function () {
+        window.focus();
+        if (conversationID) {
+          openConversation(conversationID);
+        }
+        notification.close();
+      };
+    } catch (_) {}
   }
 
   function trimMessageExcerpt(text) {
@@ -4219,6 +4420,7 @@
       if (shouldPlayIncomingMessageSound(event)) {
         playIncomingMessageSound();
       }
+      showDesktopNotification(event);
       refreshConversationListOnly();
       if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
         const stickToBottom = isMessageBoardNearBottom();
