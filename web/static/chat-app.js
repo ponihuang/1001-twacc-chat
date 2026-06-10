@@ -12,6 +12,8 @@
     folderCategories: "twacc_chat_folder_categories",
     conversationCatalog: "twacc_chat_conversation_catalog"
   };
+  const baseDocumentTitle = document.title || "TWACC Chat";
+  const titleBlinkIntervalMs = 1200;
 
   const conversationList = app.querySelector("[data-conversation-list]");
   const conversationSummary = app.querySelector("[data-conversation-summary]");
@@ -184,6 +186,13 @@
   let lastReportedReadMessageID = 0;
   let notificationAudioContext = null;
   let notificationAudioUnlocked = false;
+  let notificationAudioPrimed = false;
+  let documentUnreadCount = 0;
+  let unreadTitleBlinkTimer = 0;
+  let unreadTitleBlinkAlternate = false;
+  let faviconLink = document.querySelector("link[rel~='icon']");
+  let originalFaviconHref = faviconLink ? faviconLink.href : "";
+  const notificationSoundVolume = 0.18;
   const allowedImageExtensions = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"];
   const allowedDocumentExtensions = [
     "doc",
@@ -325,6 +334,150 @@
       return;
     }
     conversationTitle.textContent = text || "目前對話";
+  }
+
+  function totalUnreadCount(items) {
+    return (items || []).reduce(function (total, item) {
+      return total + Math.max(0, Number(item && item.unread_count ? item.unread_count : 0));
+    }, 0);
+  }
+
+  function unreadNotificationTitle(count) {
+    return count === 1 ? "1 notification" : count + " notifications";
+  }
+
+  function shouldBlinkUnreadTitle() {
+    return documentUnreadCount > 0 && (document.visibilityState === "hidden" || !document.hasFocus());
+  }
+
+  function stopUnreadTitleBlink() {
+    if (unreadTitleBlinkTimer) {
+      window.clearInterval(unreadTitleBlinkTimer);
+      unreadTitleBlinkTimer = 0;
+    }
+    unreadTitleBlinkAlternate = false;
+  }
+
+  function applyDocumentTitle() {
+    if (documentUnreadCount <= 0) {
+      document.title = baseDocumentTitle;
+      return;
+    }
+    if (shouldBlinkUnreadTitle() && unreadTitleBlinkAlternate) {
+      document.title = unreadNotificationTitle(documentUnreadCount);
+      return;
+    }
+    document.title = "(" + documentUnreadCount + ") " + baseDocumentTitle;
+  }
+
+  function startUnreadTitleBlink() {
+    if (unreadTitleBlinkTimer || !shouldBlinkUnreadTitle()) {
+      return;
+    }
+    unreadTitleBlinkAlternate = true;
+    applyDocumentTitle();
+    unreadTitleBlinkTimer = window.setInterval(function () {
+      if (!shouldBlinkUnreadTitle()) {
+        stopUnreadTitleBlink();
+        applyDocumentTitle();
+        return;
+      }
+      unreadTitleBlinkAlternate = !unreadTitleBlinkAlternate;
+      applyDocumentTitle();
+    }, titleBlinkIntervalMs);
+  }
+
+  function ensureFaviconLink() {
+    if (faviconLink) {
+      return faviconLink;
+    }
+    faviconLink = document.createElement("link");
+    faviconLink.rel = "icon";
+    faviconLink.type = "image/png";
+    document.head.appendChild(faviconLink);
+    return faviconLink;
+  }
+
+  function drawDefaultFaviconIcon(ctx, size) {
+    ctx.fillStyle = "#2d8be8";
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = size * 0.07;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(size * 0.31, size * 0.44);
+    ctx.lineTo(size * 0.69, size * 0.44);
+    ctx.moveTo(size * 0.31, size * 0.56);
+    ctx.lineTo(size * 0.58, size * 0.56);
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(size * 0.45, size * 0.68);
+    ctx.lineTo(size * 0.55, size * 0.59);
+    ctx.lineTo(size * 0.61, size * 0.68);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function updateUnreadFavicon(count) {
+    const link = ensureFaviconLink();
+    if (count <= 0) {
+      if (originalFaviconHref) {
+        link.href = originalFaviconHref;
+      } else {
+        const emptyCanvas = document.createElement("canvas");
+        emptyCanvas.width = 64;
+        emptyCanvas.height = 64;
+        drawDefaultFaviconIcon(emptyCanvas.getContext("2d"), 64);
+        link.href = emptyCanvas.toDataURL("image/png");
+      }
+      return;
+    }
+
+    const size = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    drawDefaultFaviconIcon(ctx, size);
+
+    const badgeText = count > 99 ? "99+" : String(count);
+    ctx.fillStyle = "#2d8be8";
+    ctx.beginPath();
+    ctx.arc(size * 0.72, size * 0.28, size * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = size * 0.045;
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "700 " + (badgeText.length > 2 ? 18 : 24) + "px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(badgeText, size * 0.72, size * 0.28);
+    link.href = canvas.toDataURL("image/png");
+  }
+
+  function updateDocumentUnreadTitle(items) {
+    documentUnreadCount = totalUnreadCount(items);
+    updateUnreadFavicon(documentUnreadCount);
+    if (shouldBlinkUnreadTitle()) {
+      applyDocumentTitle();
+      startUnreadTitleBlink();
+      return;
+    }
+    stopUnreadTitleBlink();
+    applyDocumentTitle();
+  }
+
+  function refreshDocumentUnreadAttention() {
+    updateDocumentUnreadTitle(conversations);
   }
 
   function setConversationUIActive(isActive) {
@@ -1358,6 +1511,7 @@
   function renderConversationList(items) {
     conversations = items;
     syncConversationCatalog(items);
+    updateDocumentUnreadTitle(items);
 
     const visibleItems = filteredConversations(items);
     if (!visibleItems.length) {
@@ -2103,49 +2257,70 @@
     return notificationAudioContext;
   }
 
+  function primeNotificationAudio(context) {
+    if (!context || notificationAudioPrimed) {
+      return;
+    }
+    notificationAudioPrimed = true;
+    try {
+      const startedAt = context.currentTime;
+      const gain = context.createGain();
+      const oscillator = context.createOscillator();
+      gain.gain.setValueAtTime(0.0001, startedAt);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startedAt + 0.03);
+      oscillator.frequency.setValueAtTime(440, startedAt);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(startedAt);
+      oscillator.stop(startedAt + 0.03);
+    } catch (_) {}
+  }
+
   function unlockNotificationAudio() {
     const context = getNotificationAudioContext();
     if (!context) {
-      return;
+      return Promise.resolve(false);
     }
     const markUnlocked = function () {
       notificationAudioUnlocked = true;
+      primeNotificationAudio(context);
+      return true;
     };
     if (context.state === "suspended" && context.resume) {
-      context.resume().then(markUnlocked).catch(function () {});
-      return;
+      return context.resume().then(markUnlocked).catch(function () {
+        return false;
+      });
     }
-    markUnlocked();
+    return Promise.resolve(markUnlocked());
   }
 
   function setupNotificationAudioUnlock() {
-    const unlock = function () {
-      unlockNotificationAudio();
+    const removeUnlockListeners = function () {
       window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("mousedown", unlock);
       window.removeEventListener("keydown", unlock);
       window.removeEventListener("touchstart", unlock);
+      window.removeEventListener("click", unlock);
     };
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
-    window.addEventListener("touchstart", unlock, { once: true });
+    const unlock = function () {
+      unlockNotificationAudio().then(function (unlocked) {
+        if (unlocked) {
+          removeUnlockListeners();
+        }
+      });
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("mousedown", unlock);
+    window.addEventListener("keydown", unlock);
+    window.addEventListener("touchstart", unlock);
+    window.addEventListener("click", unlock);
   }
 
-  function playIncomingMessageSound() {
-    const context = getNotificationAudioContext();
-    if (!context) {
-      return;
-    }
-    if (context.state === "suspended") {
-      if (!notificationAudioUnlocked) {
-        return;
-      }
-      context.resume().catch(function () {});
-    }
-
+  function playIncomingMessageSoundNow(context) {
     const startedAt = context.currentTime;
     const gain = context.createGain();
     gain.gain.setValueAtTime(0.0001, startedAt);
-    gain.gain.exponentialRampToValueAtTime(0.045, startedAt + 0.015);
+    gain.gain.exponentialRampToValueAtTime(notificationSoundVolume, startedAt + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.0001, startedAt + 0.22);
     gain.connect(context.destination);
 
@@ -2160,6 +2335,28 @@
       oscillator.start(startedAt + tone.start);
       oscillator.stop(startedAt + tone.start + tone.duration);
     });
+  }
+
+  function playIncomingMessageSound() {
+    const context = getNotificationAudioContext();
+    if (!context) {
+      return;
+    }
+    if (context.state === "suspended") {
+      if (!context.resume) {
+        return;
+      }
+      context.resume().then(function () {
+        if (context.state !== "suspended") {
+          notificationAudioUnlocked = true;
+          primeNotificationAudio(context);
+          playIncomingMessageSoundNow(context);
+        }
+      }).catch(function () {});
+      return;
+    }
+
+    playIncomingMessageSoundNow(context);
   }
 
   function shouldPlayIncomingMessageSound(event) {
@@ -4976,6 +5173,10 @@
       zone.addEventListener("drop", handleDropZoneDrop);
     });
   }
+
+  document.addEventListener("visibilitychange", refreshDocumentUnreadAttention);
+  window.addEventListener("focus", refreshDocumentUnreadAttention);
+  window.addEventListener("blur", refreshDocumentUnreadAttention);
 
   setupNotificationAudioUnlock();
   connectRealtime();
