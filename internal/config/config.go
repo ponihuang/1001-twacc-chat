@@ -43,6 +43,8 @@ type ServerConfig struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
+	TLSCertFile  string
+	TLSKeyFile   string
 }
 
 // MySQLConfig groups database connection settings.
@@ -70,6 +72,8 @@ func Load() Config {
 			ReadTimeout:  durationEnv("HTTP_READ_TIMEOUT", defaultReadTimeout),
 			WriteTimeout: durationEnv("HTTP_WRITE_TIMEOUT", defaultWriteTimeout),
 			IdleTimeout:  durationEnv("HTTP_IDLE_TIMEOUT", defaultIdleTimeout),
+			TLSCertFile:  strings.TrimSpace(os.Getenv("TLS_CERT_FILE")),
+			TLSKeyFile:   strings.TrimSpace(os.Getenv("TLS_KEY_FILE")),
 		},
 		MySQL: MySQLConfig{
 			DSN:             strings.TrimSpace(os.Getenv("MYSQL_DSN")),

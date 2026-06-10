@@ -81,6 +81,14 @@ func Run() error {
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
+	if cfg.Server.TLSCertFile != "" || cfg.Server.TLSKeyFile != "" {
+		if cfg.Server.TLSCertFile == "" || cfg.Server.TLSKeyFile == "" {
+			return fmt.Errorf("TLS_CERT_FILE and TLS_KEY_FILE must be set together")
+		}
+		fmt.Printf("server listening on https://%s:%s\n", cfg.ListenHost, cfg.Port)
+		return server.ListenAndServeTLS(cfg.Server.TLSCertFile, cfg.Server.TLSKeyFile)
+	}
+
 	fmt.Printf("server listening on http://%s:%s\n", cfg.ListenHost, cfg.Port)
 	return server.ListenAndServe()
 }

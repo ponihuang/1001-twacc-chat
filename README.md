@@ -79,7 +79,7 @@ go run .
 
 程式啟動時會先嘗試讀取專案根目錄的 `.env`，再載入系統環境變數；若兩邊都有同名變數，系統環境變數優先。
 
-目前服務預設監聽 `http://0.0.0.0:8080`，可透過 `.env` 的 `LISTEN_HOST` 與 `PORT` 調整。
+目前服務預設監聽 `http://0.0.0.0:8080`，可透過 `.env` 的 `LISTEN_HOST` 與 `PORT` 調整。若要直接由 Go server 啟用 HTTPS，需同時設定 `TLS_CERT_FILE` 與 `TLS_KEY_FILE`，程式會改用 `https://` 啟動；若只設定其中一個會啟動失敗以避免誤用。
 
 開發時若想要自動重啟 server，可使用 `air`：
 
@@ -100,6 +100,8 @@ make dev
 ```bash
 LISTEN_HOST=0.0.0.0
 PORT=8080
+# TLS_CERT_FILE=certs/server.crt
+# TLS_KEY_FILE=certs/server.key
 ENABLE_MYSQL=true
 AUTO_MIGRATE=true
 MIGRATIONS_DIR=db/migrations
