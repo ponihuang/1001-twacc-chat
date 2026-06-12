@@ -196,7 +196,8 @@
   let faviconLink = document.querySelector("link[rel~='icon']");
   let originalFaviconHref = faviconLink ? faviconLink.href : "";
   let desktopNotificationPermissionRequested = localStorage.getItem(storageKeys.notificationPermissionAsked) === "1";
-  const notificationSoundVolume = 0.42;
+  const notificationSoundFile = "/static/sounds/notification.wav?v=20260611a";
+  const notificationSoundVolume = 0.45;
   const allowedImageExtensions = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"];
   const allowedDocumentExtensions = [
     "doc",
@@ -351,7 +352,7 @@
   }
 
   function shouldBlinkUnreadTitle() {
-    return documentUnreadCount > 0 && (document.visibilityState === "hidden" || !document.hasFocus());
+    return documentUnreadCount > 0 && document.visibilityState === "hidden";
   }
 
   function stopUnreadTitleBlink() {
@@ -2246,6 +2247,19 @@
     return senderName === displayName || senderName === externalUserID;
   }
 
+  function realtimeEventConversationID(event) {
+    return Number((event && event.conversation_id)
+      || (event && event.message && event.message.conversation_id)
+      || 0);
+  }
+
+  function isCurrentVisibleConversationEvent(event) {
+    const conversationID = realtimeEventConversationID(event);
+    return document.visibilityState === "visible"
+      && conversationID > 0
+      && conversationID === Number(activeConversationID || 0);
+  }
+
   function notificationAudioAPI() {
     return window.AudioContext || window.webkitAudioContext || null;
   }
@@ -2316,7 +2330,7 @@
     return 1;
   }
 
-  function createNotificationSoundURL() {
+  function createFallbackNotificationSoundURL() {
     if (notificationSoundURL) {
       return notificationSoundURL;
     }
@@ -2359,7 +2373,7 @@
     if (notificationAudioElement) {
       return notificationAudioElement;
     }
-    const soundURL = createNotificationSoundURL();
+    const soundURL = notificationSoundFile || createFallbackNotificationSoundURL();
     if (!soundURL) {
       return null;
     }
@@ -2370,6 +2384,9 @@
     notificationAudioElement.setAttribute("aria-hidden", "true");
     notificationAudioElement.style.display = "none";
     document.body.appendChild(notificationAudioElement);
+    try {
+      notificationAudioElement.load();
+    } catch (_) {}
     return notificationAudioElement;
   }
 
@@ -2500,7 +2517,10 @@
     if (!event || event.event_type !== "message.created") {
       return false;
     }
-    return !isOutgoingMessage(event.message || {});
+    if (isOutgoingMessage(event.message || {})) {
+      return false;
+    }
+    return !isCurrentVisibleConversationEvent(event);
   }
 
   function canUseDesktopNotifications() {
@@ -2525,7 +2545,7 @@
     return canUseDesktopNotifications()
       && Notification.permission === "granted"
       && shouldPlayIncomingMessageSound(event)
-      && (document.visibilityState === "hidden" || !document.hasFocus());
+      && document.visibilityState === "hidden";
   }
 
   function conversationTitleForNotification(conversationID) {
@@ -4422,7 +4442,7 @@
       }
       showDesktopNotification(event);
       refreshConversationListOnly();
-      if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
+      if (realtimeEventConversationID(event) === Number(activeConversationID || 0)) {
         const stickToBottom = isMessageBoardNearBottom();
         loadMessages(activeConversationID, false, {
           stickToBottom: stickToBottom,
@@ -4434,7 +4454,7 @@
 
     if (event.event_type === "message.recalled" || event.event_type === "message.deleted") {
       refreshConversationListOnly();
-      if (event.conversation_id && Number(event.conversation_id) === activeConversationID) {
+      if (realtimeEventConversationID(event) === Number(activeConversationID || 0)) {
         loadMessages(activeConversationID, false, { preserveScroll: true });
       }
     }
