@@ -85,7 +85,7 @@
     const infoMessage = document.getElementById('info-message');
     const infoText = document.getElementById('info-text');
 
-    // 從 localStorage 恢復上次的使用者 ID
+    // 從 localStorage 恢復上次的用戶 ID
     const savedUserId = localStorage.getItem('admin_external_user_id');
     if (savedUserId) {
       externalUserIdInput.value = savedUserId;
@@ -158,8 +158,8 @@
         localStorage.setItem('admin_user_id', userId);
         localStorage.setItem('admin_external_user_id', externalUserId);
 
-        // 導向儀表板
-        window.location.href = '/admin/dashboard';
+        // 導向首頁
+        window.location.href = '/office';
       } catch (err) {
         showError('[錯誤] ' + (err.message || '網路連接失敗，請檢查您的連接'));
       } finally {

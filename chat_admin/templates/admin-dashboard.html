@@ -4,378 +4,195 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=1">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260624-2">
   <script defer src="/admin/static/admin-auth.js?v=1"></script>
-  <script defer src="/admin/static/admin-app.js?v=1"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260624-2"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-logout-redirect="/admin/login">
-    <!-- Header -->
-    <header class="admin-header">
-      <h1 class="admin-header-title">TWACC 聊天系統 - 管理後台</h1>
-      <div class="admin-header-user">
-        <span id="header-admin-name" style="font-size: 0.95rem;">管理員</span>
-        <button type="button" class="btn btn-small" id="logout-button">登出</button>
-      </div>
-    </header>
-
-    <!-- Sidebar Navigation -->
     <aside class="admin-sidebar">
-      <nav class="sidebar-menu" data-sidebar-menu>
-        <button type="button" class="sidebar-menu-item is-active" data-menu-item="dashboard">
-          📊 儀表板
+      <nav class="sidebar-menu" data-sidebar-menu aria-label="管理功能">
+        <button type="button" class="sidebar-root" data-menu-item="dashboard">
+          <span class="menu-glyph" aria-hidden="true">⌂</span>
+          <span>首頁</span>
         </button>
-        <button type="button" class="sidebar-menu-item" data-menu-item="users">
-          👥 使用者管理
+
+        <div class="sidebar-group is-open">
+          <button type="button" class="sidebar-root is-group-open">
+            <span class="menu-glyph" aria-hidden="true">◉</span>
+            <span>用戶</span>
+            <span class="menu-caret" aria-hidden="true">⌃</span>
+          </button>
+          <div class="sidebar-submenu">
+            <button type="button" class="sidebar-subitem is-active" data-menu-item="users">
+              <span class="menu-glyph" aria-hidden="true">▣</span>
+              <span>用戶管理</span>
+            </button>
+          </div>
+        </div>
+
+        <button type="button" class="sidebar-root" data-menu-item="conversations">
+          <span class="menu-glyph" aria-hidden="true">●</span>
+          <span>對話</span>
         </button>
-        <button type="button" class="sidebar-menu-item" data-menu-item="devices">
-          🖥️ 設備管理
-        </button>
-        <button type="button" class="sidebar-menu-item" data-menu-item="whitelist">
-          🛡️ IP 白名單
-        </button>
-        <button type="button" class="sidebar-menu-item" data-menu-item="logs">
-          📋 操作日誌
-        </button>
-        <button type="button" class="sidebar-menu-item" data-menu-item="health">
-          🏥 系統狀態
+        <button type="button" class="sidebar-root" data-menu-item="admins">
+          <span class="menu-glyph" aria-hidden="true">▧</span>
+          <span>管理員</span>
         </button>
       </nav>
     </aside>
 
-    <!-- Main Content -->
-    <main class="admin-main" data-main-content>
-      <!-- Dashboard View -->
-      <section data-view="dashboard" class="is-active">
-        <div class="card">
-          <h2 class="card-title">歡迎，管理員</h2>
-          <p class="card-subtitle">TWACC 聊天系統管理後台</p>
+    <div class="admin-workspace">
+      <header class="admin-header">
+        <button type="button" class="header-toggle" aria-label="切換選單">☰</button>
+        <div class="admin-header-tools">
+          <button type="button" class="header-icon" aria-label="語言">文A</button>
+          <span class="admin-avatar" aria-hidden="true">●</span>
+          <span class="admin-name" id="header-admin-name">admin</span>
+          <button type="button" class="btn btn-small" id="logout-button">登出</button>
         </div>
+      </header>
 
-        <div class="card">
-          <h3 class="card-title">系統概覽</h3>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-            <div style="padding: 16px; background: var(--accent-soft); border-radius: 8px;">
-              <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent);" id="stat-users">--</div>
-              <div style="color: var(--muted); font-size: 0.9rem;">系統使用者</div>
+      <main class="admin-main" data-main-content>
+        <section data-view="dashboard" hidden>
+          <div class="admin-page-panel">
+            <div class="page-heading">
+              <div>
+                <p class="admin-breadcrumb">首頁 / 儀表板</p>
+                <h2>系統總覽</h2>
+              </div>
+              <button type="button" class="btn btn-primary" data-menu-item="users">前往用戶管理</button>
             </div>
-            <div style="padding: 16px; background: var(--olive-soft); border-radius: 8px;">
-              <div style="font-size: 1.5rem; font-weight: bold; color: var(--olive);" id="stat-active">--</div>
-              <div style="color: var(--muted); font-size: 0.9rem;">活躍裝置</div>
+            <div class="metric-grid">
+              <article class="metric-card">
+                <span>系統用戶</span>
+                <strong id="stat-users">--</strong>
+              </article>
+              <article class="metric-card">
+                <span>活躍裝置</span>
+                <strong id="stat-active">--</strong>
+              </article>
+              <article class="metric-card">
+                <span>對話總數</span>
+                <strong id="stat-conversations">--</strong>
+              </article>
+              <article class="metric-card">
+                <span>系統運行</span>
+                <strong id="stat-uptime">--</strong>
+              </article>
             </div>
-            <div style="padding: 16px; background: rgba(52, 152, 219, 0.12); border-radius: 8px;">
-              <div style="font-size: 1.5rem; font-weight: bold; color: #3498db;" id="stat-conversations">--</div>
-              <div style="color: var(--muted); font-size: 0.9rem;">對話總數</div>
-            </div>
-            <div style="padding: 16px; background: rgba(46, 204, 113, 0.12); border-radius: 8px;">
-              <div style="font-size: 1.5rem; font-weight: bold; color: #2ecc71;" id="stat-uptime">--</div>
-              <div style="color: var(--muted); font-size: 0.9rem;">系統運行時間</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3 class="card-title">快速操作</h3>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
-            <button class="btn btn-primary" data-menu-item="users">
-              查詢使用者
-            </button>
-            <button class="btn btn-primary" data-menu-item="devices">
-              管理設備
-            </button>
-            <button class="btn btn-primary" data-menu-item="whitelist">
-              設定 IP 白名單
-            </button>
-            <button class="btn btn-primary" data-menu-item="logs">
-              查看日誌
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Users Management View -->
-      <section data-view="users" hidden>
-        <div class="card">
-          <div class="flex-between mb-16">
-            <div>
-              <h2 class="card-title">使用者管理</h2>
-              <p class="card-subtitle">查詢和管理系統使用者</p>
-            </div>
-            <button class="btn btn-primary" id="refresh-users-btn">🔄 重新整理</button>
-          </div>
-
-          <div class="form-group">
-            <input 
-              type="text" 
-              id="user-search" 
-              placeholder="搜尋使用者 ID、名稱或 Email..."
-              autocomplete="off"
-            >
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="is-empty" id="users-loading" hidden>
-            <div class="loading"></div>
-            <p>載入中...</p>
-          </div>
-
-          <div class="is-empty" id="users-empty" hidden>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-              <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-            <p>找不到使用者</p>
-          </div>
-
-          <table class="data-table" id="users-table" hidden>
-            <thead>
-              <tr>
-                <th>使用者 ID</th>
-                <th>顯示名稱</th>
-                <th>建立時間</th>
-                <th>登入時間</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="users-tbody">
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- Devices Management View -->
-      <section data-view="devices" hidden>
-        <div class="card">
-          <div class="flex-between mb-16">
-            <div>
-              <h2 class="card-title">設備管理</h2>
-              <p class="card-subtitle">管理使用者的登入設備和信任狀態</p>
-            </div>
-            <button class="btn btn-primary" id="refresh-devices-btn">🔄 重新整理</button>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-            <div class="form-group">
-              <label for="device-user-id">使用者 ID</label>
-              <input 
-                type="text" 
-                id="device-user-id" 
-                placeholder="輸入使用者 ID"
-                autocomplete="off"
-              >
-            </div>
-            <div style="display: flex; align-items: flex-end; gap: 8px;">
-              <button class="btn btn-primary" id="search-devices-btn">搜尋設備</button>
+            <div class="health-grid">
+              <span>API <b id="health-api-time">--</b></span>
+              <span>DB <b id="health-db-time">--</b></span>
+              <span>WS <b id="health-ws-connections">--</b></span>
+              <span>版本 <b id="health-version">--</b></span>
+              <span>記憶體 <b id="health-memory">--</b></span>
+              <span>連接 <b id="health-concurrent">--</b></span>
+              <span>運行 <b id="health-uptime">--</b></span>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="card">
-          <div class="is-empty" id="devices-loading" hidden>
-            <div class="loading"></div>
-            <p>載入中...</p>
-          </div>
+        <section data-view="users" class="is-active">
+          <div class="admin-page-panel">
+            <p class="admin-breadcrumb">首頁 / 用戶管理</p>
 
-          <div class="is-empty" id="devices-empty" hidden>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-              <line x1="8" y1="21" x2="16" y2="21"></line>
-              <line x1="12" y1="17" x2="12" y2="21"></line>
-            </svg>
-            <p>尚無設備資料</p>
-          </div>
-
-          <table class="data-table" id="devices-table" hidden>
-            <thead>
-              <tr>
-                <th>設備 ID</th>
-                <th>User Agent</th>
-                <th>IP 位址</th>
-                <th>首次登入</th>
-                <th>最後登入</th>
-                <th>狀態</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="devices-tbody">
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- IP Whitelist View -->
-      <section data-view="whitelist" hidden>
-        <div class="card">
-          <div class="flex-between mb-16">
-            <div>
-              <h2 class="card-title">IP 白名單管理</h2>
-              <p class="card-subtitle">設定使用者允許登入的 IP 位址範圍</p>
-            </div>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-            <div class="form-group">
-              <label for="whitelist-user-id">使用者 ID</label>
-              <input 
-                type="text" 
-                id="whitelist-user-id" 
-                placeholder="輸入使用者 ID"
-                autocomplete="off"
-              >
-            </div>
-            <div style="display: flex; align-items: flex-end; gap: 8px;">
-              <button class="btn btn-primary" id="load-whitelist-btn">載入設定</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="is-empty" id="whitelist-loading" hidden>
-            <div class="loading"></div>
-            <p>載入中...</p>
-          </div>
-
-          <div id="whitelist-content" hidden>
-            <div class="form-group" style="margin-bottom: 20px;">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input type="checkbox" id="allow-all-toggle">
-                <span>允許從所有 IP 登入</span>
+            <form class="user-filter-panel" id="user-filter-form" aria-label="用戶篩選">
+              <label class="filter-account">
+                <span>帳號</span>
+                <input type="search" id="user-search" placeholder="搜尋帳號" autocomplete="off">
               </label>
-              <p style="margin: 8px 0 0 0; color: var(--muted); font-size: 0.85rem;">啟用此選項將允許使用者從任何 IP 位址登入</p>
-            </div>
-
-            <div class="form-group" id="rules-container" hidden>
-              <label>IP 白名單規則</label>
-              <p style="margin: 0 0 12px 0; color: var(--muted); font-size: 0.9rem;">支援 IPv4、IPv6 和 CIDR 標記法</p>
-              <div id="rules-list" style="margin-bottom: 12px;">
-                <!-- 動態生成 -->
+              <label class="filter-nickname">
+                <span>暱稱</span>
+                <input type="search" id="user-display-name" placeholder="搜尋暱稱" autocomplete="off">
+              </label>
+              <label class="filter-email">
+                <span>Email</span>
+                <input type="search" id="user-email" inputmode="email" placeholder="請輸入完整Email" autocomplete="off">
+              </label>
+              <label>
+                <span>狀態</span>
+                <select id="user-status">
+                  <option value="">全部</option>
+                  <option value="active">啟用</option>
+                  <option value="inactive">停用</option>
+                </select>
+              </label>
+              <label>
+                <span>來源</span>
+                <select id="user-source">
+                  <option value="">全部</option>
+                  <option value="erp">ERP</option>
+                  <option value="system">系統</option>
+                </select>
+              </label>
+              <label class="filter-wide">
+                <span>排序</span>
+                <select id="user-sort">
+                  <option value="created_at_desc">建立時間(新)</option>
+                  <option value="created_at_asc">建立時間(舊)</option>
+                  <option value="last_online_desc">最近在線</option>
+                </select>
+              </label>
+              <label class="filter-start-time">
+                <span>開始時間</span>
+                <input type="date" id="user-created-from" autocomplete="off">
+              </label>
+              <label>
+                <span>結束時間</span>
+                <input type="date" id="user-created-to" autocomplete="off">
+              </label>
+              <div class="filter-actions">
+                <button type="submit" class="btn" id="refresh-users-btn">搜尋</button>
+                <button type="button" class="btn btn-primary">新增</button>
               </div>
-              <button type="button" class="btn btn-small" id="add-rule-btn" hidden>
-                + 新增規則
-              </button>
-            </div>
+            </form>
 
-            <div style="display: flex; gap: 8px;">
-              <button class="btn btn-primary" id="save-whitelist-btn">保存設定</button>
-              <button class="btn" id="cancel-whitelist-btn">取消</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Logs View -->
-      <section data-view="logs" hidden>
-        <div class="card">
-          <div class="flex-between mb-16">
-            <div>
-              <h2 class="card-title">操作日誌</h2>
-              <p class="card-subtitle">管理員操作記錄</p>
-            </div>
-            <button class="btn btn-primary" id="refresh-logs-btn">🔄 重新整理</button>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-            <div class="form-group">
-              <label for="log-filter">篩選類型</label>
-              <select id="log-filter">
-                <option value="all">所有操作</option>
-                <option value="device_approval">設備核准</option>
-                <option value="whitelist_update">白名單更新</option>
-                <option value="user_query">使用者查詢</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="is-empty" id="logs-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="12" y1="19" x2="12" y2="5"></line>
-              <line x1="9" y1="16" x2="15" y2="16"></line>
-            </svg>
-            <p>暫無操作日誌</p>
-          </div>
-
-          <div id="logs-list">
-            <!-- 動態生成 -->
-          </div>
-        </div>
-      </section>
-
-      <!-- Health Status View -->
-      <section data-view="health" hidden>
-        <div class="card">
-          <h2 class="card-title">系統狀態</h2>
-          <p class="card-subtitle">系統健康狀態檢查</p>
-        </div>
-
-        <div class="card">
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
-            <div style="padding: 16px; background: var(--accent-soft); border-radius: 8px;">
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                <span style="font-size: 1.5rem;">✓</span>
-                <div>
-                  <div style="font-weight: bold;">API 服務</div>
-                  <span class="status-badge status-active">正常</span>
-                </div>
+            <section class="user-table-card">
+              <div class="is-empty" id="users-loading" hidden>
+                <div class="loading"></div>
+                <p>載入中...</p>
               </div>
-              <small style="color: var(--muted);">最後檢查: <span id="health-api-time">--:--:--</span></small>
-            </div>
-
-            <div style="padding: 16px; background: var(--accent-soft); border-radius: 8px;">
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                <span style="font-size: 1.5rem;">✓</span>
-                <div>
-                  <div style="font-weight: bold;">資料庫連接</div>
-                  <span class="status-badge status-active">正常</span>
-                </div>
+              <div class="is-empty" id="users-empty" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <p>找不到用戶</p>
               </div>
-              <small style="color: var(--muted);">回應時間: <span id="health-db-time">--ms</span></small>
-            </div>
-
-            <div style="padding: 16px; background: var(--accent-soft); border-radius: 8px;">
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                <span style="font-size: 1.5rem;">✓</span>
-                <div>
-                  <div style="font-weight: bold;">WebSocket 伺服器</div>
-                  <span class="status-badge status-active">正常</span>
-                </div>
+              <div class="table-scroll">
+                <table class="data-table" id="users-table">
+                  <colgroup id="users-colgroup"></colgroup>
+                  <thead id="users-thead"></thead>
+                  <tbody id="users-tbody"></tbody>
+                </table>
               </div>
-              <small style="color: var(--muted);">連接數: <span id="health-ws-connections">--</span></small>
+            </section>
+          </div>
+        </section>
+
+        <section data-view="conversations" hidden>
+          <div class="admin-page-panel">
+            <p class="admin-breadcrumb">首頁 / 對話</p>
+            <div class="placeholder-panel">
+              <h2>對話管理</h2>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="card">
-          <h3 class="card-title">伺服器資訊</h3>
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr style="border-bottom: 1px solid var(--line);">
-              <td style="padding: 12px; min-width: 200px; color: var(--muted);">版本</td>
-              <td style="padding: 12px;" id="health-version">--</td>
-            </tr>
-            <tr style="border-bottom: 1px solid var(--line);">
-              <td style="padding: 12px; color: var(--muted);">運行時間</td>
-              <td style="padding: 12px;" id="health-uptime">--</td>
-            </tr>
-            <tr style="border-bottom: 1px solid var(--line);">
-              <td style="padding: 12px; color: var(--muted);">記憶體使用</td>
-              <td style="padding: 12px;" id="health-memory">--</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; color: var(--muted);">並發連接</td>
-              <td style="padding: 12px;" id="health-concurrent">--</td>
-            </tr>
-          </table>
-        </div>
-      </section>
-    </main>
+        <section data-view="admins" hidden>
+          <div class="admin-page-panel">
+            <p class="admin-breadcrumb">首頁 / 管理員</p>
+            <div class="placeholder-panel">
+              <h2>管理員</h2>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
   </div>
 
-  <!-- Modal -->
-  <div class="modal" id="admin-modal">
+  <div class="modal" id="admin-modal" hidden>
     <div class="modal-content">
       <div class="modal-header" id="modal-title">標題</div>
       <div id="modal-body"></div>

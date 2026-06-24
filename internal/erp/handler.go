@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -108,6 +109,33 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, status, err := h.service.UpdateProfile(principal, req)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// ListUsers handles GET /api/system-admin/users.
+func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	filter, err := parseAdminUserFilter(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	resp, status, err := h.service.ListUsers(filter, principal)
 	if err != nil {
 		writeJSON(w, status, errorResponse(err))
 		return
@@ -320,6 +348,45 @@ func parseUserIDPath(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	}
 
 	return targetUserID, true
+}
+
+func parseAdminUserFilter(r *http.Request) (AdminUserFilter, error) {
+	query := r.URL.Query()
+	filter := AdminUserFilter{
+		ExternalUserID: strings.TrimSpace(query.Get("external_user_id")),
+		DisplayName:    strings.TrimSpace(query.Get("display_name")),
+		Email:          strings.TrimSpace(query.Get("email")),
+		Status:         strings.TrimSpace(query.Get("status")),
+		SourceSystem:   strings.TrimSpace(query.Get("source_system")),
+		Sort:           strings.TrimSpace(query.Get("sort")),
+	}
+
+	var err error
+	if value := strings.TrimSpace(query.Get("created_from")); value != "" {
+		filter.CreatedFrom, err = parseAdminDate(value, false)
+		if err != nil {
+			return AdminUserFilter{}, fmt.Errorf("開始時間格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("created_to")); value != "" {
+		filter.CreatedTo, err = parseAdminDate(value, true)
+		if err != nil {
+			return AdminUserFilter{}, fmt.Errorf("結束時間格式錯誤")
+		}
+	}
+
+	return filter, nil
+}
+
+func parseAdminDate(value string, endOfDay bool) (*time.Time, error) {
+	parsed, err := time.ParseInLocation("2006-01-02", value, time.Local)
+	if err != nil {
+		return nil, err
+	}
+	if endOfDay {
+		parsed = parsed.Add(24*time.Hour - time.Nanosecond)
+	}
+	return &parsed, nil
 }
 
 func decodeJSON(r *http.Request, dst any) error {

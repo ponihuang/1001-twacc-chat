@@ -11,12 +11,46 @@
   // DOM Elements
   let elements = {};
 
+  // Adjust each user-table column here. Use width for a fixed width or
+  // minWidth when the column may grow with the available table width.
+  const USER_COLUMNS = [
+    { key: 'index', title: '#', width: 60 },
+    { key: 'avatar', title: '頭像', width: 90 },
+    { key: 'account', title: '帳號', minWidth: 160 },
+    { key: 'displayName', title: '暱稱', minWidth: 180 },
+    { key: 'email', title: 'Email', minWidth: 260 },
+    { key: 'status', title: '狀態', width: 100 },
+    { key: 'source', title: '來源', width: 100 },
+    { key: 'lastOnline', title: '最近在線', minWidth: 180 },
+    { key: 'options', title: '選項', width: 120 }
+  ];
+
+  const VIEW_ROUTES = {
+    dashboard: '/office',
+    users: '/office/user',
+    conversations: '/office/conversations',
+    admins: '/office/admins'
+  };
+
+  const ROUTE_VIEWS = Object.entries(VIEW_ROUTES).reduce((routes, [viewName, path]) => {
+    routes[path] = viewName;
+    return routes;
+  }, {
+    '/admin/dashboard': 'dashboard'
+  });
+
+  function resolveInitialView() {
+    return ROUTE_VIEWS[window.location.pathname] || 'dashboard';
+  }
+
   /**
    * Initialize the app
    */
   async function initApp() {
     cacheElements();
+    renderTableColumns(elements.usersTable, elements.usersColgroup, elements.usersThead, USER_COLUMNS);
     setupEventListeners();
+    switchView(resolveInitialView(), { replace: true });
     await loadInitialData();
   }
 
@@ -37,8 +71,18 @@
       statUptime: document.getElementById('stat-uptime'),
       
       // Users
+      userFilterForm: document.getElementById('user-filter-form'),
       userSearch: document.getElementById('user-search'),
+      userDisplayName: document.getElementById('user-display-name'),
+      userEmail: document.getElementById('user-email'),
+      userStatus: document.getElementById('user-status'),
+      userSource: document.getElementById('user-source'),
+      userSort: document.getElementById('user-sort'),
+      userCreatedFrom: document.getElementById('user-created-from'),
+      userCreatedTo: document.getElementById('user-created-to'),
       usersTable: document.getElementById('users-table'),
+      usersColgroup: document.getElementById('users-colgroup'),
+      usersThead: document.getElementById('users-thead'),
       usersTbody: document.getElementById('users-tbody'),
       usersLoading: document.getElementById('users-loading'),
       usersEmpty: document.getElementById('users-empty'),
@@ -106,11 +150,27 @@
       });
     }
 
-    // User management
-    if (elements.userSearch) {
-      elements.userSearch.addEventListener('input', debounce(searchUsers, 300));
+    if (elements.mainContent) {
+      elements.mainContent.addEventListener('click', (e) => {
+        const menuItem = e.target.closest('[data-menu-item]');
+        if (menuItem) {
+          switchView(menuItem.getAttribute('data-menu-item'));
+        }
+      });
     }
-    if (elements.refreshUsersBtn) {
+
+    window.addEventListener('popstate', () => {
+      switchView(resolveInitialView(), { skipHistory: true });
+    });
+
+    // User management
+    if (elements.userFilterForm) {
+      elements.userFilterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        loadUsers();
+      });
+    }
+    if (elements.refreshUsersBtn && !elements.userFilterForm) {
       elements.refreshUsersBtn.addEventListener('click', loadUsers);
     }
 
@@ -158,6 +218,9 @@
     if (elements.modalCancelBtn) {
       elements.modalCancelBtn.addEventListener('click', closeModal);
     }
+    if (elements.modalConfirmBtn) {
+      elements.modalConfirmBtn.addEventListener('click', closeModal);
+    }
 
     // Logout
     if (elements.logoutButton) {
@@ -171,7 +234,19 @@
   /**
    * Switch between views
    */
-  function switchView(viewName) {
+  function switchView(viewName, options = {}) {
+    if (!VIEW_ROUTES[viewName]) {
+      viewName = 'dashboard';
+    }
+
+    if (!options.skipHistory) {
+      const nextPath = VIEW_ROUTES[viewName];
+      if (nextPath && window.location.pathname !== nextPath) {
+        const method = options.replace ? 'replaceState' : 'pushState';
+        window.history[method]({ adminView: viewName }, '', nextPath);
+      }
+    }
+
     // Update menu items
     document.querySelectorAll('[data-menu-item]').forEach(item => {
       item.classList.toggle('is-active', item.getAttribute('data-menu-item') === viewName);
@@ -194,6 +269,9 @@
     switch (viewName) {
       case 'users':
         loadUsers();
+        break;
+      case 'conversations':
+      case 'admins':
         break;
       case 'devices':
         // Already handled by button
@@ -242,40 +320,152 @@
    */
   async function loadUsers() {
     if (elements.usersLoading) elements.usersLoading.hidden = false;
-    if (elements.usersTable) elements.usersTable.hidden = true;
     if (elements.usersEmpty) elements.usersEmpty.hidden = true;
+    if (elements.usersTable) elements.usersTable.hidden = true;
 
     try {
-      // TODO: Implement actual API call to fetch users
-      // This would call an endpoint like GET /api/system-admin/users
-      
-      // For now, show empty state
-      showUsersEmpty();
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users?${buildUserQuery().toString()}`);
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入用戶列表失敗');
+      }
+
+      const users = Array.isArray(data.data) ? data.data : [];
+      if (users.length === 0) {
+        showUsersEmpty();
+        return;
+      }
+
+      populateUsersTable(users);
+      if (elements.usersTable) elements.usersTable.hidden = false;
     } catch (err) {
-      showError('載入使用者列表失敗: ' + err.message);
+      showError('載入用戶列表失敗: ' + err.message);
       showUsersEmpty();
+    } finally {
+      if (elements.usersLoading) elements.usersLoading.hidden = true;
     }
   }
 
-  /**
-   * Search users
-   */
-  async function searchUsers() {
-    const query = elements.userSearch?.value?.trim() || '';
-    if (!query) {
-      loadUsers();
-      return;
+  function buildUserQuery() {
+    const params = new URLSearchParams();
+    const filters = [
+      ['external_user_id', elements.userSearch?.value],
+      ['display_name', elements.userDisplayName?.value],
+      ['email', elements.userEmail?.value],
+      ['status', elements.userStatus?.value],
+      ['source_system', elements.userSource?.value],
+      ['sort', elements.userSort?.value],
+      ['created_from', elements.userCreatedFrom?.value],
+      ['created_to', elements.userCreatedTo?.value]
+    ];
+    filters.forEach(([key, value]) => {
+      const normalized = value?.trim();
+      if (normalized) params.set(key, normalized);
+    });
+    return params;
+  }
+
+  function populateUsersTable(users) {
+    if (!elements.usersTbody) return;
+
+    elements.usersTbody.replaceChildren();
+    users.forEach((user, index) => {
+      const row = document.createElement('tr');
+      USER_COLUMNS.forEach(column => {
+        row.appendChild(renderUserCell(column.key, user, index));
+      });
+
+      elements.usersTbody.appendChild(row);
+    });
+  }
+
+  function renderTableColumns(table, colgroup, thead, columns) {
+    if (!table || !colgroup || !thead) return;
+
+    colgroup.replaceChildren();
+    const headerRow = document.createElement('tr');
+    let minimumTableWidth = 0;
+
+    columns.forEach(column => {
+      const columnWidth = column.width || column.minWidth || 120;
+      minimumTableWidth += columnWidth;
+
+      const col = document.createElement('col');
+      col.style.width = `${columnWidth}px`;
+      colgroup.appendChild(col);
+
+      const header = document.createElement('th');
+      header.scope = 'col';
+      header.textContent = column.title;
+      headerRow.appendChild(header);
+    });
+
+    thead.replaceChildren(headerRow);
+    table.style.minWidth = `${minimumTableWidth}px`;
+  }
+
+  function renderUserCell(key, user, index) {
+    const cell = document.createElement('td');
+
+    switch (key) {
+      case 'index':
+        cell.textContent = String(index + 1);
+        break;
+      case 'avatar': {
+        const avatar = document.createElement('span');
+        avatar.className = 'user-avatar';
+        avatar.textContent = userInitial(user.display_name || user.external_user_id);
+        cell.appendChild(avatar);
+        break;
+      }
+      case 'account': {
+        const account = document.createElement('span');
+        account.className = 'account-link';
+        account.textContent = user.external_user_id || '--';
+        cell.appendChild(account);
+        break;
+      }
+      case 'displayName':
+        cell.textContent = user.display_name || '--';
+        break;
+      case 'email':
+        cell.textContent = user.email || '--';
+        break;
+      case 'status': {
+        const status = document.createElement('span');
+        status.className = 'status-badge';
+        status.textContent = user.status === 'active' ? '啟用' : '停用';
+        cell.appendChild(status);
+        break;
+      }
+      case 'source':
+        cell.textContent = (user.source_system || '--').toUpperCase();
+        break;
+      case 'lastOnline':
+        cell.textContent = formatDate(user.last_online_at);
+        break;
+      case 'options': {
+        cell.className = 'actions-cell';
+        const viewButton = document.createElement('button');
+        viewButton.type = 'button';
+        viewButton.className = 'table-action';
+        viewButton.textContent = '查看';
+        viewButton.title = '查看用戶';
+        cell.appendChild(viewButton);
+        break;
+      }
+      default:
+        cell.textContent = '--';
     }
 
-    if (elements.usersLoading) elements.usersLoading.hidden = false;
-    if (elements.usersTable) elements.usersTable.hidden = true;
+    return cell;
+  }
 
-    try {
-      // TODO: Implement actual search API call
-      showUsersEmpty();
-    } catch (err) {
-      showError('搜尋使用者失敗: ' + err.message);
-    }
+  function userInitial(value) {
+    const normalized = String(value || '').trim();
+    return normalized ? normalized.slice(0, 1).toUpperCase() : '?';
   }
 
   /**
@@ -293,7 +483,7 @@
   async function searchDevices() {
     const userId = elements.deviceUserId?.value?.trim();
     if (!userId) {
-      showError('請輸入使用者 ID');
+      showError('請輸入用戶 ID');
       return;
     }
 
@@ -379,7 +569,7 @@
   async function loadWhitelist() {
     const userId = elements.whitelistUserId?.value?.trim();
     if (!userId) {
-      showError('請輸入使用者 ID');
+      showError('請輸入用戶 ID');
       return;
     }
 
@@ -466,7 +656,7 @@
   async function saveWhitelist() {
     const userId = elements.whitelistUserId?.value?.trim();
     if (!userId) {
-      showError('請輸入使用者 ID');
+      showError('請輸入用戶 ID');
       return;
     }
 
@@ -607,6 +797,7 @@
   function closeModal() {
     if (elements.modal) {
       elements.modal.classList.remove('is-active');
+      elements.modal.hidden = true;
     }
   }
 
