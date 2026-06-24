@@ -52,6 +52,71 @@ button:disabled {
   display: none !important;
 }
 
+.redirect-page {
+  min-height: 100vh;
+  background: var(--admin-bg);
+}
+
+.login-panel {
+  border: 1px solid var(--admin-line);
+  border-radius: 8px;
+  background: var(--admin-panel);
+  box-shadow: var(--admin-shadow);
+}
+
+.login-panel h1 {
+  color: var(--admin-text);
+}
+
+.login-panel p,
+.login-panel label {
+  color: var(--admin-muted);
+}
+
+.form-group {
+  display: grid;
+  gap: 7px;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.form-group input {
+  width: 100%;
+  border: 1px solid var(--admin-line);
+  color: var(--admin-text);
+  outline: none;
+}
+
+.alert {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--admin-line);
+  border-radius: 6px;
+}
+
+.alert-info {
+  background: #edf3ee;
+  color: var(--admin-secondary);
+}
+
+.alert-danger {
+  border-color: rgba(165, 63, 43, 0.3);
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent-strong);
+}
+
+.login-submit .loading {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: admin-spin 0.8s linear infinite;
+}
+
 .admin-shell {
   min-height: 100vh;
   display: grid;
