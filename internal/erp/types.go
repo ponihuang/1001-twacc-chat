@@ -50,6 +50,30 @@ type DeviceSummary struct {
 	IsTrustedDevice bool   `json:"is_trusted_device"`
 }
 
+// AdminUserFilter contains supported filters for the admin user list.
+type AdminUserFilter struct {
+	ExternalUserID string
+	DisplayName    string
+	Email          string
+	Status         string
+	SourceSystem   string
+	CreatedFrom    *time.Time
+	CreatedTo      *time.Time
+	Sort           string
+}
+
+// AdminUserSummary is the API-facing user shape for the admin console.
+type AdminUserSummary struct {
+	ID             int64      `json:"id"`
+	ExternalUserID string     `json:"external_user_id"`
+	DisplayName    string     `json:"display_name"`
+	Email          string     `json:"email"`
+	Status         string     `json:"status"`
+	SourceSystem   string     `json:"source_system"`
+	CreatedAt      time.Time  `json:"created_at"`
+	LastOnlineAt   *time.Time `json:"last_online_at,omitempty"`
+}
+
 // IPWhitelistSettings is the API-facing whitelist payload.
 type IPWhitelistSettings struct {
 	AllowAll bool     `json:"allow_all"`
@@ -127,6 +151,7 @@ type Repository interface {
 	CreateUser(params RegisterParams) (User, error)
 	FindUserByID(userID int64) (User, error)
 	FindUserByExternal(sourceSystem, externalUserID string) (User, error)
+	ListUsers(filter AdminUserFilter) ([]AdminUserSummary, error)
 	UpdateUserProfile(userID int64, displayName string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)
 	GetUserSecuritySettings(userID int64) (UserSecuritySettings, error)

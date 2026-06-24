@@ -195,6 +195,28 @@ func (s *Service) UpdateProfile(actor SessionPrincipal, req ProfileUpdateRequest
 	return Response{Success: true, Code: "PROFILE_UPDATED", Message: "个人资料更新成功", Data: data}, 200, nil
 }
 
+// ListUsers returns users for the admin console. Only system_admin is allowed.
+func (s *Service) ListUsers(filter AdminUserFilter, actor SessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	users, err := s.repo.ListUsers(filter)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USERS_OK",
+		Message: "用户列表读取成功",
+		Data:    users,
+	}, 200, nil
+}
+
 // ListDevices returns the recent devices for a target user. Only system_admin is allowed.
 func (s *Service) ListDevices(targetUserID int64, actor SessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {

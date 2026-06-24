@@ -64,6 +64,22 @@ func (m *mockRepository) FindUserByExternal(sourceSystem, externalUserID string)
 	return user, nil
 }
 
+func (m *mockRepository) ListUsers(filter AdminUserFilter) ([]AdminUserSummary, error) {
+	users := make([]AdminUserSummary, 0, len(m.usersByID))
+	for _, user := range m.usersByID {
+		users = append(users, AdminUserSummary{
+			ID:             user.ID,
+			ExternalUserID: user.ExternalUserID,
+			DisplayName:    user.DisplayName,
+			Email:          user.Email,
+			Status:         user.Status,
+			SourceSystem:   user.SourceSystem,
+			CreatedAt:      user.CreatedAt,
+		})
+	}
+	return users, nil
+}
+
 func (m *mockRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
 	user, ok := m.usersByID[userID]
 	if !ok {
@@ -381,6 +397,42 @@ func TestUpdateIPWhitelistRejectsInvalidRule(t *testing.T) {
 	_, _, err := service.UpdateIPWhitelist(1, SessionPrincipal{UserID: 9}, IPWhitelistUpdateRequest{AllowAll: false, Rules: []string{"not-an-ip"}})
 	if !errors.Is(err, ErrInvalidIPWhitelistRule) {
 		t.Fatalf("expected ErrInvalidIPWhitelistRule, got %v", err)
+	}
+}
+
+func TestListUsersRequiresSystemAdmin(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:    map[int64]User{1: {ID: 1}},
+		systemAdmins: map[int64]bool{},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, _, err := service.ListUsers(AdminUserFilter{}, SessionPrincipal{UserID: 1})
+	if !errors.Is(err, ErrInsufficientRole) {
+		t.Fatalf("expected ErrInsufficientRole, got %v", err)
+	}
+}
+
+func TestListUsersReturnsRepositoryUsers(t *testing.T) {
+	repo := &mockRepository{
+		usersByID: map[int64]User{
+			1: {ID: 1, ExternalUserID: "user-1", DisplayName: "User One", Status: "active", SourceSystem: "erp"},
+			9: {ID: 9, ExternalUserID: "admin", DisplayName: "Admin", Status: "active", SourceSystem: "erp"},
+		},
+		systemAdmins: map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	resp, status, err := service.ListUsers(AdminUserFilter{}, SessionPrincipal{UserID: 9})
+	if err != nil {
+		t.Fatalf("ListUsers returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	users, ok := resp.Data.([]AdminUserSummary)
+	if !ok || len(users) != 2 {
+		t.Fatalf("users = %#v, want 2 users", resp.Data)
 	}
 }
 

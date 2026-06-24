@@ -129,6 +129,91 @@ func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID 
 	return user, nil
 }
 
+// ListUsers returns users and their most recent authenticated activity.
+func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.AdminUserSummary, error) {
+	var query strings.Builder
+	query.WriteString(
+		`SELECT u.id, u.external_user_id, u.display_name, COALESCE(u.email, ''), u.status,
+		        u.source_system, u.created_at, MAX(s.last_used_at) AS last_online_at
+		   FROM users u
+		   LEFT JOIN auth_sessions s ON s.user_id = u.id
+		  WHERE 1 = 1`,
+	)
+
+	args := make([]any, 0, 7)
+	addLikeFilter := func(column, value string) {
+		if value == "" {
+			return
+		}
+		query.WriteString(" AND " + column + " LIKE ?")
+		args = append(args, "%"+value+"%")
+	}
+	addLikeFilter("u.external_user_id", strings.TrimSpace(filter.ExternalUserID))
+	addLikeFilter("u.display_name", strings.TrimSpace(filter.DisplayName))
+	addLikeFilter("COALESCE(u.email, '')", strings.TrimSpace(filter.Email))
+
+	if value := strings.TrimSpace(filter.Status); value != "" {
+		query.WriteString(" AND u.status = ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(filter.SourceSystem); value != "" {
+		query.WriteString(" AND u.source_system = ?")
+		args = append(args, value)
+	}
+	if filter.CreatedFrom != nil {
+		query.WriteString(" AND u.created_at >= ?")
+		args = append(args, *filter.CreatedFrom)
+	}
+	if filter.CreatedTo != nil {
+		query.WriteString(" AND u.created_at <= ?")
+		args = append(args, *filter.CreatedTo)
+	}
+
+	query.WriteString(" GROUP BY u.id, u.external_user_id, u.display_name, u.email, u.status, u.source_system, u.created_at")
+	switch strings.TrimSpace(filter.Sort) {
+	case "created_at_asc":
+		query.WriteString(" ORDER BY u.created_at ASC, u.id ASC")
+	case "last_online_desc":
+		query.WriteString(" ORDER BY last_online_at DESC, u.id DESC")
+	default:
+		query.WriteString(" ORDER BY u.created_at DESC, u.id DESC")
+	}
+	query.WriteString(" LIMIT 500")
+
+	rows, err := r.db.Query(query.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]erp.AdminUserSummary, 0)
+	for rows.Next() {
+		var user erp.AdminUserSummary
+		var lastOnline sql.NullTime
+		if err := rows.Scan(
+			&user.ID,
+			&user.ExternalUserID,
+			&user.DisplayName,
+			&user.Email,
+			&user.Status,
+			&user.SourceSystem,
+			&user.CreatedAt,
+			&lastOnline,
+		); err != nil {
+			return nil, fmt.Errorf("scan user list: %w", err)
+		}
+		if lastOnline.Valid {
+			user.LastOnlineAt = &lastOnline.Time
+		}
+		users = append(users, user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate user list: %w", err)
+	}
+
+	return users, nil
+}
+
 // UpdateUserProfile updates mutable profile fields for a user.
 func (r *IntegrationRepository) UpdateUserProfile(userID int64, displayName string) (erp.User, error) {
 	result, err := r.db.Exec(`UPDATE users SET display_name = ? WHERE id = ?`, strings.TrimSpace(displayName), userID)

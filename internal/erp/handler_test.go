@@ -27,6 +27,10 @@ func (s *stubIntegrationRepository) FindUserByExternal(sourceSystem, externalUse
 	return User{}, ErrUserNotFound
 }
 
+func (s *stubIntegrationRepository) ListUsers(filter AdminUserFilter) ([]AdminUserSummary, error) {
+	return nil, nil
+}
+
 func (s *stubIntegrationRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
 	return User{ID: userID, SourceSystem: "erp", ExternalUserID: "user_a", DisplayName: displayName}, nil
 }
