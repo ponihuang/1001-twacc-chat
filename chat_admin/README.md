@@ -10,6 +10,7 @@
 - 登入成功導向 `/office`
 - 舊 `/admin/dashboard` 導向 `/office`
 - `/office/user` 使用者管理頁
+- `/office/user/create` 新增使用者頁
 - 從 `users` 資料表載入使用者列表
 - 以 `auth_sessions.last_used_at` 顯示最近在線
 - 帳號、暱稱、Email、狀態、來源、建立日期與排序篩選
@@ -18,7 +19,7 @@
 
 尚未完成：
 
-- 使用者新增、查看詳細資料與編輯
+- 使用者查看詳細資料與編輯
 - 對話管理 `/office/conversations`
 - 管理員管理 `/office/admins`
 - 新版介面中的設備、IP 白名單與操作日誌頁面
@@ -50,6 +51,7 @@ chat_admin/
 | `/admin/dashboard` | 重新導向 `/office` |
 | `/office` | 後台首頁 |
 | `/office/user` | 使用者管理，已串接資料 |
+| `/office/user/create` | 新增一般使用者 |
 | `/office/conversations` | 對話管理占位頁 |
 | `/office/admins` | 管理員管理占位頁 |
 
@@ -72,6 +74,16 @@ Authorization: Bearer <session-token>
 - `sort`：`created_at_desc`、`created_at_asc`、`last_online_desc`
 
 目前最多回傳 500 筆，後續需加入分頁。
+
+建立使用者：
+
+```http
+POST /api/system-admin/users
+Authorization: Bearer <session-token>
+Content-Type: application/json
+```
+
+新增頁欄位依序為帳號、密碼、暱稱、Email 與狀態。頁面固定使用 `source_system=office` 與 `language=zh-Hant`；狀態可選啟用或停用，預設為啟用。
 
 其他既有管理 API：
 

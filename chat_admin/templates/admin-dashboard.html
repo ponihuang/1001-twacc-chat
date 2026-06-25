@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260624-2">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260625-4">
   <script defer src="/admin/static/admin-auth.js?v=1"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260624-2"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260625-4"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-logout-redirect="/admin/login">
@@ -123,6 +123,7 @@
                 <select id="user-source">
                   <option value="">全部</option>
                   <option value="erp">ERP</option>
+                  <option value="office">OFFICE</option>
                   <option value="system">系統</option>
                 </select>
               </label>
@@ -144,7 +145,7 @@
               </label>
               <div class="filter-actions">
                 <button type="submit" class="btn" id="refresh-users-btn">搜尋</button>
-                <button type="button" class="btn btn-primary">新增</button>
+                <button type="button" class="btn btn-primary" data-menu-item="userCreate">新增</button>
               </div>
             </form>
 
@@ -168,6 +169,52 @@
                 </table>
               </div>
             </section>
+          </div>
+        </section>
+
+        <section data-view="userCreate" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="users" aria-label="返回用戶管理">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="users">用戶管理</button>
+              <span>/</span>
+              <span>新增用戶</span>
+            </nav>
+
+            <form class="user-create-form" id="user-create-form">
+              <div class="user-create-fields">
+                <label class="user-create-field">
+                  <span>帳號</span>
+                  <input type="text" id="create-user-account" maxlength="100" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>密碼</span>
+                  <input type="text" id="create-user-password" minlength="4" maxlength="20" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>暱稱</span>
+                  <input type="text" id="create-user-display-name" maxlength="100" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>Email</span>
+                  <input type="email" id="create-user-email" maxlength="255" autocomplete="off">
+                </label>
+                <label class="user-create-field">
+                  <span>狀態</span>
+                  <select id="create-user-status">
+                    <option value="active" selected>啟用</option>
+                    <option value="inactive">停用</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="user-create-actions">
+                <button type="submit" class="btn btn-primary btn-compact" id="submit-create-user">建立</button>
+                <button type="reset" class="btn btn-compact" id="reset-create-user">重置</button>
+              </div>
+            </form>
           </div>
         </section>
 

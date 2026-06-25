@@ -24,6 +24,8 @@ var (
 	ErrInvalidSourceSystem       = errors.New("invalid source system")
 	ErrInvalidExternalUserID     = errors.New("invalid external user id")
 	ErrInvalidDisplayName        = errors.New("invalid display name")
+	ErrInvalidEmail              = errors.New("invalid email")
+	ErrInvalidStatus             = errors.New("invalid status")
 	ErrInvalidPassword           = errors.New("invalid password")
 	ErrInvalidCredentials        = errors.New("invalid credentials")
 	ErrInvalidUserID             = errors.New("invalid user id")
@@ -70,24 +72,8 @@ func (s *Service) Register(req RegisterRequest) (Response, int, error) {
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
-	params.PasswordHash, err = hashPassword(req.Password)
-	if err != nil {
+	if _, err := s.createUser(params, req.Password); err != nil {
 		return Response{}, statusCode(err), err
-	}
-
-	_, err = s.repo.FindUserByExternal(params.SourceSystem, params.ExternalUserID)
-	if err == nil {
-		return Response{}, statusCode(ErrUserAlreadyExists), ErrUserAlreadyExists
-	}
-	if !errors.Is(err, ErrUserNotFound) {
-		return Response{}, 500, err
-	}
-
-	if _, err := s.repo.CreateUser(params); err != nil {
-		if errors.Is(err, ErrUserAlreadyExists) {
-			return Response{}, statusCode(err), err
-		}
-		return Response{}, 500, err
 	}
 
 	return Response{Success: true, Code: "REGISTERED", Message: "用户注册成功"}, 200, nil
@@ -215,6 +201,56 @@ func (s *Service) ListUsers(filter AdminUserFilter, actor SessionPrincipal) (Res
 		Message: "用户列表读取成功",
 		Data:    users,
 	}, 200, nil
+}
+
+// CreateUser creates an active user from the admin console. Only system_admin is allowed.
+func (s *Service) CreateUser(req AdminCreateUserRequest, actor SessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	params, err := validateRegisterRequest(RegisterRequest{
+		SourceSystem:   req.SourceSystem,
+		ExternalUserID: req.ExternalUserID,
+		Password:       req.Password,
+		DisplayName:    req.DisplayName,
+		Email:          req.Email,
+		Language:       req.Language,
+	})
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	status := strings.TrimSpace(req.Status)
+	if status == "" {
+		status = "active"
+	}
+	if status != "active" && status != "inactive" {
+		return Response{}, statusCode(ErrInvalidStatus), ErrInvalidStatus
+	}
+	params.Status = status
+
+	user, err := s.createUser(params, req.Password)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_CREATED",
+		Message: "用户建立成功",
+		Data: AdminUserSummary{
+			ID:             user.ID,
+			ExternalUserID: user.ExternalUserID,
+			DisplayName:    user.DisplayName,
+			Email:          user.Email,
+			Status:         user.Status,
+			SourceSystem:   user.SourceSystem,
+			CreatedAt:      user.CreatedAt,
+		},
+	}, 201, nil
 }
 
 // ListDevices returns the recent devices for a target user. Only system_admin is allowed.
@@ -345,16 +381,20 @@ func validateRegisterRequest(req RegisterRequest) (RegisterParams, error) {
 		Language:        strings.TrimSpace(req.Language),
 		WhatsAppAccount: strings.TrimSpace(req.WhatsAppAccount),
 		TelegramAccount: strings.TrimSpace(req.TelegramAccount),
+		Status:          "active",
 	}
 
 	if !sourceSystemPattern.MatchString(params.SourceSystem) {
 		return RegisterParams{}, ErrInvalidSourceSystem
 	}
-	if params.ExternalUserID == "" {
+	if params.ExternalUserID == "" || len([]rune(params.ExternalUserID)) > 100 {
 		return RegisterParams{}, ErrInvalidExternalUserID
 	}
-	if params.DisplayName == "" {
+	if params.DisplayName == "" || len([]rune(params.DisplayName)) > 100 {
 		return RegisterParams{}, ErrInvalidDisplayName
+	}
+	if len(params.Email) > 255 || (params.Email != "" && !strings.Contains(params.Email, "@")) {
+		return RegisterParams{}, ErrInvalidEmail
 	}
 	if err := validatePassword(req.Password); err != nil {
 		return RegisterParams{}, err
@@ -364,6 +404,31 @@ func validateRegisterRequest(req RegisterRequest) (RegisterParams, error) {
 	}
 
 	return params, nil
+}
+
+func (s *Service) createUser(params RegisterParams, password string) (User, error) {
+	passwordHash, err := hashPassword(password)
+	if err != nil {
+		return User{}, err
+	}
+	params.PasswordHash = passwordHash
+
+	_, err = s.repo.FindUserByExternal(params.SourceSystem, params.ExternalUserID)
+	if err == nil {
+		return User{}, ErrUserAlreadyExists
+	}
+	if !errors.Is(err, ErrUserNotFound) {
+		return User{}, err
+	}
+
+	user, err := s.repo.CreateUser(params)
+	if err != nil {
+		if errors.Is(err, ErrUserAlreadyExists) {
+			return User{}, ErrUserAlreadyExists
+		}
+		return User{}, err
+	}
+	return user, nil
 }
 
 func validateLoginRequest(req LoginRequest) (string, string, string, string, error) {
@@ -550,6 +615,8 @@ func statusCode(err error) int {
 	case errors.Is(err, ErrInvalidSourceSystem),
 		errors.Is(err, ErrInvalidExternalUserID),
 		errors.Is(err, ErrInvalidDisplayName),
+		errors.Is(err, ErrInvalidEmail),
+		errors.Is(err, ErrInvalidStatus),
 		errors.Is(err, ErrInvalidPassword),
 		errors.Is(err, ErrInvalidUserID),
 		errors.Is(err, ErrDeviceIDRequired),

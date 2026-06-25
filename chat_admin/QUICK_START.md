@@ -85,7 +85,7 @@ Authorization: Bearer <session-token>
 
 ## 5. 目前限制
 
-- 「新增」與「查看」尚未實作。
+- 「查看」尚未實作。
 - `/office/conversations` 與 `/office/admins` 目前是占位頁。
 - 設備與 IP 白名單 API 已存在，但新版後台尚未提供對應頁面。
 - 使用者列表尚未分頁，目前後端最多回傳 500 筆。

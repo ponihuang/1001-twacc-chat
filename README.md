@@ -55,6 +55,7 @@
 - system_admin 使用者列表 API，支援帳號、暱稱、Email、狀態、來源、建立日期與排序篩選
 - 管理後台登入頁與 `/office`、`/office/user`、`/office/conversations`、`/office/admins` 路由
 - `/office/user` 使用者管理畫面、資料表列表與可設定欄位寬度
+- `/office/user/create` 新增使用者頁面與 `POST /api/system-admin/users`
 - trusted device 核准 API
 - 使用者、session、裝置、IP 白名單、聊天核心資料表 migration
 - 裝置與 IP 白名單的基本驗證邏輯
@@ -64,7 +65,7 @@
 目前尚未完成：
 
 - 檔案留存策略
-- 管理後台的新增使用者、使用者詳細資料、設備、IP 白名單與操作日誌完整 UI
+- 管理後台的使用者詳細資料、設備、IP 白名單與操作日誌完整 UI
 - 管理後台的對話管理與管理員管理頁面，目前仍為占位畫面
 - 手機版 / 嵌入式頁面的聊天資料串接
 - 三語系完整文案

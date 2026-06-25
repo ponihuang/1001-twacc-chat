@@ -144,6 +144,33 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// CreateUser handles POST /api/system-admin/users.
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminCreateUserRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.CreateUser(req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // ListDevices handles GET /api/system-admin/users/{user_id}/devices.
 func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {
@@ -414,6 +441,10 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "INVALID_EXTERNAL_USER_ID", Message: "external_user_id 不可为空"}
 	case errors.Is(err, ErrInvalidDisplayName):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "display_name 不可为空"}
+	case errors.Is(err, ErrInvalidEmail):
+		return Response{Success: false, Code: "INVALID_EMAIL", Message: "Email 格式错误"}
+	case errors.Is(err, ErrInvalidStatus):
+		return Response{Success: false, Code: "INVALID_STATUS", Message: "状态仅支持 active 或 inactive"}
 	case errors.Is(err, ErrInvalidPassword):
 		return Response{Success: false, Code: "INVALID_PASSWORD", Message: "密码需为 4 到 20 码，且只能包含英文、数字或特殊符号"}
 	case errors.Is(err, ErrInvalidCredentials):

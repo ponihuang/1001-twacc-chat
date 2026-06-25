@@ -36,7 +36,7 @@ func (m *mockRepository) CreateUser(params RegisterParams) (User, error) {
 	if _, ok := m.usersByExternal[key]; ok {
 		return User{}, ErrUserAlreadyExists
 	}
-	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, PasswordHash: params.PasswordHash, Language: params.Language}
+	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, PasswordHash: params.PasswordHash, Language: params.Language, Status: params.Status}
 	if m.usersByID == nil {
 		m.usersByID = map[int64]User{}
 	}
@@ -433,6 +433,64 @@ func TestListUsersReturnsRepositoryUsers(t *testing.T) {
 	users, ok := resp.Data.([]AdminUserSummary)
 	if !ok || len(users) != 2 {
 		t.Fatalf("users = %#v, want 2 users", resp.Data)
+	}
+}
+
+func TestCreateUserRequiresSystemAdmin(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{1: {ID: 1}},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, _, err := service.CreateUser(AdminCreateUserRequest{
+		SourceSystem:   "erp",
+		ExternalUserID: "new-user",
+		DisplayName:    "New User",
+		Password:       "pass123!",
+	}, SessionPrincipal{UserID: 1})
+	if !errors.Is(err, ErrInsufficientRole) {
+		t.Fatalf("expected ErrInsufficientRole, got %v", err)
+	}
+}
+
+func TestCreateUserCreatesUserWithHashedPassword(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{9: {ID: 9}},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	resp, status, err := service.CreateUser(AdminCreateUserRequest{
+		SourceSystem:   "office",
+		ExternalUserID: "new-user",
+		DisplayName:    "New User",
+		Email:          "new@example.com",
+		Password:       "pass123!",
+		Language:       "zh-Hant",
+		Status:         "inactive",
+	}, SessionPrincipal{UserID: 9})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+	if resp.Code != "USER_CREATED" {
+		t.Fatalf("code = %q, want USER_CREATED", resp.Code)
+	}
+
+	created, ok := repo.usersByExternal["office:new-user"]
+	if !ok {
+		t.Fatal("created user not stored")
+	}
+	if created.PasswordHash == "" || created.PasswordHash == "pass123!" {
+		t.Fatal("password was not hashed")
+	}
+	if created.Status != "inactive" {
+		t.Fatalf("status = %q, want inactive", created.Status)
 	}
 }
 

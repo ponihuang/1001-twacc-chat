@@ -28,6 +28,7 @@
   const VIEW_ROUTES = {
     dashboard: '/office',
     users: '/office/user',
+    userCreate: '/office/user/create',
     conversations: '/office/conversations',
     admins: '/office/admins'
   };
@@ -87,6 +88,13 @@
       usersLoading: document.getElementById('users-loading'),
       usersEmpty: document.getElementById('users-empty'),
       refreshUsersBtn: document.getElementById('refresh-users-btn'),
+      userCreateForm: document.getElementById('user-create-form'),
+      createUserAccount: document.getElementById('create-user-account'),
+      createUserDisplayName: document.getElementById('create-user-display-name'),
+      createUserEmail: document.getElementById('create-user-email'),
+      createUserStatus: document.getElementById('create-user-status'),
+      createUserPassword: document.getElementById('create-user-password'),
+      submitCreateUser: document.getElementById('submit-create-user'),
       
       // Devices
       deviceUserId: document.getElementById('device-user-id'),
@@ -173,6 +181,9 @@
     if (elements.refreshUsersBtn && !elements.userFilterForm) {
       elements.refreshUsersBtn.addEventListener('click', loadUsers);
     }
+    if (elements.userCreateForm) {
+      elements.userCreateForm.addEventListener('submit', createUser);
+    }
 
     // Devices management
     if (elements.searchDevicesBtn) {
@@ -248,8 +259,9 @@
     }
 
     // Update menu items
+    const activeMenuItem = viewName === 'userCreate' ? 'users' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
-      item.classList.toggle('is-active', item.getAttribute('data-menu-item') === viewName);
+      item.classList.toggle('is-active', item.getAttribute('data-menu-item') === activeMenuItem);
     });
 
     // Update views
@@ -269,6 +281,9 @@
     switch (viewName) {
       case 'users':
         loadUsers();
+        break;
+      case 'userCreate':
+        elements.createUserAccount?.focus();
         break;
       case 'conversations':
       case 'admins':
@@ -466,6 +481,54 @@
   function userInitial(value) {
     const normalized = String(value || '').trim();
     return normalized ? normalized.slice(0, 1).toUpperCase() : '?';
+  }
+
+  async function createUser(event) {
+    event.preventDefault();
+
+    const password = elements.createUserPassword?.value || '';
+    if (/\s/.test(password)) {
+      showError('密碼不可包含空白');
+      elements.createUserPassword?.focus();
+      return;
+    }
+
+    const payload = {
+      source_system: 'office',
+      external_user_id: elements.createUserAccount?.value?.trim() || '',
+      display_name: elements.createUserDisplayName?.value?.trim() || '',
+      email: elements.createUserEmail?.value?.trim() || '',
+      language: 'zh-Hant',
+      status: elements.createUserStatus?.value || 'active',
+      password
+    };
+
+    if (!payload.external_user_id || !payload.display_name || !payload.password) {
+      showError('請填寫來源、帳號、暱稱與密碼');
+      return;
+    }
+
+    if (elements.submitCreateUser) elements.submitCreateUser.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/users', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '建立用戶失敗');
+      }
+
+      elements.userCreateForm?.reset();
+      showSuccess('用戶已建立');
+      switchView('users');
+    } catch (err) {
+      showError(err.message || '建立用戶失敗');
+    } finally {
+      if (elements.submitCreateUser) elements.submitCreateUser.disabled = false;
+    }
   }
 
   /**

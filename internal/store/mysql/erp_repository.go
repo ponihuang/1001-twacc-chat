@@ -31,7 +31,7 @@ func NewERPRepository(db *sql.DB) *IntegrationRepository {
 func (r *IntegrationRepository) CreateUser(params erp.RegisterParams) (erp.User, error) {
 	result, err := r.db.Exec(
 		`INSERT INTO users (source_system, external_user_id, display_name, password_hash, email, language, whatsapp_account, telegram_account, status)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		params.SourceSystem,
 		params.ExternalUserID,
 		params.DisplayName,
@@ -40,6 +40,7 @@ func (r *IntegrationRepository) CreateUser(params erp.RegisterParams) (erp.User,
 		params.Language,
 		nullableString(params.WhatsAppAccount),
 		nullableString(params.TelegramAccount),
+		params.Status,
 	)
 	if err != nil {
 		if isDuplicate(err) {

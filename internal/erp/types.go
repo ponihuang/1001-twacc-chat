@@ -105,6 +105,17 @@ type RegisterRequest struct {
 	TelegramAccount string `json:"telegram_account"`
 }
 
+// AdminCreateUserRequest is the system-admin payload for creating a user.
+type AdminCreateUserRequest struct {
+	SourceSystem   string `json:"source_system"`
+	ExternalUserID string `json:"external_user_id"`
+	Password       string `json:"password"`
+	DisplayName    string `json:"display_name"`
+	Email          string `json:"email"`
+	Language       string `json:"language"`
+	Status         string `json:"status"`
+}
+
 // LoginRequest is the external-system login payload.
 type LoginRequest struct {
 	SourceSystem   string `json:"source_system"`
@@ -144,6 +155,7 @@ type RegisterParams struct {
 	Language        string
 	WhatsAppAccount string
 	TelegramAccount string
+	Status          string
 }
 
 // Repository defines persistence required by external identity, login, and admin flows.

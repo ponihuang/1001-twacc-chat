@@ -6,7 +6,7 @@
 - [共用] 規劃 session 續期、後端登出失效與多裝置 session 管理策略
 - [前台] 規劃聊天室分類後端設定 API，取代目前 `localStorage` 原型
 - [後台] 將 `/office/user`、`/office/conversations`、`/office/admins` 拆成清楚的頁面模板與頁面 JS
-- [後台] 補使用者新增、詳細資料與編輯流程；目前「新增」與「查看」僅有 UI
+- [後台] 補使用者詳細資料與編輯流程；目前「查看」僅有 UI
 
 ## 中優先
 
@@ -66,3 +66,4 @@
 - 管理後台已新增 `/office` 路由、登入導向與使用者管理頁面
 - 管理後台使用者列表已串接 `GET /api/system-admin/users`
 - 使用者列表已支援帳號、暱稱、Email、狀態、來源、建立日期與排序篩選
+- 管理後台已新增 `/office/user/create` 與建立使用者 API

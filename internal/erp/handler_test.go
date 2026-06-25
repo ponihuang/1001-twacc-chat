@@ -16,7 +16,7 @@ import (
 type stubIntegrationRepository struct{}
 
 func (s *stubIntegrationRepository) CreateUser(params RegisterParams) (User, error) {
-	return User{ID: 1, SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName}, nil
+	return User{ID: 1, SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, Status: params.Status}, nil
 }
 
 func (s *stubIntegrationRepository) FindUserByID(userID int64) (User, error) {
