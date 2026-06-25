@@ -10,6 +10,8 @@
 
   // DOM Elements
   let elements = {};
+  let editingUserID = null;
+  let originalEditableUser = null;
 
   // Adjust each user-table column here. Use width for a fixed width or
   // minWidth when the column may grow with the available table width.
@@ -29,18 +31,24 @@
     dashboard: '/office',
     users: '/office/user',
     userCreate: '/office/user/create',
+    userEdit: null,
     conversations: '/office/conversations',
     admins: '/office/admins'
   };
 
   const ROUTE_VIEWS = Object.entries(VIEW_ROUTES).reduce((routes, [viewName, path]) => {
-    routes[path] = viewName;
+    if (path) routes[path] = viewName;
     return routes;
   }, {
     '/admin/dashboard': 'dashboard'
   });
 
   function resolveInitialView() {
+    const editMatch = window.location.pathname.match(/^\/office\/user\/(\d+)\/edit$/);
+    if (editMatch) {
+      editingUserID = editMatch[1];
+      return 'userEdit';
+    }
     return ROUTE_VIEWS[window.location.pathname] || 'dashboard';
   }
 
@@ -95,6 +103,14 @@
       createUserStatus: document.getElementById('create-user-status'),
       createUserPassword: document.getElementById('create-user-password'),
       submitCreateUser: document.getElementById('submit-create-user'),
+      userEditForm: document.getElementById('user-edit-form'),
+      editUserAccount: document.getElementById('edit-user-account'),
+      editUserPassword: document.getElementById('edit-user-password'),
+      editUserDisplayName: document.getElementById('edit-user-display-name'),
+      editUserEmail: document.getElementById('edit-user-email'),
+      editUserStatus: document.getElementById('edit-user-status'),
+      submitEditUser: document.getElementById('submit-edit-user'),
+      resetEditUser: document.getElementById('reset-edit-user'),
       
       // Devices
       deviceUserId: document.getElementById('device-user-id'),
@@ -184,6 +200,12 @@
     if (elements.userCreateForm) {
       elements.userCreateForm.addEventListener('submit', createUser);
     }
+    if (elements.userEditForm) {
+      elements.userEditForm.addEventListener('submit', updateUser);
+    }
+    if (elements.resetEditUser) {
+      elements.resetEditUser.addEventListener('click', resetUserEditForm);
+    }
 
     // Devices management
     if (elements.searchDevicesBtn) {
@@ -246,12 +268,14 @@
    * Switch between views
    */
   function switchView(viewName, options = {}) {
-    if (!VIEW_ROUTES[viewName]) {
+    if (!Object.prototype.hasOwnProperty.call(VIEW_ROUTES, viewName)) {
       viewName = 'dashboard';
     }
 
     if (!options.skipHistory) {
-      const nextPath = VIEW_ROUTES[viewName];
+      const nextPath = options.path || VIEW_ROUTES[viewName] || (
+        viewName === 'userEdit' && editingUserID ? `/office/user/${editingUserID}/edit` : ''
+      );
       if (nextPath && window.location.pathname !== nextPath) {
         const method = options.replace ? 'replaceState' : 'pushState';
         window.history[method]({ adminView: viewName }, '', nextPath);
@@ -259,7 +283,7 @@
     }
 
     // Update menu items
-    const activeMenuItem = viewName === 'userCreate' ? 'users' : viewName;
+    const activeMenuItem = viewName === 'userCreate' || viewName === 'userEdit' ? 'users' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
       item.classList.toggle('is-active', item.getAttribute('data-menu-item') === activeMenuItem);
     });
@@ -284,6 +308,9 @@
         break;
       case 'userCreate':
         elements.createUserAccount?.focus();
+        break;
+      case 'userEdit':
+        loadUserForEdit();
         break;
       case 'conversations':
       case 'admins':
@@ -463,12 +490,13 @@
         break;
       case 'options': {
         cell.className = 'actions-cell';
-        const viewButton = document.createElement('button');
-        viewButton.type = 'button';
-        viewButton.className = 'table-action';
-        viewButton.textContent = '查看';
-        viewButton.title = '查看用戶';
-        cell.appendChild(viewButton);
+        const editButton = document.createElement('button');
+        editButton.type = 'button';
+        editButton.className = 'table-action';
+        editButton.textContent = '編輯';
+        editButton.title = '編輯用戶';
+        editButton.addEventListener('click', () => openUserEdit(user.id));
+        cell.appendChild(editButton);
         break;
       }
       default:
@@ -528,6 +556,103 @@
       showError(err.message || '建立用戶失敗');
     } finally {
       if (elements.submitCreateUser) elements.submitCreateUser.disabled = false;
+    }
+  }
+
+  function openUserEdit(userID) {
+    editingUserID = String(userID);
+    switchView('userEdit', { path: `/office/user/${encodeURIComponent(editingUserID)}/edit` });
+  }
+
+  async function loadUserForEdit() {
+    if (!editingUserID || !elements.userEditForm) return;
+
+    if (elements.submitEditUser) elements.submitEditUser.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingUserID)}`);
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入用戶資料失敗');
+      }
+
+      const user = data.data || {};
+      elements.editUserAccount.value = user.external_user_id || '';
+      originalEditableUser = {
+        password: '',
+        displayName: user.display_name || '',
+        email: user.email || '',
+        status: user.status || 'active'
+      };
+      resetUserEditForm();
+      elements.editUserDisplayName.focus();
+    } catch (err) {
+      showError(err.message || '載入用戶資料失敗');
+      switchView('users');
+    } finally {
+      if (elements.submitEditUser) elements.submitEditUser.disabled = false;
+    }
+  }
+
+  function resetUserEditForm() {
+    if (!originalEditableUser) return;
+
+    const editableFields = [
+      [elements.editUserPassword, originalEditableUser.password],
+      [elements.editUserDisplayName, originalEditableUser.displayName],
+      [elements.editUserEmail, originalEditableUser.email],
+      [elements.editUserStatus, originalEditableUser.status]
+    ];
+    editableFields.forEach(([field, originalValue]) => {
+      if (field && field.value !== originalValue) {
+        field.value = originalValue;
+      }
+    });
+  }
+
+  async function updateUser(event) {
+    event.preventDefault();
+    if (!editingUserID) return;
+
+    const password = elements.editUserPassword?.value || '';
+    if (password && /\s/.test(password)) {
+      showError('密碼不可包含空白');
+      elements.editUserPassword?.focus();
+      return;
+    }
+
+    const payload = {
+      password,
+      display_name: elements.editUserDisplayName?.value?.trim() || '',
+      email: elements.editUserEmail?.value?.trim() || '',
+      status: elements.editUserStatus?.value || 'active'
+    };
+    if (!payload.display_name) {
+      showError('請填寫暱稱');
+      return;
+    }
+
+    if (elements.submitEditUser) elements.submitEditUser.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingUserID)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '更新用戶失敗');
+      }
+
+      elements.editUserPassword.value = '';
+      showSuccess('用戶資料已更新');
+      switchView('users');
+    } catch (err) {
+      showError(err.message || '更新用戶失敗');
+    } finally {
+      if (elements.submitEditUser) elements.submitEditUser.disabled = false;
     }
   }
 

@@ -80,6 +80,22 @@ func (m *mockRepository) ListUsers(filter AdminUserFilter) ([]AdminUserSummary, 
 	return users, nil
 }
 
+func (m *mockRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
+	user, ok := m.usersByID[userID]
+	if !ok {
+		return User{}, ErrUserNotFound
+	}
+	user.DisplayName = params.DisplayName
+	user.Email = params.Email
+	user.Status = params.Status
+	if params.PasswordHash != "" {
+		user.PasswordHash = params.PasswordHash
+	}
+	m.usersByID[userID] = user
+	m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
+	return user, nil
+}
+
 func (m *mockRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
 	user, ok := m.usersByID[userID]
 	if !ok {
@@ -491,6 +507,66 @@ func TestCreateUserCreatesUserWithHashedPassword(t *testing.T) {
 	}
 	if created.Status != "inactive" {
 		t.Fatalf("status = %q, want inactive", created.Status)
+	}
+}
+
+func TestUpdateUserKeepsPasswordWhenBlank(t *testing.T) {
+	originalHash := mustHashPassword(t, "oldpass!")
+	repo := &mockRepository{
+		usersByID: map[int64]User{
+			1: {ID: 1, SourceSystem: "office", ExternalUserID: "old-user", DisplayName: "Old", PasswordHash: originalHash, Status: "active"},
+			9: {ID: 9},
+		},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, status, err := service.UpdateUser(1, AdminUpdateUserRequest{
+		DisplayName: "Updated",
+		Email:       "updated@example.com",
+		Status:      "inactive",
+		Password:    "",
+	}, SessionPrincipal{UserID: 9})
+	if err != nil {
+		t.Fatalf("UpdateUser returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if repo.usersByID[1].PasswordHash != originalHash {
+		t.Fatal("blank password changed password hash")
+	}
+	if repo.usersByID[1].ExternalUserID != "old-user" {
+		t.Fatal("update changed immutable external user id")
+	}
+}
+
+func TestUpdateUserChangesPasswordWhenProvided(t *testing.T) {
+	originalHash := mustHashPassword(t, "oldpass!")
+	repo := &mockRepository{
+		usersByID: map[int64]User{
+			1: {ID: 1, SourceSystem: "office", ExternalUserID: "user-1", DisplayName: "User", PasswordHash: originalHash, Status: "active"},
+			9: {ID: 9},
+		},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, _, err := service.UpdateUser(1, AdminUpdateUserRequest{
+		DisplayName: "User",
+		Status:      "active",
+		Password:    "newpass!",
+	}, SessionPrincipal{UserID: 9})
+	if err != nil {
+		t.Fatalf("UpdateUser returned error: %v", err)
+	}
+	if repo.usersByID[1].PasswordHash == originalHash {
+		t.Fatal("provided password did not change password hash")
+	}
+	if !passwordMatches("newpass!", repo.usersByID[1].PasswordHash) {
+		t.Fatal("updated password hash does not match new password")
 	}
 }
 

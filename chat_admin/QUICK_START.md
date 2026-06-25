@@ -85,7 +85,7 @@ Authorization: Bearer <session-token>
 
 ## 5. 目前限制
 
-- 「查看」尚未實作。
+- 使用者列表的「編輯」可進入 `/office/user/{user_id}/edit` 查看不可修改的帳號，並修改密碼、暱稱、Email 與狀態；密碼留空時保留原密碼。
 - `/office/conversations` 與 `/office/admins` 目前是占位頁。
 - 設備與 IP 白名單 API 已存在，但新版後台尚未提供對應頁面。
 - 使用者列表尚未分頁，目前後端最多回傳 500 筆。

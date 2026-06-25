@@ -447,6 +447,8 @@ button:disabled {
   width: 100%;
   height: 38px;
   padding: 0 13px;
+  font-family: inherit;
+  font-size: 14px;
   border: 1px solid var(--admin-line);
   border-radius: 3px;
   background: var(--admin-panel);
@@ -458,6 +460,24 @@ button:disabled {
 .user-create-field select:focus {
   border-color: var(--admin-accent);
   box-shadow: 0 0 0 3px rgba(165, 63, 43, 0.12);
+}
+
+.user-create-field input[readonly] {
+  border-color: #d8d3cc;
+  background: #e9e7e3;
+  color: #77736d;
+  cursor: not-allowed;
+}
+
+.user-create-field input[readonly]:focus {
+  border-color: #d8d3cc;
+  box-shadow: none;
+}
+
+#edit-user-password::placeholder {
+  color: #a6a19a;
+  font-size: 12px;
+  opacity: 1;
 }
 
 .user-create-actions {

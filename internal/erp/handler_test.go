@@ -31,6 +31,10 @@ func (s *stubIntegrationRepository) ListUsers(filter AdminUserFilter) ([]AdminUs
 	return nil, nil
 }
 
+func (s *stubIntegrationRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
+	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: params.DisplayName, Email: params.Email, Status: params.Status}, nil
+}
+
 func (s *stubIntegrationRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
 	return User{ID: userID, SourceSystem: "erp", ExternalUserID: "user_a", DisplayName: displayName}, nil
 }

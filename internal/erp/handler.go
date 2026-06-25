@@ -171,6 +171,60 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// GetUser handles GET /api/system-admin/users/{user_id}.
+func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	targetUserID, ok := parseUserIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, err := h.service.GetUser(targetUserID, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
+// UpdateUser handles PATCH /api/system-admin/users/{user_id}.
+func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	targetUserID, ok := parseUserIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminUpdateUserRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.UpdateUser(targetUserID, req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
 // ListDevices handles GET /api/system-admin/users/{user_id}/devices.
 func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {

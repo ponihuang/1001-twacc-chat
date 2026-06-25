@@ -116,6 +116,14 @@ type AdminCreateUserRequest struct {
 	Status         string `json:"status"`
 }
 
+// AdminUpdateUserRequest is the system-admin payload for updating a user.
+type AdminUpdateUserRequest struct {
+	Password    string `json:"password"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+	Status      string `json:"status"`
+}
+
 // LoginRequest is the external-system login payload.
 type LoginRequest struct {
 	SourceSystem   string `json:"source_system"`
@@ -158,12 +166,21 @@ type RegisterParams struct {
 	Status          string
 }
 
+// AdminUpdateUserParams carries validated admin edits into storage.
+type AdminUpdateUserParams struct {
+	PasswordHash string
+	DisplayName  string
+	Email        string
+	Status       string
+}
+
 // Repository defines persistence required by external identity, login, and admin flows.
 type Repository interface {
 	CreateUser(params RegisterParams) (User, error)
 	FindUserByID(userID int64) (User, error)
 	FindUserByExternal(sourceSystem, externalUserID string) (User, error)
 	ListUsers(filter AdminUserFilter) ([]AdminUserSummary, error)
+	UpdateUser(userID int64, params AdminUpdateUserParams) (User, error)
 	UpdateUserProfile(userID int64, displayName string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)
 	GetUserSecuritySettings(userID int64) (UserSecuritySettings, error)

@@ -215,6 +215,41 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.Adm
 	return users, nil
 }
 
+// UpdateUser applies mutable admin-managed fields. An empty password hash keeps the existing password.
+func (r *IntegrationRepository) UpdateUser(userID int64, params erp.AdminUpdateUserParams) (erp.User, error) {
+	var err error
+	if params.PasswordHash == "" {
+		_, err = r.db.Exec(
+			`UPDATE users
+			    SET display_name = ?, email = ?, status = ?
+			  WHERE id = ?`,
+			params.DisplayName,
+			nullableString(params.Email),
+			params.Status,
+			userID,
+		)
+	} else {
+		_, err = r.db.Exec(
+			`UPDATE users
+			    SET display_name = ?, email = ?, status = ?, password_hash = ?
+			  WHERE id = ?`,
+			params.DisplayName,
+			nullableString(params.Email),
+			params.Status,
+			params.PasswordHash,
+			userID,
+		)
+	}
+	if err != nil {
+		if isDuplicate(err) {
+			return erp.User{}, erp.ErrUserAlreadyExists
+		}
+		return erp.User{}, fmt.Errorf("update user: %w", err)
+	}
+
+	return r.FindUserByID(userID)
+}
+
 // UpdateUserProfile updates mutable profile fields for a user.
 func (r *IntegrationRepository) UpdateUserProfile(userID int64, displayName string) (erp.User, error) {
 	result, err := r.db.Exec(`UPDATE users SET display_name = ? WHERE id = ?`, strings.TrimSpace(displayName), userID)

@@ -11,6 +11,7 @@
 - 舊 `/admin/dashboard` 導向 `/office`
 - `/office/user` 使用者管理頁
 - `/office/user/create` 新增使用者頁
+- `/office/user/{user_id}/edit` 編輯使用者頁
 - 從 `users` 資料表載入使用者列表
 - 以 `auth_sessions.last_used_at` 顯示最近在線
 - 帳號、暱稱、Email、狀態、來源、建立日期與排序篩選
@@ -19,7 +20,6 @@
 
 尚未完成：
 
-- 使用者查看詳細資料與編輯
 - 對話管理 `/office/conversations`
 - 管理員管理 `/office/admins`
 - 新版介面中的設備、IP 白名單與操作日誌頁面
@@ -52,6 +52,7 @@ chat_admin/
 | `/office` | 後台首頁 |
 | `/office/user` | 使用者管理，已串接資料 |
 | `/office/user/create` | 新增一般使用者 |
+| `/office/user/{user_id}/edit` | 編輯一般使用者 |
 | `/office/conversations` | 對話管理占位頁 |
 | `/office/admins` | 管理員管理占位頁 |
 
@@ -84,6 +85,16 @@ Content-Type: application/json
 ```
 
 新增頁欄位依序為帳號、密碼、暱稱、Email 與狀態。頁面固定使用 `source_system=office` 與 `language=zh-Hant`；狀態可選啟用或停用，預設為啟用。
+
+取得與更新單一使用者：
+
+```http
+GET /api/system-admin/users/{user_id}
+PATCH /api/system-admin/users/{user_id}
+Authorization: Bearer <session-token>
+```
+
+帳號由 `source_system + external_user_id` 識別，編輯頁僅供查看且不可修改。密碼欄位固定顯示空白；PATCH 時密碼有輸入才更新，留空則保留原密碼。
 
 其他既有管理 API：
 

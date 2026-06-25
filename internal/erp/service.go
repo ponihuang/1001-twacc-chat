@@ -253,6 +253,82 @@ func (s *Service) CreateUser(req AdminCreateUserRequest, actor SessionPrincipal)
 	}, 201, nil
 }
 
+// GetUser returns one user for editing. Only system_admin is allowed.
+func (s *Service) GetUser(targetUserID int64, actor SessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if targetUserID <= 0 {
+		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
+	}
+	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	user, err := s.repo.FindUserByID(targetUserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_OK",
+		Message: "用户读取成功",
+		Data:    adminUserSummary(user),
+	}, 200, nil
+}
+
+// UpdateUser updates mutable user fields. A blank password keeps the current password.
+func (s *Service) UpdateUser(targetUserID int64, req AdminUpdateUserRequest, actor SessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if targetUserID <= 0 {
+		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
+	}
+	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	displayName := strings.TrimSpace(req.DisplayName)
+	email := strings.TrimSpace(req.Email)
+	status := strings.TrimSpace(req.Status)
+	if displayName == "" || len([]rune(displayName)) > 100 {
+		return Response{}, statusCode(ErrInvalidDisplayName), ErrInvalidDisplayName
+	}
+	if len(email) > 255 || (email != "" && !strings.Contains(email, "@")) {
+		return Response{}, statusCode(ErrInvalidEmail), ErrInvalidEmail
+	}
+	if status != "active" && status != "inactive" {
+		return Response{}, statusCode(ErrInvalidStatus), ErrInvalidStatus
+	}
+
+	params := AdminUpdateUserParams{
+		DisplayName: displayName,
+		Email:       email,
+		Status:      status,
+	}
+	if strings.TrimSpace(req.Password) != "" {
+		passwordHash, err := hashPassword(req.Password)
+		if err != nil {
+			return Response{}, statusCode(err), err
+		}
+		params.PasswordHash = passwordHash
+	}
+
+	user, err := s.repo.UpdateUser(targetUserID, params)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_UPDATED",
+		Message: "用户更新成功",
+		Data:    adminUserSummary(user),
+	}, 200, nil
+}
+
 // ListDevices returns the recent devices for a target user. Only system_admin is allowed.
 func (s *Service) ListDevices(targetUserID int64, actor SessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -560,6 +636,18 @@ func (s *Service) profileResponseData(user User) (map[string]any, error) {
 		"external_user_id": user.ExternalUserID,
 		"display_name":     user.DisplayName,
 	}, nil
+}
+
+func adminUserSummary(user User) AdminUserSummary {
+	return AdminUserSummary{
+		ID:             user.ID,
+		ExternalUserID: user.ExternalUserID,
+		DisplayName:    user.DisplayName,
+		Email:          user.Email,
+		Status:         user.Status,
+		SourceSystem:   user.SourceSystem,
+		CreatedAt:      user.CreatedAt,
+	}
 }
 
 func ipAllowed(clientIP string, rules []string) bool {
