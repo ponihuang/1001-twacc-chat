@@ -60,6 +60,7 @@
   async function initApp() {
     cacheElements();
     renderTableColumns(elements.usersTable, elements.usersColgroup, elements.usersThead, USER_COLUMNS);
+    setupOverlayScrollbar(document.getElementById('users-table-scroll'));
     setupEventListeners();
     switchView(resolveInitialView(), { replace: true });
     await loadInitialData();
@@ -470,6 +471,82 @@
 
     thead.replaceChildren(headerRow);
     table.style.minWidth = `${minimumTableWidth}px`;
+  }
+
+  function setupOverlayScrollbar(container) {
+    if (!container) return;
+
+    const viewport = container.querySelector('.table-scroll-viewport');
+    const track = container.querySelector('.table-scrollbar');
+    const thumb = container.querySelector('.table-scrollbar-thumb');
+    if (!viewport || !track || !thumb) return;
+
+    const syncThumb = () => {
+      const scrollRange = viewport.scrollWidth - viewport.clientWidth;
+      if (scrollRange <= 1) {
+        track.hidden = true;
+        return;
+      }
+
+      track.hidden = false;
+      const trackWidth = track.clientWidth;
+      const thumbWidth = Math.max(48, trackWidth * viewport.clientWidth / viewport.scrollWidth);
+      const thumbRange = Math.max(0, trackWidth - thumbWidth);
+      const thumbLeft = scrollRange > 0 ? thumbRange * viewport.scrollLeft / scrollRange : 0;
+      thumb.style.width = `${thumbWidth}px`;
+      thumb.style.transform = `translateX(${thumbLeft}px)`;
+    };
+
+    let hideTimer = 0;
+    const revealTemporarily = () => {
+      container.classList.add('is-scrolling');
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => container.classList.remove('is-scrolling'), 700);
+    };
+
+    viewport.addEventListener('scroll', () => {
+      syncThumb();
+      revealTemporarily();
+    }, { passive: true });
+
+    track.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      const trackRect = track.getBoundingClientRect();
+      const thumbRect = thumb.getBoundingClientRect();
+      const startPointerX = event.clientX;
+      const pointerOffset = event.target === thumb
+        ? event.clientX - thumbRect.left
+        : thumbRect.width / 2;
+
+      if (event.target !== thumb) {
+        const ratio = (event.clientX - trackRect.left - pointerOffset) / Math.max(1, trackRect.width - thumbRect.width);
+        viewport.scrollLeft = ratio * (viewport.scrollWidth - viewport.clientWidth);
+      }
+
+      track.setPointerCapture(event.pointerId);
+      thumb.style.cursor = 'grabbing';
+      const dragStartScrollLeft = viewport.scrollLeft;
+      const dragStartPointerX = event.target === thumb ? startPointerX : event.clientX;
+
+      const move = moveEvent => {
+        const thumbRange = Math.max(1, track.clientWidth - thumb.clientWidth);
+        const scrollRange = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+        viewport.scrollLeft = dragStartScrollLeft
+          + (moveEvent.clientX - dragStartPointerX) * scrollRange / thumbRange;
+      };
+      const stop = () => {
+        thumb.style.cursor = 'grab';
+        track.removeEventListener('pointermove', move);
+        track.removeEventListener('pointerup', stop);
+        track.removeEventListener('pointercancel', stop);
+      };
+      track.addEventListener('pointermove', move);
+      track.addEventListener('pointerup', stop);
+      track.addEventListener('pointercancel', stop);
+    });
+
+    new ResizeObserver(syncThumb).observe(viewport);
+    syncThumb();
   }
 
   function renderUserCell(key, user, index) {

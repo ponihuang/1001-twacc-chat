@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260625-12">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260625-19">
   <script defer src="/admin/static/admin-auth.js?v=1"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260625-8"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260625-9"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-logout-redirect="/admin/login">
@@ -160,27 +160,32 @@
                 </svg>
                 <p>找不到用戶</p>
               </div>
-              <div class="table-scroll">
-                <table class="data-table" id="users-table">
-                  <colgroup id="users-colgroup"></colgroup>
-                  <thead id="users-thead"></thead>
-                  <tbody id="users-tbody"></tbody>
-                </table>
-              </div>
-              <div class="table-pagination" id="users-pagination" hidden>
-                <span class="pagination-total">總筆數: <strong id="users-total">0</strong></span>
-                <nav class="pagination-pages" id="users-pages" aria-label="使用者列表分頁"></nav>
-                <label class="pagination-size">
-                  <span class="sr-only">每頁筆數</span>
-                  <select id="users-per-page">
-                    <option value="10" selected>10 / 頁</option>
-                    <option value="20">20 / 頁</option>
-                    <option value="50">50 / 頁</option>
-                    <option value="100">100 / 頁</option>
-                  </select>
-                </label>
+              <div class="table-scroll" id="users-table-scroll">
+                <div class="table-scroll-viewport">
+                  <table class="data-table" id="users-table">
+                    <colgroup id="users-colgroup"></colgroup>
+                    <thead id="users-thead"></thead>
+                    <tbody id="users-tbody"></tbody>
+                  </table>
+                </div>
+                <div class="table-scrollbar" aria-hidden="true">
+                  <div class="table-scrollbar-thumb"></div>
+                </div>
               </div>
             </section>
+            <div class="table-pagination" id="users-pagination" hidden>
+              <span class="pagination-total">總筆數: <strong id="users-total">0</strong></span>
+              <nav class="pagination-pages" id="users-pages" aria-label="使用者列表分頁"></nav>
+              <label class="pagination-size">
+                <span class="sr-only">每頁筆數</span>
+                <select id="users-per-page">
+                  <option value="10" selected>10 / 頁</option>
+                  <option value="20">20 / 頁</option>
+                  <option value="50">50 / 頁</option>
+                  <option value="100">100 / 頁</option>
+                </select>
+              </label>
+            </div>
           </div>
         </section>
 
