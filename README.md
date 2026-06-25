@@ -55,6 +55,7 @@
 - system_admin 使用者列表 API，支援帳號、暱稱、Email、狀態、來源、建立日期與排序篩選
 - 管理後台登入頁與 `/office`、`/office/user`、`/office/conversations`、`/office/admins` 路由
 - `/office/user` 使用者管理畫面、資料表列表與可設定欄位寬度
+- 使用者列表支援總筆數、分頁及每頁 10、20、50、100 筆切換
 - `/office/user/create` 新增使用者頁面與 `POST /api/system-admin/users`
 - `/office/user/{user_id}/edit` 編輯使用者頁面與使用者查詢、更新 API；編輯時密碼留空會保留原密碼
 - trusted device 核准 API

@@ -23,7 +23,7 @@
 - 對話管理 `/office/conversations`
 - 管理員管理 `/office/admins`
 - 新版介面中的設備、IP 白名單與操作日誌頁面
-- 分頁、批次操作、稽核記錄與完整多語系
+- 批次操作、稽核記錄與完整多語系
 - 依路由拆分模板與頁面 JavaScript
 
 ## 目錄
@@ -73,8 +73,10 @@ Authorization: Bearer <session-token>
 - `created_from`，格式 `YYYY-MM-DD`
 - `created_to`，格式 `YYYY-MM-DD`
 - `sort`：`created_at_desc`、`created_at_asc`、`last_online_desc`
+- `page`：頁碼，預設 `1`
+- `per_page`：每頁筆數，可用 `10`、`20`、`50`、`100`，預設 `10`
 
-目前最多回傳 500 筆，後續需加入分頁。
+回應包含 `items`、`total`、`page`、`per_page` 與 `total_pages`。
 
 建立使用者：
 

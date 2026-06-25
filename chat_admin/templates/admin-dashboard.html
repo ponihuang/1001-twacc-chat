@@ -6,7 +6,7 @@
   <title>管理儀表板</title>
   <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260625-12">
   <script defer src="/admin/static/admin-auth.js?v=1"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260625-7"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260625-8"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-logout-redirect="/admin/login">
@@ -166,6 +166,19 @@
                   <thead id="users-thead"></thead>
                   <tbody id="users-tbody"></tbody>
                 </table>
+              </div>
+              <div class="table-pagination" id="users-pagination" hidden>
+                <span class="pagination-total">總筆數: <strong id="users-total">0</strong></span>
+                <nav class="pagination-pages" id="users-pages" aria-label="使用者列表分頁"></nav>
+                <label class="pagination-size">
+                  <span class="sr-only">每頁筆數</span>
+                  <select id="users-per-page">
+                    <option value="10" selected>10 / 頁</option>
+                    <option value="20">20 / 頁</option>
+                    <option value="50">50 / 頁</option>
+                    <option value="100">100 / 頁</option>
+                  </select>
+                </label>
               </div>
             </section>
           </div>

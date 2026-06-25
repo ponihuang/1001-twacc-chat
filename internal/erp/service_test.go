@@ -64,7 +64,7 @@ func (m *mockRepository) FindUserByExternal(sourceSystem, externalUserID string)
 	return user, nil
 }
 
-func (m *mockRepository) ListUsers(filter AdminUserFilter) ([]AdminUserSummary, error) {
+func (m *mockRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error) {
 	users := make([]AdminUserSummary, 0, len(m.usersByID))
 	for _, user := range m.usersByID {
 		users = append(users, AdminUserSummary{
@@ -77,7 +77,13 @@ func (m *mockRepository) ListUsers(filter AdminUserFilter) ([]AdminUserSummary, 
 			CreatedAt:      user.CreatedAt,
 		})
 	}
-	return users, nil
+	return AdminUserPage{
+		Items:      users,
+		Total:      len(users),
+		Page:       filter.Page,
+		PerPage:    filter.PerPage,
+		TotalPages: 1,
+	}, nil
 }
 
 func (m *mockRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
@@ -446,8 +452,8 @@ func TestListUsersReturnsRepositoryUsers(t *testing.T) {
 	if status != 200 {
 		t.Fatalf("status = %d, want 200", status)
 	}
-	users, ok := resp.Data.([]AdminUserSummary)
-	if !ok || len(users) != 2 {
+	users, ok := resp.Data.(AdminUserPage)
+	if !ok || len(users.Items) != 2 || users.Total != 2 {
 		t.Fatalf("users = %#v, want 2 users", resp.Data)
 	}
 }

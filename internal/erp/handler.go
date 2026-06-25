@@ -440,9 +440,23 @@ func parseAdminUserFilter(r *http.Request) (AdminUserFilter, error) {
 		Status:         strings.TrimSpace(query.Get("status")),
 		SourceSystem:   strings.TrimSpace(query.Get("source_system")),
 		Sort:           strings.TrimSpace(query.Get("sort")),
+		Page:           1,
+		PerPage:        10,
 	}
 
 	var err error
+	if value := strings.TrimSpace(query.Get("page")); value != "" {
+		filter.Page, err = strconv.Atoi(value)
+		if err != nil || filter.Page < 1 {
+			return AdminUserFilter{}, fmt.Errorf("頁碼格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("per_page")); value != "" {
+		filter.PerPage, err = strconv.Atoi(value)
+		if err != nil || !validAdminPerPage(filter.PerPage) {
+			return AdminUserFilter{}, fmt.Errorf("每頁筆數格式錯誤")
+		}
+	}
 	if value := strings.TrimSpace(query.Get("created_from")); value != "" {
 		filter.CreatedFrom, err = parseAdminDate(value, false)
 		if err != nil {
@@ -457,6 +471,10 @@ func parseAdminUserFilter(r *http.Request) (AdminUserFilter, error) {
 	}
 
 	return filter, nil
+}
+
+func validAdminPerPage(value int) bool {
+	return value == 10 || value == 20 || value == 50 || value == 100
 }
 
 func parseAdminDate(value string, endOfDay bool) (*time.Time, error) {

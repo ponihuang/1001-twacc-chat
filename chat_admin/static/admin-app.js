@@ -12,6 +12,8 @@
   let elements = {};
   let editingUserID = null;
   let originalEditableUser = null;
+  let usersPage = 1;
+  let usersPerPage = 10;
 
   // Adjust each user-table column here. Use width for a fixed width or
   // minWidth when the column may grow with the available table width.
@@ -95,6 +97,10 @@
       usersTbody: document.getElementById('users-tbody'),
       usersLoading: document.getElementById('users-loading'),
       usersEmpty: document.getElementById('users-empty'),
+      usersPagination: document.getElementById('users-pagination'),
+      usersTotal: document.getElementById('users-total'),
+      usersPages: document.getElementById('users-pages'),
+      usersPerPage: document.getElementById('users-per-page'),
       refreshUsersBtn: document.getElementById('refresh-users-btn'),
       userCreateForm: document.getElementById('user-create-form'),
       createUserAccount: document.getElementById('create-user-account'),
@@ -191,6 +197,14 @@
     if (elements.userFilterForm) {
       elements.userFilterForm.addEventListener('submit', (e) => {
         e.preventDefault();
+        usersPage = 1;
+        loadUsers();
+      });
+    }
+    if (elements.usersPerPage) {
+      elements.usersPerPage.addEventListener('change', () => {
+        usersPerPage = Number(elements.usersPerPage.value) || 10;
+        usersPage = 1;
         loadUsers();
       });
     }
@@ -364,6 +378,7 @@
     if (elements.usersLoading) elements.usersLoading.hidden = false;
     if (elements.usersEmpty) elements.usersEmpty.hidden = true;
     if (elements.usersTable) elements.usersTable.hidden = true;
+    if (elements.usersPagination) elements.usersPagination.hidden = true;
 
     try {
       const response = await makeAuthenticatedRequest(`/api/system-admin/users?${buildUserQuery().toString()}`);
@@ -374,14 +389,21 @@
         throw new Error(data.message || '載入用戶列表失敗');
       }
 
-      const users = Array.isArray(data.data) ? data.data : [];
+      const pageData = data.data || {};
+      const users = Array.isArray(pageData.items) ? pageData.items : [];
+      const total = Number(pageData.total) || 0;
+      const totalPages = Number(pageData.total_pages) || 0;
+      usersPage = Number(pageData.page) || usersPage;
+      usersPerPage = Number(pageData.per_page) || usersPerPage;
       if (users.length === 0) {
         showUsersEmpty();
+        renderUsersPagination(total, totalPages);
         return;
       }
 
       populateUsersTable(users);
       if (elements.usersTable) elements.usersTable.hidden = false;
+      renderUsersPagination(total, totalPages);
     } catch (err) {
       showError('載入用戶列表失敗: ' + err.message);
       showUsersEmpty();
@@ -406,6 +428,8 @@
       const normalized = value?.trim();
       if (normalized) params.set(key, normalized);
     });
+    params.set('page', String(usersPage));
+    params.set('per_page', String(usersPerPage));
     return params;
   }
 
@@ -453,7 +477,7 @@
 
     switch (key) {
       case 'index':
-        cell.textContent = String(index + 1);
+        cell.textContent = String((usersPage - 1) * usersPerPage + index + 1);
         break;
       case 'avatar': {
         const avatar = document.createElement('span');
@@ -504,6 +528,61 @@
     }
 
     return cell;
+  }
+
+  function renderUsersPagination(total, totalPages) {
+    if (!elements.usersPagination || !elements.usersPages) return;
+
+    if (elements.usersTotal) elements.usersTotal.textContent = String(total);
+    if (elements.usersPerPage) elements.usersPerPage.value = String(usersPerPage);
+    elements.usersPages.replaceChildren();
+
+    const addButton = (label, page, options = {}) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pagination-button';
+      button.textContent = label;
+      button.disabled = Boolean(options.disabled);
+      if (options.current) {
+        button.classList.add('is-current');
+        button.setAttribute('aria-current', 'page');
+      } else if (!options.disabled) {
+        button.addEventListener('click', () => {
+          usersPage = page;
+          loadUsers();
+        });
+      }
+      elements.usersPages.appendChild(button);
+    };
+
+    addButton('‹', usersPage - 1, { disabled: usersPage <= 1 });
+    paginationSequence(usersPage, totalPages).forEach(page => {
+      if (page === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '…';
+        elements.usersPages.appendChild(ellipsis);
+        return;
+      }
+      addButton(String(page), page, { current: page === usersPage });
+    });
+    addButton('›', usersPage + 1, { disabled: usersPage >= totalPages || totalPages === 0 });
+    elements.usersPagination.hidden = false;
+  }
+
+  function paginationSequence(current, totalPages) {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages = new Set([1, totalPages, current - 1, current, current + 1]);
+    const ordered = [...pages].filter(page => page >= 1 && page <= totalPages).sort((a, b) => a - b);
+    const sequence = [];
+    ordered.forEach((page, index) => {
+      if (index > 0 && page - ordered[index - 1] > 1) sequence.push('ellipsis');
+      sequence.push(page);
+    });
+    return sequence;
   }
 
   function userInitial(value) {

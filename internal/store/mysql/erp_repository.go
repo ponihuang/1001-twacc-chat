@@ -130,23 +130,25 @@ func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID 
 	return user, nil
 }
 
-// ListUsers returns users and their most recent authenticated activity.
-func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.AdminUserSummary, error) {
-	var query strings.Builder
-	query.WriteString(
-		`SELECT u.id, u.external_user_id, u.display_name, COALESCE(u.email, ''), u.status,
-		        u.source_system, u.created_at, MAX(s.last_used_at) AS last_online_at
-		   FROM users u
-		   LEFT JOIN auth_sessions s ON s.user_id = u.id
-		  WHERE 1 = 1`,
-	)
+// ListUsers returns one page of users and their most recent authenticated activity.
+func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) (erp.AdminUserPage, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage < 1 {
+		perPage = 10
+	}
 
+	var where strings.Builder
+	where.WriteString(" WHERE 1 = 1")
 	args := make([]any, 0, 7)
 	addLikeFilter := func(column, value string) {
 		if value == "" {
 			return
 		}
-		query.WriteString(" AND " + column + " LIKE ?")
+		where.WriteString(" AND " + column + " LIKE ?")
 		args = append(args, "%"+value+"%")
 	}
 	addLikeFilter("u.external_user_id", strings.TrimSpace(filter.ExternalUserID))
@@ -154,21 +156,35 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.Adm
 	addLikeFilter("COALESCE(u.email, '')", strings.TrimSpace(filter.Email))
 
 	if value := strings.TrimSpace(filter.Status); value != "" {
-		query.WriteString(" AND u.status = ?")
+		where.WriteString(" AND u.status = ?")
 		args = append(args, value)
 	}
 	if value := strings.TrimSpace(filter.SourceSystem); value != "" {
-		query.WriteString(" AND u.source_system = ?")
+		where.WriteString(" AND u.source_system = ?")
 		args = append(args, value)
 	}
 	if filter.CreatedFrom != nil {
-		query.WriteString(" AND u.created_at >= ?")
+		where.WriteString(" AND u.created_at >= ?")
 		args = append(args, *filter.CreatedFrom)
 	}
 	if filter.CreatedTo != nil {
-		query.WriteString(" AND u.created_at <= ?")
+		where.WriteString(" AND u.created_at <= ?")
 		args = append(args, *filter.CreatedTo)
 	}
+
+	var total int
+	if err := r.db.QueryRow("SELECT COUNT(*) FROM users u"+where.String(), args...).Scan(&total); err != nil {
+		return erp.AdminUserPage{}, fmt.Errorf("count users: %w", err)
+	}
+
+	var query strings.Builder
+	query.WriteString(
+		`SELECT u.id, u.external_user_id, u.display_name, COALESCE(u.email, ''), u.status,
+		        u.source_system, u.created_at, MAX(s.last_used_at) AS last_online_at
+		   FROM users u
+		   LEFT JOIN auth_sessions s ON s.user_id = u.id`,
+	)
+	query.WriteString(where.String())
 
 	query.WriteString(" GROUP BY u.id, u.external_user_id, u.display_name, u.email, u.status, u.source_system, u.created_at")
 	switch strings.TrimSpace(filter.Sort) {
@@ -179,11 +195,12 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.Adm
 	default:
 		query.WriteString(" ORDER BY u.created_at DESC, u.id DESC")
 	}
-	query.WriteString(" LIMIT 500")
+	query.WriteString(" LIMIT ? OFFSET ?")
+	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
 
-	rows, err := r.db.Query(query.String(), args...)
+	rows, err := r.db.Query(query.String(), queryArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list users: %w", err)
+		return erp.AdminUserPage{}, fmt.Errorf("list users: %w", err)
 	}
 	defer rows.Close()
 
@@ -201,7 +218,7 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.Adm
 			&user.CreatedAt,
 			&lastOnline,
 		); err != nil {
-			return nil, fmt.Errorf("scan user list: %w", err)
+			return erp.AdminUserPage{}, fmt.Errorf("scan user list: %w", err)
 		}
 		if lastOnline.Valid {
 			user.LastOnlineAt = &lastOnline.Time
@@ -209,10 +226,20 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.Adm
 		users = append(users, user)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate user list: %w", err)
+		return erp.AdminUserPage{}, fmt.Errorf("iterate user list: %w", err)
 	}
 
-	return users, nil
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+	return erp.AdminUserPage{
+		Items:      users,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
 }
 
 // UpdateUser applies mutable admin-managed fields. An empty password hash keeps the existing password.
