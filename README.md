@@ -1,6 +1,13 @@
 # 1001-twacc-chat
 
-以 Go 為主體的 Web 聊天系統 MVP。產品主核心是聊天與群組通訊；外部系統接入僅作為統一 API 能力，讓其他網站或業務系統可以透過 API 與本對談系統溝通，不另為 ERP 或任何單一來源系統建立專屬產品分類或專屬界面。現階段已建立可執行的 HTTP server、首頁導覽頁、登入頁、MySQL 連線初始化、migration 自動執行、外部系統註冊 / 登入 API、session/token 驗證、聊天列表 / 訊息列表 / 一對一對話 API、使用者與訊息搜尋、個人資料更新 API、WebSocket 即時更新、圖片與檔案訊息上傳、訊息右鍵回覆 / 收回操作、本機靜態附件提供、IP 白名單管理 API，以及 trusted device 核准 API。
+以 Go 為主體的 Web 聊天系統 MVP，同一個服務內包含聊天室前台、聊天系統管理後台與共用 API。產品主核心是聊天與群組通訊；外部系統接入僅作為統一 API 能力，不另為 ERP 或任何單一來源系統建立專屬產品分類或專屬界面。
+
+分支責任：
+
+- `main`：正式穩定版本
+- `develop`：前台與後台功能整合分支
+- `develop-nina`：聊天室前台開發分支
+- `develop-admin`：聊天系統後台開發分支
 
 ## 目前狀態
 
@@ -11,11 +18,19 @@
 - `GET /api/conversations`
 - `POST /api/conversations/direct`
 - `POST /api/conversations/group`
+- `GET /api/contacts`
+- `POST /api/contacts`
 - `GET /api/users/search`
 - `GET /api/messages/search`
+- `PATCH /api/conversations/{conversation_id}`
+- `GET /api/conversations/{conversation_id}/members`
+- `POST /api/conversations/{conversation_id}/members`
+- `DELETE /api/conversations/{conversation_id}/members`
 - `GET /api/conversations/{conversation_id}/messages`
 - `POST /api/conversations/{conversation_id}/messages`
+- `POST /api/conversations/{conversation_id}/read`
 - `POST /api/conversations/{conversation_id}/messages/{message_id}/recall`
+- `DELETE /api/conversations/{conversation_id}/messages/{message_id}`
 - `GET /ws`
 - `GET /uploads/{filename}`
 - `/` 依登入狀態導向 `/login` 或 `/chat`
@@ -25,6 +40,8 @@
 - 桌機版 Web 測試登入、對話列表、搜尋使用者與訊息
 - 桌機版搜尋使用者時，點選使用者會先比對既有一對一對話；若已有對話會直接載入，若尚未建立則先開啟暫存聊天畫面，送出第一則訊息時才建立一對一對話
 - 桌機版左側新增入口可建立多人群組：新增成員、輸入群組名稱後建立群組對話
+- 聯絡人清單、加入聯絡人、群組資訊、群組成員新增與移除
+- 群組名稱與描述更新
 - 桌機版左欄下拉選單：第一列顯示登入帳號並進入設定頁
 - 桌機版設定頁：個人資料、顯示名稱更新、聊天室分類建立與分類列顯示
 - 文字訊息送出、`Enter` 快捷送出
@@ -35,6 +52,9 @@
 - session token 簽發與 Bearer 驗證
 - 顯示名稱更新 API
 - system_admin 裝置查詢與 IP 白名單管理 API
+- system_admin 使用者列表 API，支援帳號、暱稱、Email、狀態、來源、建立日期與排序篩選
+- 管理後台登入頁與 `/office`、`/office/user`、`/office/conversations`、`/office/admins` 路由
+- `/office/user` 使用者管理畫面、資料表列表與可設定欄位寬度
 - trusted device 核准 API
 - 使用者、session、裝置、IP 白名單、聊天核心資料表 migration
 - 裝置與 IP 白名單的基本驗證邏輯
@@ -43,9 +63,9 @@
 
 目前尚未完成：
 
-- 群組聊天建立流程
 - 檔案留存策略
-- `system_admin` 管理頁面
+- 管理後台的新增使用者、使用者詳細資料、設備、IP 白名單與操作日誌完整 UI
+- 管理後台的對話管理與管理員管理頁面，目前仍為占位畫面
 - 手機版 / 嵌入式頁面的聊天資料串接
 - 三語系完整文案
 
@@ -56,6 +76,9 @@
 ├─ db/
 │  └─ migrations/
 ├─ docs/
+├─ chat_admin/
+│  ├─ static/
+│  └─ templates/
 ├─ internal/
 │  ├─ app/
 │  ├─ auth/
@@ -93,7 +116,7 @@ air -c .air.toml
 make dev
 ```
 
-若本機尚未安裝 `air`，可先安裝後再使用；專案已提供 [`.air.toml`](/Users/elva/新公司/聊天系統/1001-twacc-chat-main/.air.toml) 設定，會在 `.go`、`.html`、`.css`、`.js`、`.md`、`.toml` 變更時自動重建與重啟。
+若本機尚未安裝 `air`，可先安裝後再使用；專案已提供 [`.air.toml`](.air.toml) 設定，會在 `.go`、`.html`、`.css`、`.js`、`.md`、`.toml` 變更時自動重建與重啟。
 
 若要啟用 MySQL 與外部系統接入 / 管理 API：
 
@@ -153,13 +176,12 @@ REQUIRE_TRUSTED_DEVICE=false
 
 附件格式目前支援：
 
-- `.jpg`
-- `.jpeg`
-- `.png`
-- `.doc`
-- `.docx`
-- `.pdf`
-- `.xlsx`
+- 圖片：`.jpg`、`.jpeg`、`.png`、`.webp`、`.gif`、`.heic`、`.heif`
+- 文件：`.doc`、`.docx`、`.xls`、`.xlsx`、`.ppt`、`.pptx`、`.pdf`
+- 文字與資料：`.txt`、`.csv`、`.rtf`、`.md`
+- OpenDocument：`.odt`、`.ods`、`.odp`
+- iWork：`.pages`、`.numbers`、`.key`
+- 壓縮檔：`.zip`、`.rar`、`.7z`
 
 單檔上限 `40MB`。
 
@@ -176,18 +198,38 @@ REQUIRE_TRUSTED_DEVICE=false
 - `GET /api/conversations`
 - `POST /api/conversations/direct`
 - `POST /api/conversations/group`
+- `GET /api/contacts`
+- `POST /api/contacts`
 - `GET /api/users/search`
 - `GET /api/messages/search`
+- `PATCH /api/conversations/{conversation_id}`
+- `GET /api/conversations/{conversation_id}/members`
+- `POST /api/conversations/{conversation_id}/members`
+- `DELETE /api/conversations/{conversation_id}/members`
 - `GET /api/conversations/{conversation_id}/messages`
 - `POST /api/conversations/{conversation_id}/messages`
+- `POST /api/conversations/{conversation_id}/read`
 - `POST /api/conversations/{conversation_id}/messages/{message_id}/recall`
+- `DELETE /api/conversations/{conversation_id}/messages/{message_id}`
 - `GET /uploads/{filename}`
 - `POST /api/erp/register`
 - `POST /api/erp/login`
 - `PATCH /api/users/me/profile`
+- `GET /api/system-admin/users`
 - `GET /api/system-admin/users/{user_id}/devices`
 - `PUT /api/system-admin/users/{user_id}/ip-whitelist`
 - `POST /api/users/{user_id}/devices/{device_id}/approve`
+
+## 管理後台
+
+- 登入入口：`/admin/login`
+- 後台首頁：`/office`
+- 使用者管理：`/office/user`
+- 對話管理：`/office/conversations`（目前為占位畫面）
+- 管理員管理：`/office/admins`（目前為占位畫面）
+- 舊路由 `/admin/dashboard` 會重新導向 `/office`
+
+目前 `/office/user` 會從 `users` 資料表載入使用者，並以 `auth_sessions.last_used_at` 顯示最近在線時間。詳細說明請見 [`chat_admin/README.md`](chat_admin/README.md)。
 
 ## Web 介面形態
 
@@ -235,7 +277,7 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 
 預設 timestamp 容許誤差為 `5m`，可由 `INTEGRATION_TIMESTAMP_TOLERANCE` 調整。
 
-完整對接範例請見 [docs/integration-signature.md](/Users/elva/新公司/聊天系統/1001-twacc-chat-main/docs/integration-signature.md)。
+完整對接範例請見 [`docs/integration-signature.md`](docs/integration-signature.md)。
 
 登入成功後，`/api/erp/login` 會回傳 session token。這個端點目前是外部系統接入的第一個相容入口；後續聊天 API、管理 API 與裝置核准 API 使用：
 
