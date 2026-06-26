@@ -11,9 +11,13 @@
   // DOM Elements
   let elements = {};
   let editingUserID = null;
+  let editingAdminUserID = null;
   let originalEditableUser = null;
+  let originalEditableAdmin = null;
   let usersPage = 1;
   let usersPerPage = 10;
+  let adminsPage = 1;
+  let adminsPerPage = 10;
 
   // Adjust each user-table column here. Use width for a fixed width or
   // minWidth when the column may grow with the available table width.
@@ -35,7 +39,9 @@
     userCreate: '/office/user/create',
     userEdit: null,
     conversations: '/office/conversations',
-    admins: '/office/admins'
+    admins: '/office/admins',
+    adminCreate: '/office/admins/create',
+    adminEdit: null
   };
 
   const ROUTE_VIEWS = Object.entries(VIEW_ROUTES).reduce((routes, [viewName, path]) => {
@@ -50,6 +56,11 @@
     if (editMatch) {
       editingUserID = editMatch[1];
       return 'userEdit';
+    }
+    const adminEditMatch = window.location.pathname.match(/^\/office\/admins\/(\d+)\/edit$/);
+    if (adminEditMatch) {
+      editingAdminUserID = adminEditMatch[1];
+      return 'adminEdit';
     }
     return ROUTE_VIEWS[window.location.pathname] || 'dashboard';
   }
@@ -118,6 +129,35 @@
       editUserStatus: document.getElementById('edit-user-status'),
       submitEditUser: document.getElementById('submit-edit-user'),
       resetEditUser: document.getElementById('reset-edit-user'),
+
+      // Admins
+      adminFilterForm: document.getElementById('admin-filter-form'),
+      adminSearch: document.getElementById('admin-search'),
+      adminDisplayName: document.getElementById('admin-display-name'),
+      adminStatus: document.getElementById('admin-status'),
+      adminsTable: document.getElementById('admins-table'),
+      adminsTbody: document.getElementById('admins-tbody'),
+      adminsLoading: document.getElementById('admins-loading'),
+      adminsEmpty: document.getElementById('admins-empty'),
+      adminsPagination: document.getElementById('admins-pagination'),
+      adminsTotal: document.getElementById('admins-total'),
+      adminsPages: document.getElementById('admins-pages'),
+      adminsPerPage: document.getElementById('admins-per-page'),
+      refreshAdminsBtn: document.getElementById('refresh-admins-btn'),
+      adminCreateForm: document.getElementById('admin-create-form'),
+      createAdminAccount: document.getElementById('create-admin-account'),
+      createAdminPassword: document.getElementById('create-admin-password'),
+      createAdminRole: document.getElementById('create-admin-role'),
+      createAdminDisplayName: document.getElementById('create-admin-display-name'),
+      createAdminStatus: document.getElementById('create-admin-status'),
+      submitCreateAdmin: document.getElementById('submit-create-admin'),
+      adminEditForm: document.getElementById('admin-edit-form'),
+      editAdminAccount: document.getElementById('edit-admin-account'),
+      editAdminPassword: document.getElementById('edit-admin-password'),
+      editAdminDisplayName: document.getElementById('edit-admin-display-name'),
+      editAdminStatus: document.getElementById('edit-admin-status'),
+      submitEditAdmin: document.getElementById('submit-edit-admin'),
+      resetEditAdmin: document.getElementById('reset-edit-admin'),
       
       // Devices
       deviceUserId: document.getElementById('device-user-id'),
@@ -222,6 +262,31 @@
       elements.resetEditUser.addEventListener('click', resetUserEditForm);
     }
 
+    // Admin management
+    if (elements.adminFilterForm) {
+      elements.adminFilterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        adminsPage = 1;
+        loadAdmins();
+      });
+    }
+    if (elements.adminsPerPage) {
+      elements.adminsPerPage.addEventListener('change', () => {
+        adminsPerPage = Number(elements.adminsPerPage.value) || 10;
+        adminsPage = 1;
+        loadAdmins();
+      });
+    }
+    if (elements.adminCreateForm) {
+      elements.adminCreateForm.addEventListener('submit', createAdmin);
+    }
+    if (elements.adminEditForm) {
+      elements.adminEditForm.addEventListener('submit', updateAdmin);
+    }
+    if (elements.resetEditAdmin) {
+      elements.resetEditAdmin.addEventListener('click', resetAdminEditForm);
+    }
+
     // Devices management
     if (elements.searchDevicesBtn) {
       elements.searchDevicesBtn.addEventListener('click', searchDevices);
@@ -289,7 +354,8 @@
 
     if (!options.skipHistory) {
       const nextPath = options.path || VIEW_ROUTES[viewName] || (
-        viewName === 'userEdit' && editingUserID ? `/office/user/${editingUserID}/edit` : ''
+        viewName === 'userEdit' && editingUserID ? `/office/user/${editingUserID}/edit` :
+        viewName === 'adminEdit' && editingAdminUserID ? `/office/admins/${editingAdminUserID}/edit` : ''
       );
       if (nextPath && window.location.pathname !== nextPath) {
         const method = options.replace ? 'replaceState' : 'pushState';
@@ -298,7 +364,9 @@
     }
 
     // Update menu items
-    const activeMenuItem = viewName === 'userCreate' || viewName === 'userEdit' ? 'users' : viewName;
+    const activeMenuItem = viewName === 'userCreate' || viewName === 'userEdit'
+      ? 'users'
+      : viewName === 'adminCreate' || viewName === 'adminEdit' ? 'admins' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
       item.classList.toggle('is-active', item.getAttribute('data-menu-item') === activeMenuItem);
     });
@@ -328,7 +396,16 @@
         loadUserForEdit();
         break;
       case 'conversations':
+        break;
       case 'admins':
+        loadAdmins();
+        break;
+      case 'adminCreate':
+        elements.adminCreateForm?.reset();
+        elements.createAdminAccount?.focus();
+        break;
+      case 'adminEdit':
+        loadAdminForEdit();
         break;
       case 'devices':
         // Already handled by button
@@ -660,6 +737,291 @@
       sequence.push(page);
     });
     return sequence;
+  }
+
+  async function loadAdmins() {
+    if (elements.adminsLoading) elements.adminsLoading.hidden = false;
+    if (elements.adminsEmpty) elements.adminsEmpty.hidden = true;
+    if (elements.adminsTable) elements.adminsTable.hidden = true;
+    if (elements.adminsPagination) elements.adminsPagination.hidden = true;
+
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/admins?${buildAdminQuery().toString()}`);
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入管理員列表失敗');
+      }
+
+      const pageData = data.data || {};
+      const admins = Array.isArray(pageData.items) ? pageData.items : [];
+      const total = Number(pageData.total) || 0;
+      const totalPages = Number(pageData.total_pages) || 0;
+      adminsPage = Number(pageData.page) || adminsPage;
+      adminsPerPage = Number(pageData.per_page) || adminsPerPage;
+
+      if (admins.length === 0) {
+        showAdminsEmpty();
+        renderAdminsPagination(total, totalPages);
+        return;
+      }
+
+      populateAdminsTable(admins);
+      if (elements.adminsTable) elements.adminsTable.hidden = false;
+      renderAdminsPagination(total, totalPages);
+    } catch (err) {
+      showError('載入管理員列表失敗: ' + err.message);
+      showAdminsEmpty();
+    } finally {
+      if (elements.adminsLoading) elements.adminsLoading.hidden = true;
+    }
+  }
+
+  function buildAdminQuery() {
+    const params = new URLSearchParams();
+    const filters = [
+      ['external_user_id', elements.adminSearch?.value],
+      ['display_name', elements.adminDisplayName?.value],
+      ['status', elements.adminStatus?.value]
+    ];
+    filters.forEach(([key, value]) => {
+      const normalized = value?.trim();
+      if (normalized) params.set(key, normalized);
+    });
+    params.set('page', String(adminsPage));
+    params.set('per_page', String(adminsPerPage));
+    return params;
+  }
+
+  function populateAdminsTable(admins) {
+    if (!elements.adminsTbody) return;
+
+    elements.adminsTbody.replaceChildren();
+    admins.forEach(admin => {
+      const row = document.createElement('tr');
+      [
+        admin.external_user_id || '--',
+        admin.display_name || '--',
+        admin.role_name || admin.role || '--',
+        null,
+        formatDate(admin.last_login_at),
+        admin.last_login_ip || '--',
+        null
+      ].forEach((value, index) => {
+        const cell = document.createElement('td');
+        if (index === 0) {
+          const account = document.createElement('span');
+          account.className = 'account-link';
+          account.textContent = value;
+          cell.appendChild(account);
+        } else if (index === 3) {
+          const status = document.createElement('span');
+          status.className = 'status-badge';
+          status.textContent = admin.status === 'active' ? '啟用' : '停用';
+          cell.appendChild(status);
+        } else if (index === 6) {
+          cell.className = 'actions-cell';
+          const editButton = document.createElement('button');
+          editButton.type = 'button';
+          editButton.className = 'table-action';
+          editButton.textContent = '編輯';
+          editButton.title = '編輯管理員';
+          editButton.addEventListener('click', () => openAdminEdit(admin.user_id));
+          cell.appendChild(editButton);
+        } else {
+          cell.textContent = value;
+        }
+        row.appendChild(cell);
+      });
+      elements.adminsTbody.appendChild(row);
+    });
+  }
+
+  function renderAdminsPagination(total, totalPages) {
+    if (!elements.adminsPagination || !elements.adminsPages) return;
+
+    if (elements.adminsTotal) elements.adminsTotal.textContent = String(total);
+    if (elements.adminsPerPage) elements.adminsPerPage.value = String(adminsPerPage);
+    elements.adminsPages.replaceChildren();
+
+    const addButton = (label, page, options = {}) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pagination-button';
+      button.textContent = label;
+      button.disabled = Boolean(options.disabled);
+      if (options.current) {
+        button.classList.add('is-current');
+        button.setAttribute('aria-current', 'page');
+      } else if (!options.disabled) {
+        button.addEventListener('click', () => {
+          adminsPage = page;
+          loadAdmins();
+        });
+      }
+      elements.adminsPages.appendChild(button);
+    };
+
+    addButton('‹', adminsPage - 1, { disabled: adminsPage <= 1 });
+    paginationSequence(adminsPage, totalPages).forEach(page => {
+      if (page === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '…';
+        elements.adminsPages.appendChild(ellipsis);
+        return;
+      }
+      addButton(String(page), page, { current: page === adminsPage });
+    });
+    addButton('›', adminsPage + 1, { disabled: adminsPage >= totalPages || totalPages === 0 });
+    elements.adminsPagination.hidden = false;
+  }
+
+  function showAdminsEmpty() {
+    if (elements.adminsLoading) elements.adminsLoading.hidden = true;
+    if (elements.adminsEmpty) elements.adminsEmpty.hidden = false;
+    if (elements.adminsTable) elements.adminsTable.hidden = true;
+  }
+
+  async function createAdmin(event) {
+    event.preventDefault();
+
+    const password = elements.createAdminPassword?.value || '';
+    if (/\s/.test(password)) {
+      showError('密碼不可包含空白');
+      elements.createAdminPassword?.focus();
+      return;
+    }
+
+    const payload = {
+      external_user_id: elements.createAdminAccount?.value?.trim() || '',
+      display_name: elements.createAdminDisplayName?.value?.trim() || '',
+      password,
+      status: elements.createAdminStatus?.value || 'active'
+    };
+    if (!payload.external_user_id || !payload.display_name || !payload.password) {
+      showError('請填寫帳號、名稱與密碼');
+      return;
+    }
+
+    if (elements.submitCreateAdmin) elements.submitCreateAdmin.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/admins', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '建立管理員失敗');
+      }
+
+      adminsPage = 1;
+      showSuccess('管理員已建立');
+      switchView('admins');
+    } catch (err) {
+      showError(err.message || '建立管理員失敗');
+    } finally {
+      if (elements.submitCreateAdmin) elements.submitCreateAdmin.disabled = false;
+    }
+  }
+
+  function openAdminEdit(userID) {
+    editingAdminUserID = String(userID);
+    switchView('adminEdit', { path: `/office/admins/${encodeURIComponent(editingAdminUserID)}/edit` });
+  }
+
+  async function loadAdminForEdit() {
+    if (!editingAdminUserID || !elements.adminEditForm) return;
+
+    if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingAdminUserID)}`);
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入管理員資料失敗');
+      }
+
+      const admin = data.data || {};
+      elements.editAdminAccount.value = admin.external_user_id || '';
+      originalEditableAdmin = {
+        password: '',
+        displayName: admin.display_name || '',
+        email: admin.email || '',
+        status: admin.status || 'active'
+      };
+      resetAdminEditForm();
+      elements.editAdminDisplayName.focus();
+    } catch (err) {
+      showError(err.message || '載入管理員資料失敗');
+      switchView('admins');
+    } finally {
+      if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = false;
+    }
+  }
+
+  function resetAdminEditForm() {
+    if (!originalEditableAdmin) return;
+
+    const editableFields = [
+      [elements.editAdminPassword, originalEditableAdmin.password],
+      [elements.editAdminDisplayName, originalEditableAdmin.displayName],
+      [elements.editAdminStatus, originalEditableAdmin.status]
+    ];
+    editableFields.forEach(([field, originalValue]) => {
+      if (field && field.value !== originalValue) {
+        field.value = originalValue;
+      }
+    });
+  }
+
+  async function updateAdmin(event) {
+    event.preventDefault();
+    if (!editingAdminUserID || !originalEditableAdmin) return;
+
+    const password = elements.editAdminPassword?.value || '';
+    if (password && /\s/.test(password)) {
+      showError('密碼不可包含空白');
+      elements.editAdminPassword?.focus();
+      return;
+    }
+
+    const payload = {
+      password,
+      display_name: elements.editAdminDisplayName?.value?.trim() || '',
+      email: originalEditableAdmin.email,
+      status: elements.editAdminStatus?.value || 'active'
+    };
+    if (!payload.display_name) {
+      showError('請填寫名稱');
+      return;
+    }
+
+    if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingAdminUserID)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '更新管理員失敗');
+      }
+
+      elements.editAdminPassword.value = '';
+      showSuccess('管理員資料已更新');
+      switchView('admins');
+    } catch (err) {
+      showError(err.message || '更新管理員失敗');
+    } finally {
+      if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = false;
+    }
   }
 
   function userInitial(value) {

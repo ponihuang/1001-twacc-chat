@@ -31,6 +31,14 @@ func (s *stubIntegrationRepository) ListUsers(filter AdminUserFilter) (AdminUser
 	return AdminUserPage{Items: []AdminUserSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
 
+func (s *stubIntegrationRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
+	return SystemAdminPage{Items: []SystemAdminSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
+}
+
+func (s *stubIntegrationRepository) CreateSystemAdmin(user User, createdBy int64) (SystemAdminSummary, error) {
+	return SystemAdminSummary{ID: 1, UserID: user.ID, ExternalUserID: user.ExternalUserID, DisplayName: user.DisplayName, Role: "system_admin", RoleName: "系統管理員", Status: user.Status}, nil
+}
+
 func (s *stubIntegrationRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
 	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: params.DisplayName, Email: params.Email, Status: params.Status}, nil
 }

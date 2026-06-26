@@ -242,6 +242,135 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) (erp.Admin
 	}, nil
 }
 
+// ListSystemAdmins returns one page of users granted system-admin access.
+func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (erp.SystemAdminPage, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage < 1 {
+		perPage = 10
+	}
+
+	var where strings.Builder
+	where.WriteString(" WHERE 1 = 1")
+	args := make([]any, 0, 3)
+	addLikeFilter := func(column, value string) {
+		if value == "" {
+			return
+		}
+		where.WriteString(" AND " + column + " LIKE ?")
+		args = append(args, "%"+value+"%")
+	}
+	addLikeFilter("u.external_user_id", strings.TrimSpace(filter.ExternalUserID))
+	addLikeFilter("u.display_name", strings.TrimSpace(filter.DisplayName))
+	if value := strings.TrimSpace(filter.Status); value != "" {
+		where.WriteString(" AND u.status = ?")
+		args = append(args, value)
+	}
+
+	from := ` FROM system_admin_users sau
+		  JOIN users u ON u.id = sau.user_id
+		  LEFT JOIN auth_sessions latest_session
+		    ON latest_session.id = (
+		      SELECT s.id
+		        FROM auth_sessions s
+		       WHERE s.user_id = u.id
+		       ORDER BY s.last_used_at DESC, s.id DESC
+		       LIMIT 1
+		    )
+		  LEFT JOIN devices d ON d.user_id = u.id AND d.device_id = latest_session.device_id`
+
+	var total int
+	if err := r.db.QueryRow("SELECT COUNT(*)"+from+where.String(), args...).Scan(&total); err != nil {
+		return erp.SystemAdminPage{}, fmt.Errorf("count system admins: %w", err)
+	}
+
+	query := `SELECT sau.id, u.id, u.external_user_id, u.display_name, sau.role, u.status,
+	                 latest_session.last_used_at, COALESCE(d.ip, '')
+	            ` + from + where.String() + `
+	        ORDER BY sau.created_at DESC, sau.id DESC
+	           LIMIT ? OFFSET ?`
+	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return erp.SystemAdminPage{}, fmt.Errorf("list system admins: %w", err)
+	}
+	defer rows.Close()
+
+	admins := make([]erp.SystemAdminSummary, 0)
+	for rows.Next() {
+		var admin erp.SystemAdminSummary
+		var lastLogin sql.NullTime
+		if err := rows.Scan(
+			&admin.ID,
+			&admin.UserID,
+			&admin.ExternalUserID,
+			&admin.DisplayName,
+			&admin.Role,
+			&admin.Status,
+			&lastLogin,
+			&admin.LastLoginIP,
+		); err != nil {
+			return erp.SystemAdminPage{}, fmt.Errorf("scan system admin list: %w", err)
+		}
+		if lastLogin.Valid {
+			admin.LastLoginAt = &lastLogin.Time
+		}
+		admin.RoleName = systemAdminRoleName(admin.Role)
+		admins = append(admins, admin)
+	}
+	if err := rows.Err(); err != nil {
+		return erp.SystemAdminPage{}, fmt.Errorf("iterate system admin list: %w", err)
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+	return erp.SystemAdminPage{
+		Items:      admins,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// CreateSystemAdmin grants system-admin access to an existing user.
+func (r *IntegrationRepository) CreateSystemAdmin(user erp.User, createdBy int64) (erp.SystemAdminSummary, error) {
+	result, err := r.db.Exec(
+		`INSERT INTO system_admin_users (user_id, role, created_by)
+		 VALUES (?, 'system_admin', ?)`,
+		user.ID,
+		nullableInt64(createdBy),
+	)
+	if err != nil {
+		if isDuplicate(err) {
+			return erp.SystemAdminSummary{}, erp.ErrUserAlreadyExists
+		}
+		return erp.SystemAdminSummary{}, fmt.Errorf("create system admin: %w", err)
+	}
+
+	adminID, err := result.LastInsertId()
+	if err != nil {
+		return erp.SystemAdminSummary{}, fmt.Errorf("read system admin id: %w", err)
+	}
+
+	return erp.SystemAdminSummary{
+		ID:             adminID,
+		UserID:         user.ID,
+		ExternalUserID: user.ExternalUserID,
+		DisplayName:    user.DisplayName,
+		Role:           "system_admin",
+		RoleName:       systemAdminRoleName("system_admin"),
+		Status:         user.Status,
+		LastLoginIP:    "",
+	}, nil
+}
+
 // UpdateUser applies mutable admin-managed fields. An empty password hash keeps the existing password.
 func (r *IntegrationRepository) UpdateUser(userID int64, params erp.AdminUpdateUserParams) (erp.User, error) {
 	var err error
@@ -520,6 +649,23 @@ func nullableString(value string) any {
 	}
 
 	return value
+}
+
+func nullableInt64(value int64) any {
+	if value <= 0 {
+		return nil
+	}
+
+	return value
+}
+
+func systemAdminRoleName(role string) string {
+	switch strings.TrimSpace(role) {
+	case "system_admin":
+		return "系統管理員"
+	default:
+		return strings.TrimSpace(role)
+	}
 }
 
 func ruleType(rule string) string {

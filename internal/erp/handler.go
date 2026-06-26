@@ -144,6 +144,33 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// ListSystemAdmins handles GET /api/system-admin/admins.
+func (h *Handler) ListSystemAdmins(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	filter, err := parseSystemAdminFilter(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	resp, status, err := h.service.ListSystemAdmins(filter, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // CreateUser handles POST /api/system-admin/users.
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {
@@ -163,6 +190,33 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, status, err := h.service.CreateUser(req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// CreateSystemAdmin handles POST /api/system-admin/admins.
+func (h *Handler) CreateSystemAdmin(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req SystemAdminCreateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.CreateSystemAdmin(req, principal)
 	if err != nil {
 		writeJSON(w, status, errorResponse(err))
 		return
@@ -467,6 +521,33 @@ func parseAdminUserFilter(r *http.Request) (AdminUserFilter, error) {
 		filter.CreatedTo, err = parseAdminDate(value, true)
 		if err != nil {
 			return AdminUserFilter{}, fmt.Errorf("結束時間格式錯誤")
+		}
+	}
+
+	return filter, nil
+}
+
+func parseSystemAdminFilter(r *http.Request) (SystemAdminFilter, error) {
+	query := r.URL.Query()
+	filter := SystemAdminFilter{
+		ExternalUserID: strings.TrimSpace(query.Get("external_user_id")),
+		DisplayName:    strings.TrimSpace(query.Get("display_name")),
+		Status:         strings.TrimSpace(query.Get("status")),
+		Page:           1,
+		PerPage:        10,
+	}
+
+	var err error
+	if value := strings.TrimSpace(query.Get("page")); value != "" {
+		filter.Page, err = strconv.Atoi(value)
+		if err != nil || filter.Page < 1 {
+			return SystemAdminFilter{}, fmt.Errorf("頁碼格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("per_page")); value != "" {
+		filter.PerPage, err = strconv.Atoi(value)
+		if err != nil || !validAdminPerPage(filter.PerPage) {
+			return SystemAdminFilter{}, fmt.Errorf("每頁筆數格式錯誤")
 		}
 	}
 

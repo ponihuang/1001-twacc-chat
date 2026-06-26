@@ -203,6 +203,28 @@ func (s *Service) ListUsers(filter AdminUserFilter, actor SessionPrincipal) (Res
 	}, 200, nil
 }
 
+// ListSystemAdmins returns system-admin accounts for the admin console.
+func (s *Service) ListSystemAdmins(filter SystemAdminFilter, actor SessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	admins, err := s.repo.ListSystemAdmins(filter)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "SYSTEM_ADMINS_OK",
+		Message: "管理員列表讀取成功",
+		Data:    admins,
+	}, 200, nil
+}
+
 // CreateUser creates an active user from the admin console. Only system_admin is allowed.
 func (s *Service) CreateUser(req AdminCreateUserRequest, actor SessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -250,6 +272,53 @@ func (s *Service) CreateUser(req AdminCreateUserRequest, actor SessionPrincipal)
 			SourceSystem:   user.SourceSystem,
 			CreatedAt:      user.CreatedAt,
 		},
+	}, 201, nil
+}
+
+// CreateSystemAdmin creates an office user and grants system-admin access.
+func (s *Service) CreateSystemAdmin(req SystemAdminCreateRequest, actor SessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	status := strings.TrimSpace(req.Status)
+	if status == "" {
+		status = "active"
+	}
+	if status != "active" && status != "inactive" {
+		return Response{}, statusCode(ErrInvalidStatus), ErrInvalidStatus
+	}
+
+	params, err := validateRegisterRequest(RegisterRequest{
+		SourceSystem:   "office",
+		ExternalUserID: req.ExternalUserID,
+		Password:       req.Password,
+		DisplayName:    req.DisplayName,
+		Language:       "zh-Hant",
+	})
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	params.Status = status
+
+	user, err := s.createUser(params, req.Password)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	admin, err := s.repo.CreateSystemAdmin(user, actor.UserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "SYSTEM_ADMIN_CREATED",
+		Message: "管理員已建立",
+		Data:    admin,
 	}, 201, nil
 }
 

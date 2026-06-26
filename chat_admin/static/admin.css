@@ -369,6 +369,20 @@ button:disabled {
   grid-column: 1;
 }
 
+.admin-filter-panel {
+  display: grid;
+  grid-template-columns: 220px 220px 104px auto;
+  gap: 18px 24px;
+  align-items: end;
+  max-width: 900px;
+}
+
+.admin-filter-panel label {
+  display: grid;
+  gap: 5px;
+}
+
+.admin-filter-panel label span,
 .user-filter-panel label span,
 .field label {
   color: var(--admin-text);
@@ -376,6 +390,8 @@ button:disabled {
   font-weight: 700;
 }
 
+.admin-filter-panel input,
+.admin-filter-panel select,
 .field input,
 .field select,
 .user-filter-panel input,
@@ -392,6 +408,7 @@ button:disabled {
   outline: none;
 }
 
+.admin-filter-panel input::placeholder,
 .field input::placeholder,
 .user-filter-panel input::placeholder {
   color: #a6a19a;
@@ -399,12 +416,22 @@ button:disabled {
   opacity: 1;
 }
 
+.admin-filter-panel input:focus,
+.admin-filter-panel select:focus,
 .field input:focus,
 .field select:focus,
 .user-filter-panel input:focus,
 .user-filter-panel select:focus {
   border-color: var(--admin-accent);
   box-shadow: 0 0 0 3px rgba(165, 63, 43, 0.12);
+}
+
+.admin-table-card {
+  margin-top: 26px;
+}
+
+.admin-list-table {
+  min-width: 1100px;
 }
 
 .filter-actions {
@@ -419,6 +446,21 @@ button:disabled {
   min-width: 78px;
   height: 34px;
   white-space: nowrap;
+}
+
+.admin-filter-panel .admin-filter-actions {
+  grid-column: auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-filter-panel .admin-filter-actions .btn {
+  min-width: 66px;
+  padding: 0 14px;
+}
+
+.admin-filter-panel select {
+  padding-right: 28px;
 }
 
 .user-create-form {
@@ -462,19 +504,22 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(165, 63, 43, 0.12);
 }
 
-.user-create-field input[readonly] {
+.user-create-field input[readonly],
+.user-create-field select:disabled {
   border-color: #d8d3cc;
   background: #e9e7e3;
   color: #77736d;
   cursor: not-allowed;
 }
 
-.user-create-field input[readonly]:focus {
+.user-create-field input[readonly]:focus,
+.user-create-field select:disabled:focus {
   border-color: #d8d3cc;
   box-shadow: none;
 }
 
-#edit-user-password::placeholder {
+#edit-user-password::placeholder,
+#edit-admin-password::placeholder {
   color: #a6a19a;
   font-size: 12px;
   opacity: 1;

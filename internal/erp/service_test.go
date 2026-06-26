@@ -22,6 +22,7 @@ type mockRepository struct {
 	approvedUserID     int64
 	approvedDeviceID   string
 	trustedDeviceCount map[int64]int
+	createdAdmin       SystemAdminSummary
 }
 
 type mockSessions struct {
@@ -84,6 +85,50 @@ func (m *mockRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error
 		PerPage:    filter.PerPage,
 		TotalPages: 1,
 	}, nil
+}
+
+func (m *mockRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
+	admins := make([]SystemAdminSummary, 0)
+	for userID := range m.systemAdmins {
+		if user, ok := m.usersByID[userID]; ok {
+			admins = append(admins, SystemAdminSummary{
+				ID:             userID,
+				UserID:         userID,
+				ExternalUserID: user.ExternalUserID,
+				DisplayName:    user.DisplayName,
+				Role:           "system_admin",
+				RoleName:       "系統管理員",
+				Status:         user.Status,
+			})
+		}
+	}
+	return SystemAdminPage{
+		Items:      admins,
+		Total:      len(admins),
+		Page:       filter.Page,
+		PerPage:    filter.PerPage,
+		TotalPages: 1,
+	}, nil
+}
+
+func (m *mockRepository) CreateSystemAdmin(user User, createdBy int64) (SystemAdminSummary, error) {
+	if m.systemAdmins == nil {
+		m.systemAdmins = map[int64]bool{}
+	}
+	if m.systemAdmins[user.ID] {
+		return SystemAdminSummary{}, ErrUserAlreadyExists
+	}
+	m.systemAdmins[user.ID] = true
+	m.createdAdmin = SystemAdminSummary{
+		ID:             user.ID,
+		UserID:         user.ID,
+		ExternalUserID: user.ExternalUserID,
+		DisplayName:    user.DisplayName,
+		Role:           "system_admin",
+		RoleName:       "系統管理員",
+		Status:         user.Status,
+	}
+	return m.createdAdmin, nil
 }
 
 func (m *mockRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
@@ -535,6 +580,42 @@ func TestCreateUserCreatesUserWithHashedPassword(t *testing.T) {
 	}
 	if created.Status != "inactive" {
 		t.Fatalf("status = %q, want inactive", created.Status)
+	}
+}
+
+func TestCreateSystemAdminCreatesOfficeUserAndGrantsAdmin(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{9: {ID: 9}},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	resp, status, err := service.CreateSystemAdmin(SystemAdminCreateRequest{
+		ExternalUserID: "manager01",
+		DisplayName:    "管理員一",
+		Password:       "pass123!",
+		Status:         "active",
+	}, SessionPrincipal{UserID: 9})
+	if err != nil {
+		t.Fatalf("CreateSystemAdmin returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+	if resp.Code != "SYSTEM_ADMIN_CREATED" {
+		t.Fatalf("code = %q, want SYSTEM_ADMIN_CREATED", resp.Code)
+	}
+
+	created, ok := repo.usersByExternal["office:manager01"]
+	if !ok {
+		t.Fatal("created system admin user not stored")
+	}
+	if !repo.systemAdmins[created.ID] {
+		t.Fatal("created user was not granted system admin")
+	}
+	if created.PasswordHash == "" || created.PasswordHash == "pass123!" {
+		t.Fatal("password was not hashed")
 	}
 }
 
