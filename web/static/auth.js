@@ -199,24 +199,6 @@
     };
   }
 
-  async function registerUser(payload, integrationToken) {
-    const response = await fetch("/api/erp/register", {
-      method: "POST",
-      headers: requestHeaders(integrationToken),
-      body: JSON.stringify({
-        source_system: payload.source_system,
-        external_user_id: payload.external_user_id,
-        password: payload.password,
-        display_name: payload.external_user_id
-      })
-    });
-
-    const result = await parseJSON(response);
-    if (!response.ok || !result.success) {
-      throw new Error(result.message || "註冊失敗");
-    }
-  }
-
   async function loginUser(payload, integrationToken) {
     const response = await fetch("/api/erp/login", {
       method: "POST",
@@ -246,13 +228,7 @@
     statusNode.classList.remove("is-error", "is-success");
 
     try {
-      let responseData = await loginUser(payload, integrationToken);
-      if (responseData.response.status === 404 && responseData.result.code === "USER_NOT_FOUND") {
-        statusNode.textContent = "使用者不存在，正在自動註冊...";
-        await registerUser(payload, integrationToken);
-        statusNode.textContent = "註冊完成，重新登入中...";
-        responseData = await loginUser(payload, integrationToken);
-      }
+      const responseData = await loginUser(payload, integrationToken);
 
       if (!responseData.response.ok || !responseData.result.success || !responseData.result.token) {
         throw new Error("帳號或密碼錯誤");

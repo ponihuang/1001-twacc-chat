@@ -280,6 +280,28 @@ func TestLoginIssuesSessionToken(t *testing.T) {
 	}
 }
 
+func TestLoginRejectsUnknownUserWithoutCreatingAccount(t *testing.T) {
+	repo := &mockRepository{
+		usersByExternal: map[string]User{},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, status, err := service.Login(
+		LoginRequest{SourceSystem: "erp", ExternalUserID: "missing-user", Password: "pass123!", DeviceID: "device-1"},
+		"192.168.1.10",
+		"ua",
+	)
+	if !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("expected ErrUserNotFound, got %v", err)
+	}
+	if status != 404 {
+		t.Fatalf("status = %d, want 404", status)
+	}
+	if len(repo.usersByID) != 0 || len(repo.usersByExternal) != 0 {
+		t.Fatal("login created an unknown user")
+	}
+}
+
 func TestUpdateProfileUpdatesDisplayName(t *testing.T) {
 	repo := &mockRepository{
 		usersByID:       map[int64]User{1: {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "Old Name"}},
