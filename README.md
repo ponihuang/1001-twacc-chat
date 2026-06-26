@@ -291,7 +291,7 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 Web 測試頁目前是以「帳號輸入」方式包裝既有外部 API：
 
 - 頁面仍然呼叫 `POST /api/erp/login`
-- 若使用者不存在，前端會先呼叫 `POST /api/erp/register` 再重新登入
+- 僅允許既有使用者登入，不會因帳號不存在而由前端自動註冊
 - 成功後把 session token 保存在瀏覽器，供後續聊天 API 與 WebSocket 使用
 - 密碼需為 4 到 20 碼，只允許英文、數字與特殊符號
 
