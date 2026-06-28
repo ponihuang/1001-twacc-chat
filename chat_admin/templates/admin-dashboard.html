@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260626-3">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260626-4">
   <script defer src="/admin/static/admin-auth.js?v=1"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260626-3"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260626-4"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-logout-redirect="/admin/login">
@@ -17,8 +17,8 @@
           <span>首頁</span>
         </button>
 
-        <div class="sidebar-group is-open">
-          <button type="button" class="sidebar-root is-group-open">
+        <div class="sidebar-group is-open" data-sidebar-group="users">
+          <button type="button" class="sidebar-root is-group-open" data-sidebar-toggle>
             <span class="menu-glyph" aria-hidden="true">◉</span>
             <span>用戶</span>
             <span class="menu-caret" aria-hidden="true">⌃</span>
@@ -35,10 +35,19 @@
           <span class="menu-glyph" aria-hidden="true">●</span>
           <span>對話</span>
         </button>
-        <button type="button" class="sidebar-root" data-menu-item="admins">
-          <span class="menu-glyph" aria-hidden="true">▧</span>
-          <span>管理員</span>
-        </button>
+        <div class="sidebar-group" data-sidebar-group="system">
+          <button type="button" class="sidebar-root" data-sidebar-toggle>
+            <span class="menu-glyph" aria-hidden="true">▧</span>
+            <span>系統</span>
+            <span class="menu-caret" aria-hidden="true">⌄</span>
+          </button>
+          <div class="sidebar-submenu">
+            <button type="button" class="sidebar-subitem" data-menu-item="admins">
+              <span class="menu-glyph" aria-hidden="true">◉</span>
+              <span>管理員帳號</span>
+            </button>
+          </div>
+        </div>
       </nav>
     </aside>
 
@@ -292,7 +301,7 @@
 
         <section data-view="admins" hidden>
           <div class="admin-page-panel">
-            <p class="admin-breadcrumb">首頁 / 管理員</p>
+            <p class="admin-breadcrumb">首頁 / 管理員帳號</p>
 
             <form class="admin-filter-panel" id="admin-filter-form" aria-label="管理員篩選">
               <label>
@@ -359,10 +368,10 @@
         <section data-view="adminCreate" hidden>
           <div class="admin-page-panel">
             <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
-              <button type="button" class="breadcrumb-back" data-menu-item="admins" aria-label="返回管理員">←</button>
+              <button type="button" class="breadcrumb-back" data-menu-item="admins" aria-label="返回管理員帳號">←</button>
               <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
               <span>/</span>
-              <button type="button" class="breadcrumb-link" data-menu-item="admins">管理員</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="admins">管理員帳號</button>
               <span>/</span>
               <span>新增管理員</span>
             </nav>
@@ -407,10 +416,10 @@
         <section data-view="adminEdit" hidden>
           <div class="admin-page-panel">
             <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
-              <button type="button" class="breadcrumb-back" data-menu-item="admins" aria-label="返回管理員">←</button>
+              <button type="button" class="breadcrumb-back" data-menu-item="admins" aria-label="返回管理員帳號">←</button>
               <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
               <span>/</span>
-              <button type="button" class="breadcrumb-link" data-menu-item="admins">管理員</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="admins">管理員帳號</button>
               <span>/</span>
               <span>編輯管理員</span>
             </nav>

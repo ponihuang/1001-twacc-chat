@@ -216,6 +216,11 @@ button:disabled {
   padding: 4px 0 6px;
 }
 
+.sidebar-group:not(.is-open) .sidebar-submenu,
+.sidebar-group:not(.is-open) .sidebar-group-body {
+  display: none;
+}
+
 .admin-workspace {
   min-width: 0;
   height: 100vh;

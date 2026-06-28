@@ -214,6 +214,15 @@
     // Menu items
     if (elements.menu) {
       elements.menu.addEventListener('click', (e) => {
+        const groupToggle = e.target.closest('[data-sidebar-toggle]');
+        if (groupToggle) {
+          const group = groupToggle.closest('.sidebar-group');
+          if (group) {
+            setSidebarGroupOpen(group, !group.classList.contains('is-open'));
+          }
+          return;
+        }
+
         const menuItem = e.target.closest('[data-menu-item]');
         if (menuItem) {
           switchView(menuItem.getAttribute('data-menu-item'));
@@ -370,6 +379,7 @@
     document.querySelectorAll('[data-menu-item]').forEach(item => {
       item.classList.toggle('is-active', item.getAttribute('data-menu-item') === activeMenuItem);
     });
+    updateSidebarGroups(activeMenuItem);
 
     // Update views
     if (elements.views) {
@@ -419,6 +429,25 @@
       case 'health':
         loadHealthStatus();
         break;
+    }
+  }
+
+  function updateSidebarGroups(activeMenuItem) {
+    document.querySelectorAll('.sidebar-group').forEach(group => {
+      const containsActiveItem = Boolean(group.querySelector(`[data-menu-item="${activeMenuItem}"]`));
+      setSidebarGroupOpen(group, containsActiveItem);
+    });
+  }
+
+  function setSidebarGroupOpen(group, isOpen) {
+    group.classList.toggle('is-open', isOpen);
+    const toggle = group.querySelector('[data-sidebar-toggle]');
+    if (toggle) {
+      toggle.classList.toggle('is-group-open', isOpen);
+    }
+    const caret = toggle ? toggle.querySelector('.menu-caret') : null;
+    if (caret) {
+      caret.textContent = isOpen ? '⌃' : '⌄';
     }
   }
 
