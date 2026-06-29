@@ -12,8 +12,12 @@ func registerAdminRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, pa
 	mux.HandleFunc("/admin/dashboard", methodHandler("GET", redirectAdminDashboardHandler))
 	mux.HandleFunc("/office", methodHandler("GET", adminDashboardHandler))
 	mux.HandleFunc("/office/user", methodHandler("GET", adminDashboardHandler))
+	mux.HandleFunc("/office/user/create", methodHandler("GET", adminDashboardHandler))
+	mux.HandleFunc("GET /office/user/{user_id}/edit", adminDashboardHandler)
 	mux.HandleFunc("/office/conversations", methodHandler("GET", adminDashboardHandler))
 	mux.HandleFunc("/office/admins", methodHandler("GET", adminDashboardHandler))
+	mux.HandleFunc("/office/admins/create", methodHandler("GET", adminDashboardHandler))
+	mux.HandleFunc("GET /office/admins/{user_id}/edit", adminDashboardHandler)
 	mux.HandleFunc("/admin/api/login", methodHandler("POST", adminLoginProxyHandler(integrationHandler, pages.IntegrationSharedToken)))
 	mux.Handle("/admin/static/", http.StripPrefix("/admin/static/", http.FileServer(http.Dir("chat_admin/static"))))
 }

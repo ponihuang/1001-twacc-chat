@@ -10,6 +10,14 @@
 
   // DOM Elements
   let elements = {};
+  let editingUserID = null;
+  let editingAdminUserID = null;
+  let originalEditableUser = null;
+  let originalEditableAdmin = null;
+  let usersPage = 1;
+  let usersPerPage = 10;
+  let adminsPage = 1;
+  let adminsPerPage = 10;
 
   // Adjust each user-table column here. Use width for a fixed width or
   // minWidth when the column may grow with the available table width.
@@ -28,18 +36,32 @@
   const VIEW_ROUTES = {
     dashboard: '/office',
     users: '/office/user',
+    userCreate: '/office/user/create',
+    userEdit: null,
     conversations: '/office/conversations',
-    admins: '/office/admins'
+    admins: '/office/admins',
+    adminCreate: '/office/admins/create',
+    adminEdit: null
   };
 
   const ROUTE_VIEWS = Object.entries(VIEW_ROUTES).reduce((routes, [viewName, path]) => {
-    routes[path] = viewName;
+    if (path) routes[path] = viewName;
     return routes;
   }, {
     '/admin/dashboard': 'dashboard'
   });
 
   function resolveInitialView() {
+    const editMatch = window.location.pathname.match(/^\/office\/user\/(\d+)\/edit$/);
+    if (editMatch) {
+      editingUserID = editMatch[1];
+      return 'userEdit';
+    }
+    const adminEditMatch = window.location.pathname.match(/^\/office\/admins\/(\d+)\/edit$/);
+    if (adminEditMatch) {
+      editingAdminUserID = adminEditMatch[1];
+      return 'adminEdit';
+    }
     return ROUTE_VIEWS[window.location.pathname] || 'dashboard';
   }
 
@@ -49,6 +71,7 @@
   async function initApp() {
     cacheElements();
     renderTableColumns(elements.usersTable, elements.usersColgroup, elements.usersThead, USER_COLUMNS);
+    setupOverlayScrollbar(document.getElementById('users-table-scroll'));
     setupEventListeners();
     switchView(resolveInitialView(), { replace: true });
     await loadInitialData();
@@ -86,7 +109,55 @@
       usersTbody: document.getElementById('users-tbody'),
       usersLoading: document.getElementById('users-loading'),
       usersEmpty: document.getElementById('users-empty'),
+      usersPagination: document.getElementById('users-pagination'),
+      usersTotal: document.getElementById('users-total'),
+      usersPages: document.getElementById('users-pages'),
+      usersPerPage: document.getElementById('users-per-page'),
       refreshUsersBtn: document.getElementById('refresh-users-btn'),
+      userCreateForm: document.getElementById('user-create-form'),
+      createUserAccount: document.getElementById('create-user-account'),
+      createUserDisplayName: document.getElementById('create-user-display-name'),
+      createUserEmail: document.getElementById('create-user-email'),
+      createUserStatus: document.getElementById('create-user-status'),
+      createUserPassword: document.getElementById('create-user-password'),
+      submitCreateUser: document.getElementById('submit-create-user'),
+      userEditForm: document.getElementById('user-edit-form'),
+      editUserAccount: document.getElementById('edit-user-account'),
+      editUserPassword: document.getElementById('edit-user-password'),
+      editUserDisplayName: document.getElementById('edit-user-display-name'),
+      editUserEmail: document.getElementById('edit-user-email'),
+      editUserStatus: document.getElementById('edit-user-status'),
+      submitEditUser: document.getElementById('submit-edit-user'),
+      resetEditUser: document.getElementById('reset-edit-user'),
+
+      // Admins
+      adminFilterForm: document.getElementById('admin-filter-form'),
+      adminSearch: document.getElementById('admin-search'),
+      adminDisplayName: document.getElementById('admin-display-name'),
+      adminStatus: document.getElementById('admin-status'),
+      adminsTable: document.getElementById('admins-table'),
+      adminsTbody: document.getElementById('admins-tbody'),
+      adminsLoading: document.getElementById('admins-loading'),
+      adminsEmpty: document.getElementById('admins-empty'),
+      adminsPagination: document.getElementById('admins-pagination'),
+      adminsTotal: document.getElementById('admins-total'),
+      adminsPages: document.getElementById('admins-pages'),
+      adminsPerPage: document.getElementById('admins-per-page'),
+      refreshAdminsBtn: document.getElementById('refresh-admins-btn'),
+      adminCreateForm: document.getElementById('admin-create-form'),
+      createAdminAccount: document.getElementById('create-admin-account'),
+      createAdminPassword: document.getElementById('create-admin-password'),
+      createAdminRole: document.getElementById('create-admin-role'),
+      createAdminDisplayName: document.getElementById('create-admin-display-name'),
+      createAdminStatus: document.getElementById('create-admin-status'),
+      submitCreateAdmin: document.getElementById('submit-create-admin'),
+      adminEditForm: document.getElementById('admin-edit-form'),
+      editAdminAccount: document.getElementById('edit-admin-account'),
+      editAdminPassword: document.getElementById('edit-admin-password'),
+      editAdminDisplayName: document.getElementById('edit-admin-display-name'),
+      editAdminStatus: document.getElementById('edit-admin-status'),
+      submitEditAdmin: document.getElementById('submit-edit-admin'),
+      resetEditAdmin: document.getElementById('reset-edit-admin'),
       
       // Devices
       deviceUserId: document.getElementById('device-user-id'),
@@ -143,6 +214,15 @@
     // Menu items
     if (elements.menu) {
       elements.menu.addEventListener('click', (e) => {
+        const groupToggle = e.target.closest('[data-sidebar-toggle]');
+        if (groupToggle) {
+          const group = groupToggle.closest('.sidebar-group');
+          if (group) {
+            setSidebarGroupOpen(group, !group.classList.contains('is-open'));
+          }
+          return;
+        }
+
         const menuItem = e.target.closest('[data-menu-item]');
         if (menuItem) {
           switchView(menuItem.getAttribute('data-menu-item'));
@@ -167,11 +247,53 @@
     if (elements.userFilterForm) {
       elements.userFilterForm.addEventListener('submit', (e) => {
         e.preventDefault();
+        usersPage = 1;
+        loadUsers();
+      });
+    }
+    if (elements.usersPerPage) {
+      elements.usersPerPage.addEventListener('change', () => {
+        usersPerPage = Number(elements.usersPerPage.value) || 10;
+        usersPage = 1;
         loadUsers();
       });
     }
     if (elements.refreshUsersBtn && !elements.userFilterForm) {
       elements.refreshUsersBtn.addEventListener('click', loadUsers);
+    }
+    if (elements.userCreateForm) {
+      elements.userCreateForm.addEventListener('submit', createUser);
+    }
+    if (elements.userEditForm) {
+      elements.userEditForm.addEventListener('submit', updateUser);
+    }
+    if (elements.resetEditUser) {
+      elements.resetEditUser.addEventListener('click', resetUserEditForm);
+    }
+
+    // Admin management
+    if (elements.adminFilterForm) {
+      elements.adminFilterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        adminsPage = 1;
+        loadAdmins();
+      });
+    }
+    if (elements.adminsPerPage) {
+      elements.adminsPerPage.addEventListener('change', () => {
+        adminsPerPage = Number(elements.adminsPerPage.value) || 10;
+        adminsPage = 1;
+        loadAdmins();
+      });
+    }
+    if (elements.adminCreateForm) {
+      elements.adminCreateForm.addEventListener('submit', createAdmin);
+    }
+    if (elements.adminEditForm) {
+      elements.adminEditForm.addEventListener('submit', updateAdmin);
+    }
+    if (elements.resetEditAdmin) {
+      elements.resetEditAdmin.addEventListener('click', resetAdminEditForm);
     }
 
     // Devices management
@@ -235,12 +357,15 @@
    * Switch between views
    */
   function switchView(viewName, options = {}) {
-    if (!VIEW_ROUTES[viewName]) {
+    if (!Object.prototype.hasOwnProperty.call(VIEW_ROUTES, viewName)) {
       viewName = 'dashboard';
     }
 
     if (!options.skipHistory) {
-      const nextPath = VIEW_ROUTES[viewName];
+      const nextPath = options.path || VIEW_ROUTES[viewName] || (
+        viewName === 'userEdit' && editingUserID ? `/office/user/${editingUserID}/edit` :
+        viewName === 'adminEdit' && editingAdminUserID ? `/office/admins/${editingAdminUserID}/edit` : ''
+      );
       if (nextPath && window.location.pathname !== nextPath) {
         const method = options.replace ? 'replaceState' : 'pushState';
         window.history[method]({ adminView: viewName }, '', nextPath);
@@ -248,9 +373,13 @@
     }
 
     // Update menu items
+    const activeMenuItem = viewName === 'userCreate' || viewName === 'userEdit'
+      ? 'users'
+      : viewName === 'adminCreate' || viewName === 'adminEdit' ? 'admins' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
-      item.classList.toggle('is-active', item.getAttribute('data-menu-item') === viewName);
+      item.classList.toggle('is-active', item.getAttribute('data-menu-item') === activeMenuItem);
     });
+    updateSidebarGroups(activeMenuItem);
 
     // Update views
     if (elements.views) {
@@ -270,8 +399,23 @@
       case 'users':
         loadUsers();
         break;
+      case 'userCreate':
+        elements.createUserAccount?.focus();
+        break;
+      case 'userEdit':
+        loadUserForEdit();
+        break;
       case 'conversations':
+        break;
       case 'admins':
+        loadAdmins();
+        break;
+      case 'adminCreate':
+        elements.adminCreateForm?.reset();
+        elements.createAdminAccount?.focus();
+        break;
+      case 'adminEdit':
+        loadAdminForEdit();
         break;
       case 'devices':
         // Already handled by button
@@ -285,6 +429,25 @@
       case 'health':
         loadHealthStatus();
         break;
+    }
+  }
+
+  function updateSidebarGroups(activeMenuItem) {
+    document.querySelectorAll('.sidebar-group').forEach(group => {
+      const containsActiveItem = Boolean(group.querySelector(`[data-menu-item="${activeMenuItem}"]`));
+      setSidebarGroupOpen(group, containsActiveItem);
+    });
+  }
+
+  function setSidebarGroupOpen(group, isOpen) {
+    group.classList.toggle('is-open', isOpen);
+    const toggle = group.querySelector('[data-sidebar-toggle]');
+    if (toggle) {
+      toggle.classList.toggle('is-group-open', isOpen);
+    }
+    const caret = toggle ? toggle.querySelector('.menu-caret') : null;
+    if (caret) {
+      caret.textContent = isOpen ? '⌃' : '⌄';
     }
   }
 
@@ -322,6 +485,7 @@
     if (elements.usersLoading) elements.usersLoading.hidden = false;
     if (elements.usersEmpty) elements.usersEmpty.hidden = true;
     if (elements.usersTable) elements.usersTable.hidden = true;
+    if (elements.usersPagination) elements.usersPagination.hidden = true;
 
     try {
       const response = await makeAuthenticatedRequest(`/api/system-admin/users?${buildUserQuery().toString()}`);
@@ -332,14 +496,21 @@
         throw new Error(data.message || '載入用戶列表失敗');
       }
 
-      const users = Array.isArray(data.data) ? data.data : [];
+      const pageData = data.data || {};
+      const users = Array.isArray(pageData.items) ? pageData.items : [];
+      const total = Number(pageData.total) || 0;
+      const totalPages = Number(pageData.total_pages) || 0;
+      usersPage = Number(pageData.page) || usersPage;
+      usersPerPage = Number(pageData.per_page) || usersPerPage;
       if (users.length === 0) {
         showUsersEmpty();
+        renderUsersPagination(total, totalPages);
         return;
       }
 
       populateUsersTable(users);
       if (elements.usersTable) elements.usersTable.hidden = false;
+      renderUsersPagination(total, totalPages);
     } catch (err) {
       showError('載入用戶列表失敗: ' + err.message);
       showUsersEmpty();
@@ -364,6 +535,8 @@
       const normalized = value?.trim();
       if (normalized) params.set(key, normalized);
     });
+    params.set('page', String(usersPage));
+    params.set('per_page', String(usersPerPage));
     return params;
   }
 
@@ -406,12 +579,88 @@
     table.style.minWidth = `${minimumTableWidth}px`;
   }
 
+  function setupOverlayScrollbar(container) {
+    if (!container) return;
+
+    const viewport = container.querySelector('.table-scroll-viewport');
+    const track = container.querySelector('.table-scrollbar');
+    const thumb = container.querySelector('.table-scrollbar-thumb');
+    if (!viewport || !track || !thumb) return;
+
+    const syncThumb = () => {
+      const scrollRange = viewport.scrollWidth - viewport.clientWidth;
+      if (scrollRange <= 1) {
+        track.hidden = true;
+        return;
+      }
+
+      track.hidden = false;
+      const trackWidth = track.clientWidth;
+      const thumbWidth = Math.max(48, trackWidth * viewport.clientWidth / viewport.scrollWidth);
+      const thumbRange = Math.max(0, trackWidth - thumbWidth);
+      const thumbLeft = scrollRange > 0 ? thumbRange * viewport.scrollLeft / scrollRange : 0;
+      thumb.style.width = `${thumbWidth}px`;
+      thumb.style.transform = `translateX(${thumbLeft}px)`;
+    };
+
+    let hideTimer = 0;
+    const revealTemporarily = () => {
+      container.classList.add('is-scrolling');
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => container.classList.remove('is-scrolling'), 700);
+    };
+
+    viewport.addEventListener('scroll', () => {
+      syncThumb();
+      revealTemporarily();
+    }, { passive: true });
+
+    track.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      const trackRect = track.getBoundingClientRect();
+      const thumbRect = thumb.getBoundingClientRect();
+      const startPointerX = event.clientX;
+      const pointerOffset = event.target === thumb
+        ? event.clientX - thumbRect.left
+        : thumbRect.width / 2;
+
+      if (event.target !== thumb) {
+        const ratio = (event.clientX - trackRect.left - pointerOffset) / Math.max(1, trackRect.width - thumbRect.width);
+        viewport.scrollLeft = ratio * (viewport.scrollWidth - viewport.clientWidth);
+      }
+
+      track.setPointerCapture(event.pointerId);
+      thumb.style.cursor = 'grabbing';
+      const dragStartScrollLeft = viewport.scrollLeft;
+      const dragStartPointerX = event.target === thumb ? startPointerX : event.clientX;
+
+      const move = moveEvent => {
+        const thumbRange = Math.max(1, track.clientWidth - thumb.clientWidth);
+        const scrollRange = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+        viewport.scrollLeft = dragStartScrollLeft
+          + (moveEvent.clientX - dragStartPointerX) * scrollRange / thumbRange;
+      };
+      const stop = () => {
+        thumb.style.cursor = 'grab';
+        track.removeEventListener('pointermove', move);
+        track.removeEventListener('pointerup', stop);
+        track.removeEventListener('pointercancel', stop);
+      };
+      track.addEventListener('pointermove', move);
+      track.addEventListener('pointerup', stop);
+      track.addEventListener('pointercancel', stop);
+    });
+
+    new ResizeObserver(syncThumb).observe(viewport);
+    syncThumb();
+  }
+
   function renderUserCell(key, user, index) {
     const cell = document.createElement('td');
 
     switch (key) {
       case 'index':
-        cell.textContent = String(index + 1);
+        cell.textContent = String((usersPage - 1) * usersPerPage + index + 1);
         break;
       case 'avatar': {
         const avatar = document.createElement('span');
@@ -448,12 +697,13 @@
         break;
       case 'options': {
         cell.className = 'actions-cell';
-        const viewButton = document.createElement('button');
-        viewButton.type = 'button';
-        viewButton.className = 'table-action';
-        viewButton.textContent = '查看';
-        viewButton.title = '查看用戶';
-        cell.appendChild(viewButton);
+        const editButton = document.createElement('button');
+        editButton.type = 'button';
+        editButton.className = 'table-action';
+        editButton.textContent = '編輯';
+        editButton.title = '編輯用戶';
+        editButton.addEventListener('click', () => openUserEdit(user.id));
+        cell.appendChild(editButton);
         break;
       }
       default:
@@ -463,9 +713,494 @@
     return cell;
   }
 
+  function renderUsersPagination(total, totalPages) {
+    if (!elements.usersPagination || !elements.usersPages) return;
+
+    if (elements.usersTotal) elements.usersTotal.textContent = String(total);
+    if (elements.usersPerPage) elements.usersPerPage.value = String(usersPerPage);
+    elements.usersPages.replaceChildren();
+
+    const addButton = (label, page, options = {}) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pagination-button';
+      button.textContent = label;
+      button.disabled = Boolean(options.disabled);
+      if (options.current) {
+        button.classList.add('is-current');
+        button.setAttribute('aria-current', 'page');
+      } else if (!options.disabled) {
+        button.addEventListener('click', () => {
+          usersPage = page;
+          loadUsers();
+        });
+      }
+      elements.usersPages.appendChild(button);
+    };
+
+    addButton('‹', usersPage - 1, { disabled: usersPage <= 1 });
+    paginationSequence(usersPage, totalPages).forEach(page => {
+      if (page === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '…';
+        elements.usersPages.appendChild(ellipsis);
+        return;
+      }
+      addButton(String(page), page, { current: page === usersPage });
+    });
+    addButton('›', usersPage + 1, { disabled: usersPage >= totalPages || totalPages === 0 });
+    elements.usersPagination.hidden = false;
+  }
+
+  function paginationSequence(current, totalPages) {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages = new Set([1, totalPages, current - 1, current, current + 1]);
+    const ordered = [...pages].filter(page => page >= 1 && page <= totalPages).sort((a, b) => a - b);
+    const sequence = [];
+    ordered.forEach((page, index) => {
+      if (index > 0 && page - ordered[index - 1] > 1) sequence.push('ellipsis');
+      sequence.push(page);
+    });
+    return sequence;
+  }
+
+  async function loadAdmins() {
+    if (elements.adminsLoading) elements.adminsLoading.hidden = false;
+    if (elements.adminsEmpty) elements.adminsEmpty.hidden = true;
+    if (elements.adminsTable) elements.adminsTable.hidden = true;
+    if (elements.adminsPagination) elements.adminsPagination.hidden = true;
+
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/admins?${buildAdminQuery().toString()}`);
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入管理員列表失敗');
+      }
+
+      const pageData = data.data || {};
+      const admins = Array.isArray(pageData.items) ? pageData.items : [];
+      const total = Number(pageData.total) || 0;
+      const totalPages = Number(pageData.total_pages) || 0;
+      adminsPage = Number(pageData.page) || adminsPage;
+      adminsPerPage = Number(pageData.per_page) || adminsPerPage;
+
+      if (admins.length === 0) {
+        showAdminsEmpty();
+        renderAdminsPagination(total, totalPages);
+        return;
+      }
+
+      populateAdminsTable(admins);
+      if (elements.adminsTable) elements.adminsTable.hidden = false;
+      renderAdminsPagination(total, totalPages);
+    } catch (err) {
+      showError('載入管理員列表失敗: ' + err.message);
+      showAdminsEmpty();
+    } finally {
+      if (elements.adminsLoading) elements.adminsLoading.hidden = true;
+    }
+  }
+
+  function buildAdminQuery() {
+    const params = new URLSearchParams();
+    const filters = [
+      ['external_user_id', elements.adminSearch?.value],
+      ['display_name', elements.adminDisplayName?.value],
+      ['status', elements.adminStatus?.value]
+    ];
+    filters.forEach(([key, value]) => {
+      const normalized = value?.trim();
+      if (normalized) params.set(key, normalized);
+    });
+    params.set('page', String(adminsPage));
+    params.set('per_page', String(adminsPerPage));
+    return params;
+  }
+
+  function populateAdminsTable(admins) {
+    if (!elements.adminsTbody) return;
+
+    elements.adminsTbody.replaceChildren();
+    admins.forEach(admin => {
+      const row = document.createElement('tr');
+      [
+        admin.external_user_id || '--',
+        admin.display_name || '--',
+        admin.role_name || admin.role || '--',
+        null,
+        formatDate(admin.last_login_at),
+        admin.last_login_ip || '--',
+        null
+      ].forEach((value, index) => {
+        const cell = document.createElement('td');
+        if (index === 0) {
+          const account = document.createElement('span');
+          account.className = 'account-link';
+          account.textContent = value;
+          cell.appendChild(account);
+        } else if (index === 3) {
+          const status = document.createElement('span');
+          status.className = 'status-badge';
+          status.textContent = admin.status === 'active' ? '啟用' : '停用';
+          cell.appendChild(status);
+        } else if (index === 6) {
+          cell.className = 'actions-cell';
+          const editButton = document.createElement('button');
+          editButton.type = 'button';
+          editButton.className = 'table-action';
+          editButton.textContent = '編輯';
+          editButton.title = '編輯管理員';
+          editButton.addEventListener('click', () => openAdminEdit(admin.user_id));
+          cell.appendChild(editButton);
+        } else {
+          cell.textContent = value;
+        }
+        row.appendChild(cell);
+      });
+      elements.adminsTbody.appendChild(row);
+    });
+  }
+
+  function renderAdminsPagination(total, totalPages) {
+    if (!elements.adminsPagination || !elements.adminsPages) return;
+
+    if (elements.adminsTotal) elements.adminsTotal.textContent = String(total);
+    if (elements.adminsPerPage) elements.adminsPerPage.value = String(adminsPerPage);
+    elements.adminsPages.replaceChildren();
+
+    const addButton = (label, page, options = {}) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pagination-button';
+      button.textContent = label;
+      button.disabled = Boolean(options.disabled);
+      if (options.current) {
+        button.classList.add('is-current');
+        button.setAttribute('aria-current', 'page');
+      } else if (!options.disabled) {
+        button.addEventListener('click', () => {
+          adminsPage = page;
+          loadAdmins();
+        });
+      }
+      elements.adminsPages.appendChild(button);
+    };
+
+    addButton('‹', adminsPage - 1, { disabled: adminsPage <= 1 });
+    paginationSequence(adminsPage, totalPages).forEach(page => {
+      if (page === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '…';
+        elements.adminsPages.appendChild(ellipsis);
+        return;
+      }
+      addButton(String(page), page, { current: page === adminsPage });
+    });
+    addButton('›', adminsPage + 1, { disabled: adminsPage >= totalPages || totalPages === 0 });
+    elements.adminsPagination.hidden = false;
+  }
+
+  function showAdminsEmpty() {
+    if (elements.adminsLoading) elements.adminsLoading.hidden = true;
+    if (elements.adminsEmpty) elements.adminsEmpty.hidden = false;
+    if (elements.adminsTable) elements.adminsTable.hidden = true;
+  }
+
+  async function createAdmin(event) {
+    event.preventDefault();
+
+    const password = elements.createAdminPassword?.value || '';
+    if (/\s/.test(password)) {
+      showError('密碼不可包含空白');
+      elements.createAdminPassword?.focus();
+      return;
+    }
+
+    const payload = {
+      external_user_id: elements.createAdminAccount?.value?.trim() || '',
+      display_name: elements.createAdminDisplayName?.value?.trim() || '',
+      password,
+      status: elements.createAdminStatus?.value || 'active'
+    };
+    if (!payload.external_user_id || !payload.display_name || !payload.password) {
+      showError('請填寫帳號、名稱與密碼');
+      return;
+    }
+
+    if (elements.submitCreateAdmin) elements.submitCreateAdmin.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/admins', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '建立管理員失敗');
+      }
+
+      adminsPage = 1;
+      showSuccess('管理員已建立');
+      switchView('admins');
+    } catch (err) {
+      showError(err.message || '建立管理員失敗');
+    } finally {
+      if (elements.submitCreateAdmin) elements.submitCreateAdmin.disabled = false;
+    }
+  }
+
+  function openAdminEdit(userID) {
+    editingAdminUserID = String(userID);
+    switchView('adminEdit', { path: `/office/admins/${encodeURIComponent(editingAdminUserID)}/edit` });
+  }
+
+  async function loadAdminForEdit() {
+    if (!editingAdminUserID || !elements.adminEditForm) return;
+
+    if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingAdminUserID)}`);
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入管理員資料失敗');
+      }
+
+      const admin = data.data || {};
+      elements.editAdminAccount.value = admin.external_user_id || '';
+      originalEditableAdmin = {
+        password: '',
+        displayName: admin.display_name || '',
+        email: admin.email || '',
+        status: admin.status || 'active'
+      };
+      resetAdminEditForm();
+      elements.editAdminDisplayName.focus();
+    } catch (err) {
+      showError(err.message || '載入管理員資料失敗');
+      switchView('admins');
+    } finally {
+      if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = false;
+    }
+  }
+
+  function resetAdminEditForm() {
+    if (!originalEditableAdmin) return;
+
+    const editableFields = [
+      [elements.editAdminPassword, originalEditableAdmin.password],
+      [elements.editAdminDisplayName, originalEditableAdmin.displayName],
+      [elements.editAdminStatus, originalEditableAdmin.status]
+    ];
+    editableFields.forEach(([field, originalValue]) => {
+      if (field && field.value !== originalValue) {
+        field.value = originalValue;
+      }
+    });
+  }
+
+  async function updateAdmin(event) {
+    event.preventDefault();
+    if (!editingAdminUserID || !originalEditableAdmin) return;
+
+    const password = elements.editAdminPassword?.value || '';
+    if (password && /\s/.test(password)) {
+      showError('密碼不可包含空白');
+      elements.editAdminPassword?.focus();
+      return;
+    }
+
+    const payload = {
+      password,
+      display_name: elements.editAdminDisplayName?.value?.trim() || '',
+      email: originalEditableAdmin.email,
+      status: elements.editAdminStatus?.value || 'active'
+    };
+    if (!payload.display_name) {
+      showError('請填寫名稱');
+      return;
+    }
+
+    if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingAdminUserID)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '更新管理員失敗');
+      }
+
+      elements.editAdminPassword.value = '';
+      showSuccess('管理員資料已更新');
+      switchView('admins');
+    } catch (err) {
+      showError(err.message || '更新管理員失敗');
+    } finally {
+      if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = false;
+    }
+  }
+
   function userInitial(value) {
     const normalized = String(value || '').trim();
     return normalized ? normalized.slice(0, 1).toUpperCase() : '?';
+  }
+
+  async function createUser(event) {
+    event.preventDefault();
+
+    const password = elements.createUserPassword?.value || '';
+    if (/\s/.test(password)) {
+      showError('密碼不可包含空白');
+      elements.createUserPassword?.focus();
+      return;
+    }
+
+    const payload = {
+      source_system: 'office',
+      external_user_id: elements.createUserAccount?.value?.trim() || '',
+      display_name: elements.createUserDisplayName?.value?.trim() || '',
+      email: elements.createUserEmail?.value?.trim() || '',
+      language: 'zh-Hant',
+      status: elements.createUserStatus?.value || 'active',
+      password
+    };
+
+    if (!payload.external_user_id || !payload.display_name || !payload.password) {
+      showError('請填寫來源、帳號、暱稱與密碼');
+      return;
+    }
+
+    if (elements.submitCreateUser) elements.submitCreateUser.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/users', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '建立用戶失敗');
+      }
+
+      elements.userCreateForm?.reset();
+      showSuccess('用戶已建立');
+      switchView('users');
+    } catch (err) {
+      showError(err.message || '建立用戶失敗');
+    } finally {
+      if (elements.submitCreateUser) elements.submitCreateUser.disabled = false;
+    }
+  }
+
+  function openUserEdit(userID) {
+    editingUserID = String(userID);
+    switchView('userEdit', { path: `/office/user/${encodeURIComponent(editingUserID)}/edit` });
+  }
+
+  async function loadUserForEdit() {
+    if (!editingUserID || !elements.userEditForm) return;
+
+    if (elements.submitEditUser) elements.submitEditUser.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingUserID)}`);
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入用戶資料失敗');
+      }
+
+      const user = data.data || {};
+      elements.editUserAccount.value = user.external_user_id || '';
+      originalEditableUser = {
+        password: '',
+        displayName: user.display_name || '',
+        email: user.email || '',
+        status: user.status || 'active'
+      };
+      resetUserEditForm();
+      elements.editUserDisplayName.focus();
+    } catch (err) {
+      showError(err.message || '載入用戶資料失敗');
+      switchView('users');
+    } finally {
+      if (elements.submitEditUser) elements.submitEditUser.disabled = false;
+    }
+  }
+
+  function resetUserEditForm() {
+    if (!originalEditableUser) return;
+
+    const editableFields = [
+      [elements.editUserPassword, originalEditableUser.password],
+      [elements.editUserDisplayName, originalEditableUser.displayName],
+      [elements.editUserEmail, originalEditableUser.email],
+      [elements.editUserStatus, originalEditableUser.status]
+    ];
+    editableFields.forEach(([field, originalValue]) => {
+      if (field && field.value !== originalValue) {
+        field.value = originalValue;
+      }
+    });
+  }
+
+  async function updateUser(event) {
+    event.preventDefault();
+    if (!editingUserID) return;
+
+    const password = elements.editUserPassword?.value || '';
+    if (password && /\s/.test(password)) {
+      showError('密碼不可包含空白');
+      elements.editUserPassword?.focus();
+      return;
+    }
+
+    const payload = {
+      password,
+      display_name: elements.editUserDisplayName?.value?.trim() || '',
+      email: elements.editUserEmail?.value?.trim() || '',
+      status: elements.editUserStatus?.value || 'active'
+    };
+    if (!payload.display_name) {
+      showError('請填寫暱稱');
+      return;
+    }
+
+    if (elements.submitEditUser) elements.submitEditUser.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingUserID)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '更新用戶失敗');
+      }
+
+      elements.editUserPassword.value = '';
+      showSuccess('用戶資料已更新');
+      switchView('users');
+    } catch (err) {
+      showError(err.message || '更新用戶失敗');
+    } finally {
+      if (elements.submitEditUser) elements.submitEditUser.disabled = false;
+    }
   }
 
   /**

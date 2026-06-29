@@ -144,6 +144,141 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// ListSystemAdmins handles GET /api/system-admin/admins.
+func (h *Handler) ListSystemAdmins(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	filter, err := parseSystemAdminFilter(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	resp, status, err := h.service.ListSystemAdmins(filter, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// CreateUser handles POST /api/system-admin/users.
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminCreateUserRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.CreateUser(req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// CreateSystemAdmin handles POST /api/system-admin/admins.
+func (h *Handler) CreateSystemAdmin(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req SystemAdminCreateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.CreateSystemAdmin(req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// GetUser handles GET /api/system-admin/users/{user_id}.
+func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	targetUserID, ok := parseUserIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, err := h.service.GetUser(targetUserID, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
+// UpdateUser handles PATCH /api/system-admin/users/{user_id}.
+func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	targetUserID, ok := parseUserIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminUpdateUserRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.UpdateUser(targetUserID, req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
 // ListDevices handles GET /api/system-admin/users/{user_id}/devices.
 func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {
@@ -359,9 +494,23 @@ func parseAdminUserFilter(r *http.Request) (AdminUserFilter, error) {
 		Status:         strings.TrimSpace(query.Get("status")),
 		SourceSystem:   strings.TrimSpace(query.Get("source_system")),
 		Sort:           strings.TrimSpace(query.Get("sort")),
+		Page:           1,
+		PerPage:        10,
 	}
 
 	var err error
+	if value := strings.TrimSpace(query.Get("page")); value != "" {
+		filter.Page, err = strconv.Atoi(value)
+		if err != nil || filter.Page < 1 {
+			return AdminUserFilter{}, fmt.Errorf("頁碼格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("per_page")); value != "" {
+		filter.PerPage, err = strconv.Atoi(value)
+		if err != nil || !validAdminPerPage(filter.PerPage) {
+			return AdminUserFilter{}, fmt.Errorf("每頁筆數格式錯誤")
+		}
+	}
 	if value := strings.TrimSpace(query.Get("created_from")); value != "" {
 		filter.CreatedFrom, err = parseAdminDate(value, false)
 		if err != nil {
@@ -376,6 +525,37 @@ func parseAdminUserFilter(r *http.Request) (AdminUserFilter, error) {
 	}
 
 	return filter, nil
+}
+
+func parseSystemAdminFilter(r *http.Request) (SystemAdminFilter, error) {
+	query := r.URL.Query()
+	filter := SystemAdminFilter{
+		ExternalUserID: strings.TrimSpace(query.Get("external_user_id")),
+		DisplayName:    strings.TrimSpace(query.Get("display_name")),
+		Status:         strings.TrimSpace(query.Get("status")),
+		Page:           1,
+		PerPage:        10,
+	}
+
+	var err error
+	if value := strings.TrimSpace(query.Get("page")); value != "" {
+		filter.Page, err = strconv.Atoi(value)
+		if err != nil || filter.Page < 1 {
+			return SystemAdminFilter{}, fmt.Errorf("頁碼格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("per_page")); value != "" {
+		filter.PerPage, err = strconv.Atoi(value)
+		if err != nil || !validAdminPerPage(filter.PerPage) {
+			return SystemAdminFilter{}, fmt.Errorf("每頁筆數格式錯誤")
+		}
+	}
+
+	return filter, nil
+}
+
+func validAdminPerPage(value int) bool {
+	return value == 10 || value == 20 || value == 50 || value == 100
 }
 
 func parseAdminDate(value string, endOfDay bool) (*time.Time, error) {
@@ -414,6 +594,10 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "INVALID_EXTERNAL_USER_ID", Message: "external_user_id 不可为空"}
 	case errors.Is(err, ErrInvalidDisplayName):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "display_name 不可为空"}
+	case errors.Is(err, ErrInvalidEmail):
+		return Response{Success: false, Code: "INVALID_EMAIL", Message: "Email 格式错误"}
+	case errors.Is(err, ErrInvalidStatus):
+		return Response{Success: false, Code: "INVALID_STATUS", Message: "状态仅支持 active 或 inactive"}
 	case errors.Is(err, ErrInvalidPassword):
 		return Response{Success: false, Code: "INVALID_PASSWORD", Message: "密码需为 4 到 20 码，且只能包含英文、数字或特殊符号"}
 	case errors.Is(err, ErrInvalidCredentials):

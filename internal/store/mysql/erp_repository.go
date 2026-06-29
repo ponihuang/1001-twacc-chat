@@ -31,7 +31,7 @@ func NewERPRepository(db *sql.DB) *IntegrationRepository {
 func (r *IntegrationRepository) CreateUser(params erp.RegisterParams) (erp.User, error) {
 	result, err := r.db.Exec(
 		`INSERT INTO users (source_system, external_user_id, display_name, password_hash, email, language, whatsapp_account, telegram_account, status)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		params.SourceSystem,
 		params.ExternalUserID,
 		params.DisplayName,
@@ -40,6 +40,7 @@ func (r *IntegrationRepository) CreateUser(params erp.RegisterParams) (erp.User,
 		params.Language,
 		nullableString(params.WhatsAppAccount),
 		nullableString(params.TelegramAccount),
+		params.Status,
 	)
 	if err != nil {
 		if isDuplicate(err) {
@@ -129,23 +130,25 @@ func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID 
 	return user, nil
 }
 
-// ListUsers returns users and their most recent authenticated activity.
-func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.AdminUserSummary, error) {
-	var query strings.Builder
-	query.WriteString(
-		`SELECT u.id, u.external_user_id, u.display_name, COALESCE(u.email, ''), u.status,
-		        u.source_system, u.created_at, MAX(s.last_used_at) AS last_online_at
-		   FROM users u
-		   LEFT JOIN auth_sessions s ON s.user_id = u.id
-		  WHERE 1 = 1`,
-	)
+// ListUsers returns one page of users and their most recent authenticated activity.
+func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) (erp.AdminUserPage, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage < 1 {
+		perPage = 10
+	}
 
+	var where strings.Builder
+	where.WriteString(" WHERE 1 = 1")
 	args := make([]any, 0, 7)
 	addLikeFilter := func(column, value string) {
 		if value == "" {
 			return
 		}
-		query.WriteString(" AND " + column + " LIKE ?")
+		where.WriteString(" AND " + column + " LIKE ?")
 		args = append(args, "%"+value+"%")
 	}
 	addLikeFilter("u.external_user_id", strings.TrimSpace(filter.ExternalUserID))
@@ -153,21 +156,35 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.Adm
 	addLikeFilter("COALESCE(u.email, '')", strings.TrimSpace(filter.Email))
 
 	if value := strings.TrimSpace(filter.Status); value != "" {
-		query.WriteString(" AND u.status = ?")
+		where.WriteString(" AND u.status = ?")
 		args = append(args, value)
 	}
 	if value := strings.TrimSpace(filter.SourceSystem); value != "" {
-		query.WriteString(" AND u.source_system = ?")
+		where.WriteString(" AND u.source_system = ?")
 		args = append(args, value)
 	}
 	if filter.CreatedFrom != nil {
-		query.WriteString(" AND u.created_at >= ?")
+		where.WriteString(" AND u.created_at >= ?")
 		args = append(args, *filter.CreatedFrom)
 	}
 	if filter.CreatedTo != nil {
-		query.WriteString(" AND u.created_at <= ?")
+		where.WriteString(" AND u.created_at <= ?")
 		args = append(args, *filter.CreatedTo)
 	}
+
+	var total int
+	if err := r.db.QueryRow("SELECT COUNT(*) FROM users u"+where.String(), args...).Scan(&total); err != nil {
+		return erp.AdminUserPage{}, fmt.Errorf("count users: %w", err)
+	}
+
+	var query strings.Builder
+	query.WriteString(
+		`SELECT u.id, u.external_user_id, u.display_name, COALESCE(u.email, ''), u.status,
+		        u.source_system, u.created_at, MAX(s.last_used_at) AS last_online_at
+		   FROM users u
+		   LEFT JOIN auth_sessions s ON s.user_id = u.id`,
+	)
+	query.WriteString(where.String())
 
 	query.WriteString(" GROUP BY u.id, u.external_user_id, u.display_name, u.email, u.status, u.source_system, u.created_at")
 	switch strings.TrimSpace(filter.Sort) {
@@ -178,11 +195,12 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.Adm
 	default:
 		query.WriteString(" ORDER BY u.created_at DESC, u.id DESC")
 	}
-	query.WriteString(" LIMIT 500")
+	query.WriteString(" LIMIT ? OFFSET ?")
+	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
 
-	rows, err := r.db.Query(query.String(), args...)
+	rows, err := r.db.Query(query.String(), queryArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list users: %w", err)
+		return erp.AdminUserPage{}, fmt.Errorf("list users: %w", err)
 	}
 	defer rows.Close()
 
@@ -200,7 +218,7 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.Adm
 			&user.CreatedAt,
 			&lastOnline,
 		); err != nil {
-			return nil, fmt.Errorf("scan user list: %w", err)
+			return erp.AdminUserPage{}, fmt.Errorf("scan user list: %w", err)
 		}
 		if lastOnline.Valid {
 			user.LastOnlineAt = &lastOnline.Time
@@ -208,10 +226,184 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) ([]erp.Adm
 		users = append(users, user)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate user list: %w", err)
+		return erp.AdminUserPage{}, fmt.Errorf("iterate user list: %w", err)
 	}
 
-	return users, nil
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+	return erp.AdminUserPage{
+		Items:      users,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// ListSystemAdmins returns one page of users granted system-admin access.
+func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (erp.SystemAdminPage, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage < 1 {
+		perPage = 10
+	}
+
+	var where strings.Builder
+	where.WriteString(" WHERE 1 = 1")
+	args := make([]any, 0, 3)
+	addLikeFilter := func(column, value string) {
+		if value == "" {
+			return
+		}
+		where.WriteString(" AND " + column + " LIKE ?")
+		args = append(args, "%"+value+"%")
+	}
+	addLikeFilter("u.external_user_id", strings.TrimSpace(filter.ExternalUserID))
+	addLikeFilter("u.display_name", strings.TrimSpace(filter.DisplayName))
+	if value := strings.TrimSpace(filter.Status); value != "" {
+		where.WriteString(" AND u.status = ?")
+		args = append(args, value)
+	}
+
+	from := ` FROM system_admin_users sau
+		  JOIN users u ON u.id = sau.user_id
+		  LEFT JOIN auth_sessions latest_session
+		    ON latest_session.id = (
+		      SELECT s.id
+		        FROM auth_sessions s
+		       WHERE s.user_id = u.id
+		       ORDER BY s.last_used_at DESC, s.id DESC
+		       LIMIT 1
+		    )
+		  LEFT JOIN devices d ON d.user_id = u.id AND d.device_id = latest_session.device_id`
+
+	var total int
+	if err := r.db.QueryRow("SELECT COUNT(*)"+from+where.String(), args...).Scan(&total); err != nil {
+		return erp.SystemAdminPage{}, fmt.Errorf("count system admins: %w", err)
+	}
+
+	query := `SELECT sau.id, u.id, u.external_user_id, u.display_name, sau.role, u.status,
+	                 latest_session.last_used_at, COALESCE(d.ip, '')
+	            ` + from + where.String() + `
+	        ORDER BY sau.created_at DESC, sau.id DESC
+	           LIMIT ? OFFSET ?`
+	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return erp.SystemAdminPage{}, fmt.Errorf("list system admins: %w", err)
+	}
+	defer rows.Close()
+
+	admins := make([]erp.SystemAdminSummary, 0)
+	for rows.Next() {
+		var admin erp.SystemAdminSummary
+		var lastLogin sql.NullTime
+		if err := rows.Scan(
+			&admin.ID,
+			&admin.UserID,
+			&admin.ExternalUserID,
+			&admin.DisplayName,
+			&admin.Role,
+			&admin.Status,
+			&lastLogin,
+			&admin.LastLoginIP,
+		); err != nil {
+			return erp.SystemAdminPage{}, fmt.Errorf("scan system admin list: %w", err)
+		}
+		if lastLogin.Valid {
+			admin.LastLoginAt = &lastLogin.Time
+		}
+		admin.RoleName = systemAdminRoleName(admin.Role)
+		admins = append(admins, admin)
+	}
+	if err := rows.Err(); err != nil {
+		return erp.SystemAdminPage{}, fmt.Errorf("iterate system admin list: %w", err)
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+	return erp.SystemAdminPage{
+		Items:      admins,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// CreateSystemAdmin grants system-admin access to an existing user.
+func (r *IntegrationRepository) CreateSystemAdmin(user erp.User, createdBy int64) (erp.SystemAdminSummary, error) {
+	result, err := r.db.Exec(
+		`INSERT INTO system_admin_users (user_id, role, created_by)
+		 VALUES (?, 'system_admin', ?)`,
+		user.ID,
+		nullableInt64(createdBy),
+	)
+	if err != nil {
+		if isDuplicate(err) {
+			return erp.SystemAdminSummary{}, erp.ErrUserAlreadyExists
+		}
+		return erp.SystemAdminSummary{}, fmt.Errorf("create system admin: %w", err)
+	}
+
+	adminID, err := result.LastInsertId()
+	if err != nil {
+		return erp.SystemAdminSummary{}, fmt.Errorf("read system admin id: %w", err)
+	}
+
+	return erp.SystemAdminSummary{
+		ID:             adminID,
+		UserID:         user.ID,
+		ExternalUserID: user.ExternalUserID,
+		DisplayName:    user.DisplayName,
+		Role:           "system_admin",
+		RoleName:       systemAdminRoleName("system_admin"),
+		Status:         user.Status,
+		LastLoginIP:    "",
+	}, nil
+}
+
+// UpdateUser applies mutable admin-managed fields. An empty password hash keeps the existing password.
+func (r *IntegrationRepository) UpdateUser(userID int64, params erp.AdminUpdateUserParams) (erp.User, error) {
+	var err error
+	if params.PasswordHash == "" {
+		_, err = r.db.Exec(
+			`UPDATE users
+			    SET display_name = ?, email = ?, status = ?
+			  WHERE id = ?`,
+			params.DisplayName,
+			nullableString(params.Email),
+			params.Status,
+			userID,
+		)
+	} else {
+		_, err = r.db.Exec(
+			`UPDATE users
+			    SET display_name = ?, email = ?, status = ?, password_hash = ?
+			  WHERE id = ?`,
+			params.DisplayName,
+			nullableString(params.Email),
+			params.Status,
+			params.PasswordHash,
+			userID,
+		)
+	}
+	if err != nil {
+		if isDuplicate(err) {
+			return erp.User{}, erp.ErrUserAlreadyExists
+		}
+		return erp.User{}, fmt.Errorf("update user: %w", err)
+	}
+
+	return r.FindUserByID(userID)
 }
 
 // UpdateUserProfile updates mutable profile fields for a user.
@@ -457,6 +649,23 @@ func nullableString(value string) any {
 	}
 
 	return value
+}
+
+func nullableInt64(value int64) any {
+	if value <= 0 {
+		return nil
+	}
+
+	return value
+}
+
+func systemAdminRoleName(role string) string {
+	switch strings.TrimSpace(role) {
+	case "system_admin":
+		return "系統管理員"
+	default:
+		return strings.TrimSpace(role)
+	}
 }
 
 func ruleType(rule string) string {

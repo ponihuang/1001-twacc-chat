@@ -16,7 +16,7 @@ import (
 type stubIntegrationRepository struct{}
 
 func (s *stubIntegrationRepository) CreateUser(params RegisterParams) (User, error) {
-	return User{ID: 1, SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName}, nil
+	return User{ID: 1, SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, Status: params.Status}, nil
 }
 
 func (s *stubIntegrationRepository) FindUserByID(userID int64) (User, error) {
@@ -27,8 +27,20 @@ func (s *stubIntegrationRepository) FindUserByExternal(sourceSystem, externalUse
 	return User{}, ErrUserNotFound
 }
 
-func (s *stubIntegrationRepository) ListUsers(filter AdminUserFilter) ([]AdminUserSummary, error) {
-	return nil, nil
+func (s *stubIntegrationRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error) {
+	return AdminUserPage{Items: []AdminUserSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
+}
+
+func (s *stubIntegrationRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
+	return SystemAdminPage{Items: []SystemAdminSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
+}
+
+func (s *stubIntegrationRepository) CreateSystemAdmin(user User, createdBy int64) (SystemAdminSummary, error) {
+	return SystemAdminSummary{ID: 1, UserID: user.ID, ExternalUserID: user.ExternalUserID, DisplayName: user.DisplayName, Role: "system_admin", RoleName: "系統管理員", Status: user.Status}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
+	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: params.DisplayName, Email: params.Email, Status: params.Status}, nil
 }
 
 func (s *stubIntegrationRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
@@ -161,6 +173,38 @@ func TestRegisterAcceptsValidSignedRequest(t *testing.T) {
 	}
 	if !resp.Success || resp.Code != "REGISTERED" {
 		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
+func TestParseAdminUserFilterDefaultsPagination(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/system-admin/users", nil)
+
+	filter, err := parseAdminUserFilter(request)
+	if err != nil {
+		t.Fatalf("parseAdminUserFilter returned error: %v", err)
+	}
+	if filter.Page != 1 || filter.PerPage != 10 {
+		t.Fatalf("pagination = page %d, per_page %d; want 1, 10", filter.Page, filter.PerPage)
+	}
+}
+
+func TestParseAdminUserFilterAcceptsSupportedPageSize(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/system-admin/users?page=3&per_page=50", nil)
+
+	filter, err := parseAdminUserFilter(request)
+	if err != nil {
+		t.Fatalf("parseAdminUserFilter returned error: %v", err)
+	}
+	if filter.Page != 3 || filter.PerPage != 50 {
+		t.Fatalf("pagination = page %d, per_page %d; want 3, 50", filter.Page, filter.PerPage)
+	}
+}
+
+func TestParseAdminUserFilterRejectsUnsupportedPageSize(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/system-admin/users?per_page=15", nil)
+
+	if _, err := parseAdminUserFilter(request); err == nil {
+		t.Fatal("expected unsupported per_page to return an error")
 	}
 }
 

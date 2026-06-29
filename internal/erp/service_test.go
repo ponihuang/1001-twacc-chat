@@ -22,6 +22,7 @@ type mockRepository struct {
 	approvedUserID     int64
 	approvedDeviceID   string
 	trustedDeviceCount map[int64]int
+	createdAdmin       SystemAdminSummary
 }
 
 type mockSessions struct {
@@ -36,7 +37,7 @@ func (m *mockRepository) CreateUser(params RegisterParams) (User, error) {
 	if _, ok := m.usersByExternal[key]; ok {
 		return User{}, ErrUserAlreadyExists
 	}
-	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, PasswordHash: params.PasswordHash, Language: params.Language}
+	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, PasswordHash: params.PasswordHash, Language: params.Language, Status: params.Status}
 	if m.usersByID == nil {
 		m.usersByID = map[int64]User{}
 	}
@@ -64,7 +65,7 @@ func (m *mockRepository) FindUserByExternal(sourceSystem, externalUserID string)
 	return user, nil
 }
 
-func (m *mockRepository) ListUsers(filter AdminUserFilter) ([]AdminUserSummary, error) {
+func (m *mockRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error) {
 	users := make([]AdminUserSummary, 0, len(m.usersByID))
 	for _, user := range m.usersByID {
 		users = append(users, AdminUserSummary{
@@ -77,7 +78,73 @@ func (m *mockRepository) ListUsers(filter AdminUserFilter) ([]AdminUserSummary, 
 			CreatedAt:      user.CreatedAt,
 		})
 	}
-	return users, nil
+	return AdminUserPage{
+		Items:      users,
+		Total:      len(users),
+		Page:       filter.Page,
+		PerPage:    filter.PerPage,
+		TotalPages: 1,
+	}, nil
+}
+
+func (m *mockRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
+	admins := make([]SystemAdminSummary, 0)
+	for userID := range m.systemAdmins {
+		if user, ok := m.usersByID[userID]; ok {
+			admins = append(admins, SystemAdminSummary{
+				ID:             userID,
+				UserID:         userID,
+				ExternalUserID: user.ExternalUserID,
+				DisplayName:    user.DisplayName,
+				Role:           "system_admin",
+				RoleName:       "系統管理員",
+				Status:         user.Status,
+			})
+		}
+	}
+	return SystemAdminPage{
+		Items:      admins,
+		Total:      len(admins),
+		Page:       filter.Page,
+		PerPage:    filter.PerPage,
+		TotalPages: 1,
+	}, nil
+}
+
+func (m *mockRepository) CreateSystemAdmin(user User, createdBy int64) (SystemAdminSummary, error) {
+	if m.systemAdmins == nil {
+		m.systemAdmins = map[int64]bool{}
+	}
+	if m.systemAdmins[user.ID] {
+		return SystemAdminSummary{}, ErrUserAlreadyExists
+	}
+	m.systemAdmins[user.ID] = true
+	m.createdAdmin = SystemAdminSummary{
+		ID:             user.ID,
+		UserID:         user.ID,
+		ExternalUserID: user.ExternalUserID,
+		DisplayName:    user.DisplayName,
+		Role:           "system_admin",
+		RoleName:       "系統管理員",
+		Status:         user.Status,
+	}
+	return m.createdAdmin, nil
+}
+
+func (m *mockRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
+	user, ok := m.usersByID[userID]
+	if !ok {
+		return User{}, ErrUserNotFound
+	}
+	user.DisplayName = params.DisplayName
+	user.Email = params.Email
+	user.Status = params.Status
+	if params.PasswordHash != "" {
+		user.PasswordHash = params.PasswordHash
+	}
+	m.usersByID[userID] = user
+	m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
+	return user, nil
 }
 
 func (m *mockRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
@@ -452,9 +519,163 @@ func TestListUsersReturnsRepositoryUsers(t *testing.T) {
 	if status != 200 {
 		t.Fatalf("status = %d, want 200", status)
 	}
-	users, ok := resp.Data.([]AdminUserSummary)
-	if !ok || len(users) != 2 {
+	users, ok := resp.Data.(AdminUserPage)
+	if !ok || len(users.Items) != 2 || users.Total != 2 {
 		t.Fatalf("users = %#v, want 2 users", resp.Data)
+	}
+}
+
+func TestCreateUserRequiresSystemAdmin(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{1: {ID: 1}},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, _, err := service.CreateUser(AdminCreateUserRequest{
+		SourceSystem:   "erp",
+		ExternalUserID: "new-user",
+		DisplayName:    "New User",
+		Password:       "pass123!",
+	}, SessionPrincipal{UserID: 1})
+	if !errors.Is(err, ErrInsufficientRole) {
+		t.Fatalf("expected ErrInsufficientRole, got %v", err)
+	}
+}
+
+func TestCreateUserCreatesUserWithHashedPassword(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{9: {ID: 9}},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	resp, status, err := service.CreateUser(AdminCreateUserRequest{
+		SourceSystem:   "office",
+		ExternalUserID: "new-user",
+		DisplayName:    "New User",
+		Email:          "new@example.com",
+		Password:       "pass123!",
+		Language:       "zh-Hant",
+		Status:         "inactive",
+	}, SessionPrincipal{UserID: 9})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+	if resp.Code != "USER_CREATED" {
+		t.Fatalf("code = %q, want USER_CREATED", resp.Code)
+	}
+
+	created, ok := repo.usersByExternal["office:new-user"]
+	if !ok {
+		t.Fatal("created user not stored")
+	}
+	if created.PasswordHash == "" || created.PasswordHash == "pass123!" {
+		t.Fatal("password was not hashed")
+	}
+	if created.Status != "inactive" {
+		t.Fatalf("status = %q, want inactive", created.Status)
+	}
+}
+
+func TestCreateSystemAdminCreatesOfficeUserAndGrantsAdmin(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{9: {ID: 9}},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	resp, status, err := service.CreateSystemAdmin(SystemAdminCreateRequest{
+		ExternalUserID: "manager01",
+		DisplayName:    "管理員一",
+		Password:       "pass123!",
+		Status:         "active",
+	}, SessionPrincipal{UserID: 9})
+	if err != nil {
+		t.Fatalf("CreateSystemAdmin returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+	if resp.Code != "SYSTEM_ADMIN_CREATED" {
+		t.Fatalf("code = %q, want SYSTEM_ADMIN_CREATED", resp.Code)
+	}
+
+	created, ok := repo.usersByExternal["office:manager01"]
+	if !ok {
+		t.Fatal("created system admin user not stored")
+	}
+	if !repo.systemAdmins[created.ID] {
+		t.Fatal("created user was not granted system admin")
+	}
+	if created.PasswordHash == "" || created.PasswordHash == "pass123!" {
+		t.Fatal("password was not hashed")
+	}
+}
+
+func TestUpdateUserKeepsPasswordWhenBlank(t *testing.T) {
+	originalHash := mustHashPassword(t, "oldpass!")
+	repo := &mockRepository{
+		usersByID: map[int64]User{
+			1: {ID: 1, SourceSystem: "office", ExternalUserID: "old-user", DisplayName: "Old", PasswordHash: originalHash, Status: "active"},
+			9: {ID: 9},
+		},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, status, err := service.UpdateUser(1, AdminUpdateUserRequest{
+		DisplayName: "Updated",
+		Email:       "updated@example.com",
+		Status:      "inactive",
+		Password:    "",
+	}, SessionPrincipal{UserID: 9})
+	if err != nil {
+		t.Fatalf("UpdateUser returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if repo.usersByID[1].PasswordHash != originalHash {
+		t.Fatal("blank password changed password hash")
+	}
+	if repo.usersByID[1].ExternalUserID != "old-user" {
+		t.Fatal("update changed immutable external user id")
+	}
+}
+
+func TestUpdateUserChangesPasswordWhenProvided(t *testing.T) {
+	originalHash := mustHashPassword(t, "oldpass!")
+	repo := &mockRepository{
+		usersByID: map[int64]User{
+			1: {ID: 1, SourceSystem: "office", ExternalUserID: "user-1", DisplayName: "User", PasswordHash: originalHash, Status: "active"},
+			9: {ID: 9},
+		},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, _, err := service.UpdateUser(1, AdminUpdateUserRequest{
+		DisplayName: "User",
+		Status:      "active",
+		Password:    "newpass!",
+	}, SessionPrincipal{UserID: 9})
+	if err != nil {
+		t.Fatalf("UpdateUser returned error: %v", err)
+	}
+	if repo.usersByID[1].PasswordHash == originalHash {
+		t.Fatal("provided password did not change password hash")
+	}
+	if !passwordMatches("newpass!", repo.usersByID[1].PasswordHash) {
+		t.Fatal("updated password hash does not match new password")
 	}
 }
 
