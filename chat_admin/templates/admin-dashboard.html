@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260624-2">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260626-4">
   <script defer src="/admin/static/admin-auth.js?v=1"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260624-2"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260626-4"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-logout-redirect="/admin/login">
@@ -17,8 +17,8 @@
           <span>首頁</span>
         </button>
 
-        <div class="sidebar-group is-open">
-          <button type="button" class="sidebar-root is-group-open">
+        <div class="sidebar-group is-open" data-sidebar-group="users">
+          <button type="button" class="sidebar-root is-group-open" data-sidebar-toggle>
             <span class="menu-glyph" aria-hidden="true">◉</span>
             <span>用戶</span>
             <span class="menu-caret" aria-hidden="true">⌃</span>
@@ -35,10 +35,19 @@
           <span class="menu-glyph" aria-hidden="true">●</span>
           <span>對話</span>
         </button>
-        <button type="button" class="sidebar-root" data-menu-item="admins">
-          <span class="menu-glyph" aria-hidden="true">▧</span>
-          <span>管理員</span>
-        </button>
+        <div class="sidebar-group" data-sidebar-group="system">
+          <button type="button" class="sidebar-root" data-sidebar-toggle>
+            <span class="menu-glyph" aria-hidden="true">▧</span>
+            <span>系統</span>
+            <span class="menu-caret" aria-hidden="true">⌄</span>
+          </button>
+          <div class="sidebar-submenu">
+            <button type="button" class="sidebar-subitem" data-menu-item="admins">
+              <span class="menu-glyph" aria-hidden="true">◉</span>
+              <span>管理員帳號</span>
+            </button>
+          </div>
+        </div>
       </nav>
     </aside>
 
@@ -46,7 +55,6 @@
       <header class="admin-header">
         <button type="button" class="header-toggle" aria-label="切換選單">☰</button>
         <div class="admin-header-tools">
-          <button type="button" class="header-icon" aria-label="語言">文A</button>
           <span class="admin-avatar" aria-hidden="true">●</span>
           <span class="admin-name" id="header-admin-name">admin</span>
           <button type="button" class="btn btn-small" id="logout-button">登出</button>
@@ -123,6 +131,7 @@
                 <select id="user-source">
                   <option value="">全部</option>
                   <option value="erp">ERP</option>
+                  <option value="office">OFFICE</option>
                   <option value="system">系統</option>
                 </select>
               </label>
@@ -144,7 +153,7 @@
               </label>
               <div class="filter-actions">
                 <button type="submit" class="btn" id="refresh-users-btn">搜尋</button>
-                <button type="button" class="btn btn-primary">新增</button>
+                <button type="button" class="btn btn-primary" data-menu-item="userCreate">新增</button>
               </div>
             </form>
 
@@ -160,14 +169,124 @@
                 </svg>
                 <p>找不到用戶</p>
               </div>
-              <div class="table-scroll">
-                <table class="data-table" id="users-table">
-                  <colgroup id="users-colgroup"></colgroup>
-                  <thead id="users-thead"></thead>
-                  <tbody id="users-tbody"></tbody>
-                </table>
+              <div class="table-scroll" id="users-table-scroll">
+                <div class="table-scroll-viewport">
+                  <table class="data-table" id="users-table">
+                    <colgroup id="users-colgroup"></colgroup>
+                    <thead id="users-thead"></thead>
+                    <tbody id="users-tbody"></tbody>
+                  </table>
+                </div>
+                <div class="table-scrollbar" aria-hidden="true">
+                  <div class="table-scrollbar-thumb"></div>
+                </div>
               </div>
             </section>
+            <div class="table-pagination" id="users-pagination" hidden>
+              <span class="pagination-total">總筆數: <strong id="users-total">0</strong></span>
+              <nav class="pagination-pages" id="users-pages" aria-label="使用者列表分頁"></nav>
+              <label class="pagination-size">
+                <span class="sr-only">每頁筆數</span>
+                <select id="users-per-page">
+                  <option value="10" selected>10 / 頁</option>
+                  <option value="20">20 / 頁</option>
+                  <option value="50">50 / 頁</option>
+                  <option value="100">100 / 頁</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section data-view="userCreate" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="users" aria-label="返回用戶管理">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="users">用戶管理</button>
+              <span>/</span>
+              <span>新增用戶</span>
+            </nav>
+
+            <form class="user-create-form" id="user-create-form">
+              <div class="user-create-fields">
+                <label class="user-create-field">
+                  <span>帳號</span>
+                  <input type="text" id="create-user-account" maxlength="100" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>密碼</span>
+                  <input type="text" id="create-user-password" minlength="4" maxlength="20" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>暱稱</span>
+                  <input type="text" id="create-user-display-name" maxlength="100" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>Email</span>
+                  <input type="email" id="create-user-email" maxlength="255" autocomplete="off">
+                </label>
+                <label class="user-create-field">
+                  <span>狀態</span>
+                  <select id="create-user-status">
+                    <option value="active" selected>啟用</option>
+                    <option value="inactive">停用</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="user-create-actions">
+                <button type="submit" class="btn btn-primary btn-compact" id="submit-create-user">建立</button>
+                <button type="reset" class="btn btn-compact" id="reset-create-user">重置</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section data-view="userEdit" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="users" aria-label="返回用戶管理">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="users">用戶管理</button>
+              <span>/</span>
+              <span>編輯用戶</span>
+            </nav>
+
+            <form class="user-create-form" id="user-edit-form">
+              <div class="user-create-fields">
+                <label class="user-create-field">
+                  <span>帳號</span>
+                  <input type="text" id="edit-user-account" autocomplete="off" readonly aria-readonly="true">
+                </label>
+                <label class="user-create-field">
+                  <span>密碼</span>
+                  <input type="password" id="edit-user-password" minlength="4" maxlength="20" autocomplete="new-password" placeholder="留空表示不變">
+                </label>
+                <label class="user-create-field">
+                  <span>暱稱</span>
+                  <input type="text" id="edit-user-display-name" maxlength="100" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>Email</span>
+                  <input type="email" id="edit-user-email" maxlength="255" autocomplete="off">
+                </label>
+                <label class="user-create-field">
+                  <span>狀態</span>
+                  <select id="edit-user-status">
+                    <option value="active">啟用</option>
+                    <option value="inactive">停用</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="user-create-actions">
+                <button type="submit" class="btn btn-primary btn-compact" id="submit-edit-user">儲存</button>
+                <button type="button" class="btn btn-compact" id="reset-edit-user">重置</button>
+              </div>
+            </form>
           </div>
         </section>
 
@@ -182,10 +301,157 @@
 
         <section data-view="admins" hidden>
           <div class="admin-page-panel">
-            <p class="admin-breadcrumb">首頁 / 管理員</p>
-            <div class="placeholder-panel">
-              <h2>管理員</h2>
+            <p class="admin-breadcrumb">首頁 / 管理員帳號</p>
+
+            <form class="admin-filter-panel" id="admin-filter-form" aria-label="管理員篩選">
+              <label>
+                <span>帳號</span>
+                <input type="search" id="admin-search" placeholder="請輸入" autocomplete="off">
+              </label>
+              <label>
+                <span>名稱</span>
+                <input type="search" id="admin-display-name" placeholder="請輸入" autocomplete="off">
+              </label>
+              <label>
+                <span>狀態</span>
+                <select id="admin-status">
+                  <option value="">全部</option>
+                  <option value="active">啟用</option>
+                  <option value="inactive">停用</option>
+                </select>
+              </label>
+              <div class="filter-actions admin-filter-actions">
+                <button type="submit" class="btn" id="refresh-admins-btn">搜尋</button>
+                <button type="button" class="btn btn-primary" data-menu-item="adminCreate">新增</button>
+              </div>
+            </form>
+
+            <section class="user-table-card admin-table-card">
+              <div class="is-empty" id="admins-loading" hidden>
+                <div class="loading"></div>
+                <p>載入中...</p>
+              </div>
+              <div class="is-empty" id="admins-empty" hidden>
+                <p>找不到管理員</p>
+              </div>
+              <table class="data-table admin-list-table" id="admins-table">
+                <thead>
+                  <tr>
+                    <th>帳號</th>
+                    <th>名稱</th>
+                    <th>角色名稱</th>
+                    <th>狀態</th>
+                    <th>登入時間</th>
+                    <th>登入IP</th>
+                    <th>選項</th>
+                  </tr>
+                </thead>
+                <tbody id="admins-tbody"></tbody>
+              </table>
+            </section>
+            <div class="table-pagination" id="admins-pagination" hidden>
+              <span class="pagination-total">總筆數: <strong id="admins-total">0</strong></span>
+              <nav class="pagination-pages" id="admins-pages" aria-label="管理員列表分頁"></nav>
+              <label class="pagination-size">
+                <span class="sr-only">每頁筆數</span>
+                <select id="admins-per-page">
+                  <option value="10" selected>10 / 頁</option>
+                  <option value="20">20 / 頁</option>
+                  <option value="50">50 / 頁</option>
+                  <option value="100">100 / 頁</option>
+                </select>
+              </label>
             </div>
+          </div>
+        </section>
+
+        <section data-view="adminCreate" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="admins" aria-label="返回管理員帳號">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="admins">管理員帳號</button>
+              <span>/</span>
+              <span>新增管理員</span>
+            </nav>
+
+            <form class="user-create-form" id="admin-create-form">
+              <div class="user-create-fields">
+                <label class="user-create-field">
+                  <span>帳號</span>
+                  <input type="text" id="create-admin-account" maxlength="100" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>密碼</span>
+                  <input type="text" id="create-admin-password" minlength="4" maxlength="20" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>名稱</span>
+                  <input type="text" id="create-admin-display-name" maxlength="100" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>角色名稱</span>
+                  <select id="create-admin-role" disabled aria-disabled="true">
+                    <option value="system_admin" selected>系統管理員</option>
+                  </select>
+                </label>
+                <label class="user-create-field">
+                  <span>狀態</span>
+                  <select id="create-admin-status">
+                    <option value="active" selected>啟用</option>
+                    <option value="inactive">停用</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="user-create-actions">
+                <button type="submit" class="btn btn-primary btn-compact" id="submit-create-admin">建立</button>
+                <button type="reset" class="btn btn-compact" id="reset-create-admin">重置</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section data-view="adminEdit" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="admins" aria-label="返回管理員帳號">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="admins">管理員帳號</button>
+              <span>/</span>
+              <span>編輯管理員</span>
+            </nav>
+
+            <form class="user-create-form" id="admin-edit-form">
+              <div class="user-create-fields">
+                <label class="user-create-field">
+                  <span>帳號</span>
+                  <input type="text" id="edit-admin-account" autocomplete="off" readonly aria-readonly="true">
+                </label>
+                <label class="user-create-field">
+                  <span>密碼</span>
+                  <input type="password" id="edit-admin-password" minlength="4" maxlength="20" autocomplete="new-password" placeholder="留空表示不變">
+                </label>
+                <label class="user-create-field">
+                  <span>名稱</span>
+                  <input type="text" id="edit-admin-display-name" maxlength="100" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>狀態</span>
+                  <select id="edit-admin-status">
+                    <option value="active">啟用</option>
+                    <option value="inactive">停用</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="user-create-actions">
+                <button type="submit" class="btn btn-primary btn-compact" id="submit-edit-admin">儲存</button>
+                <button type="button" class="btn btn-compact" id="reset-edit-admin">重置</button>
+              </div>
+            </form>
           </div>
         </section>
       </main>

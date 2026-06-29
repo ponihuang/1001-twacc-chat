@@ -60,6 +60,8 @@ type AdminUserFilter struct {
 	CreatedFrom    *time.Time
 	CreatedTo      *time.Time
 	Sort           string
+	Page           int
+	PerPage        int
 }
 
 // AdminUserSummary is the API-facing user shape for the admin console.
@@ -72,6 +74,46 @@ type AdminUserSummary struct {
 	SourceSystem   string     `json:"source_system"`
 	CreatedAt      time.Time  `json:"created_at"`
 	LastOnlineAt   *time.Time `json:"last_online_at,omitempty"`
+}
+
+// AdminUserPage is the paginated response for the admin user list.
+type AdminUserPage struct {
+	Items      []AdminUserSummary `json:"items"`
+	Total      int                `json:"total"`
+	Page       int                `json:"page"`
+	PerPage    int                `json:"per_page"`
+	TotalPages int                `json:"total_pages"`
+}
+
+// SystemAdminFilter contains supported filters for the system-admin list.
+type SystemAdminFilter struct {
+	ExternalUserID string
+	DisplayName    string
+	Status         string
+	Page           int
+	PerPage        int
+}
+
+// SystemAdminSummary is the API-facing system-admin shape.
+type SystemAdminSummary struct {
+	ID             int64      `json:"id"`
+	UserID         int64      `json:"user_id"`
+	ExternalUserID string     `json:"external_user_id"`
+	DisplayName    string     `json:"display_name"`
+	Role           string     `json:"role"`
+	RoleName       string     `json:"role_name"`
+	Status         string     `json:"status"`
+	LastLoginAt    *time.Time `json:"last_login_at,omitempty"`
+	LastLoginIP    string     `json:"last_login_ip"`
+}
+
+// SystemAdminPage is the paginated response for the system-admin list.
+type SystemAdminPage struct {
+	Items      []SystemAdminSummary `json:"items"`
+	Total      int                  `json:"total"`
+	Page       int                  `json:"page"`
+	PerPage    int                  `json:"per_page"`
+	TotalPages int                  `json:"total_pages"`
 }
 
 // IPWhitelistSettings is the API-facing whitelist payload.
@@ -103,6 +145,33 @@ type RegisterRequest struct {
 	Language        string `json:"language"`
 	WhatsAppAccount string `json:"whatsapp_account"`
 	TelegramAccount string `json:"telegram_account"`
+}
+
+// AdminCreateUserRequest is the system-admin payload for creating a user.
+type AdminCreateUserRequest struct {
+	SourceSystem   string `json:"source_system"`
+	ExternalUserID string `json:"external_user_id"`
+	Password       string `json:"password"`
+	DisplayName    string `json:"display_name"`
+	Email          string `json:"email"`
+	Language       string `json:"language"`
+	Status         string `json:"status"`
+}
+
+// SystemAdminCreateRequest is the payload for creating an office system admin.
+type SystemAdminCreateRequest struct {
+	ExternalUserID string `json:"external_user_id"`
+	Password       string `json:"password"`
+	DisplayName    string `json:"display_name"`
+	Status         string `json:"status"`
+}
+
+// AdminUpdateUserRequest is the system-admin payload for updating a user.
+type AdminUpdateUserRequest struct {
+	Password    string `json:"password"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+	Status      string `json:"status"`
 }
 
 // LoginRequest is the external-system login payload.
@@ -144,6 +213,15 @@ type RegisterParams struct {
 	Language        string
 	WhatsAppAccount string
 	TelegramAccount string
+	Status          string
+}
+
+// AdminUpdateUserParams carries validated admin edits into storage.
+type AdminUpdateUserParams struct {
+	PasswordHash string
+	DisplayName  string
+	Email        string
+	Status       string
 }
 
 // Repository defines persistence required by external identity, login, and admin flows.
@@ -151,7 +229,10 @@ type Repository interface {
 	CreateUser(params RegisterParams) (User, error)
 	FindUserByID(userID int64) (User, error)
 	FindUserByExternal(sourceSystem, externalUserID string) (User, error)
-	ListUsers(filter AdminUserFilter) ([]AdminUserSummary, error)
+	ListUsers(filter AdminUserFilter) (AdminUserPage, error)
+	ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error)
+	CreateSystemAdmin(user User, createdBy int64) (SystemAdminSummary, error)
+	UpdateUser(userID int64, params AdminUpdateUserParams) (User, error)
 	UpdateUserProfile(userID int64, displayName string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)
 	GetUserSecuritySettings(userID int64) (UserSecuritySettings, error)
