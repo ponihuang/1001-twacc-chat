@@ -619,6 +619,70 @@ func TestCreateSystemAdminCreatesOfficeUserAndGrantsAdmin(t *testing.T) {
 	}
 }
 
+func TestBootstrapSystemAdminCreatesFirstAdmin(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{},
+	}
+	service := NewService(repo, nil)
+
+	result, err := service.BootstrapSystemAdmin(SystemAdminCreateRequest{
+		ExternalUserID: "admin01",
+		DisplayName:    "系統管理員",
+		Password:       "pass123!",
+	})
+	if err != nil {
+		t.Fatalf("BootstrapSystemAdmin returned error: %v", err)
+	}
+	if !result.UserCreated {
+		t.Fatal("UserCreated = false, want true")
+	}
+	if !result.AdminCreated {
+		t.Fatal("AdminCreated = false, want true")
+	}
+
+	created, ok := repo.usersByExternal["office:admin01"]
+	if !ok {
+		t.Fatal("bootstrap user not stored")
+	}
+	if !repo.systemAdmins[created.ID] {
+		t.Fatal("bootstrap user was not granted system admin")
+	}
+	if created.PasswordHash == "" || created.PasswordHash == "pass123!" {
+		t.Fatal("password was not hashed")
+	}
+}
+
+func TestBootstrapSystemAdminIsIdempotent(t *testing.T) {
+	hash := mustHashPassword(t, "oldpass!")
+	user := User{ID: 1, SourceSystem: "office", ExternalUserID: "admin01", DisplayName: "Existing Admin", PasswordHash: hash, Status: "active"}
+	repo := &mockRepository{
+		usersByID:       map[int64]User{1: user},
+		usersByExternal: map[string]User{"office:admin01": user},
+		systemAdmins:    map[int64]bool{1: true},
+	}
+	service := NewService(repo, nil)
+
+	result, err := service.BootstrapSystemAdmin(SystemAdminCreateRequest{
+		ExternalUserID: "admin01",
+		DisplayName:    "系統管理員",
+		Password:       "newpass!",
+	})
+	if err != nil {
+		t.Fatalf("BootstrapSystemAdmin returned error: %v", err)
+	}
+	if result.UserCreated {
+		t.Fatal("UserCreated = true, want false")
+	}
+	if result.AdminCreated {
+		t.Fatal("AdminCreated = true, want false")
+	}
+	if repo.usersByID[1].PasswordHash != hash {
+		t.Fatal("bootstrap should not replace an existing password")
+	}
+}
+
 func TestUpdateUserKeepsPasswordWhenBlank(t *testing.T) {
 	originalHash := mustHashPassword(t, "oldpass!")
 	repo := &mockRepository{

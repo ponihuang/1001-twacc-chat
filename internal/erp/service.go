@@ -322,6 +322,67 @@ func (s *Service) CreateSystemAdmin(req SystemAdminCreateRequest, actor SessionP
 	}, 201, nil
 }
 
+// BootstrapSystemAdmin creates or promotes an office user as system_admin.
+// It is intended for first-time deployment and is safe to run more than once.
+func (s *Service) BootstrapSystemAdmin(req SystemAdminCreateRequest) (SystemAdminBootstrapResult, error) {
+	if s == nil || s.repo == nil {
+		return SystemAdminBootstrapResult{}, fmt.Errorf("integration service unavailable")
+	}
+
+	status := strings.TrimSpace(req.Status)
+	if status == "" {
+		status = "active"
+	}
+	if status != "active" && status != "inactive" {
+		return SystemAdminBootstrapResult{}, ErrInvalidStatus
+	}
+
+	params, err := validateRegisterRequest(RegisterRequest{
+		SourceSystem:   "office",
+		ExternalUserID: req.ExternalUserID,
+		Password:       req.Password,
+		DisplayName:    req.DisplayName,
+		Language:       "zh-Hant",
+	})
+	if err != nil {
+		return SystemAdminBootstrapResult{}, err
+	}
+	params.Status = status
+
+	user, err := s.createUser(params, req.Password)
+	userCreated := true
+	if errors.Is(err, ErrUserAlreadyExists) {
+		user, err = s.repo.FindUserByExternal("office", params.ExternalUserID)
+		userCreated = false
+	}
+	if err != nil {
+		return SystemAdminBootstrapResult{}, err
+	}
+
+	admin, err := s.repo.CreateSystemAdmin(user, 0)
+	adminCreated := true
+	if errors.Is(err, ErrUserAlreadyExists) {
+		adminCreated = false
+		admin = SystemAdminSummary{
+			UserID:         user.ID,
+			ExternalUserID: user.ExternalUserID,
+			DisplayName:    user.DisplayName,
+			Role:           "system_admin",
+			RoleName:       "系統管理員",
+			Status:         user.Status,
+		}
+	} else if err != nil {
+		return SystemAdminBootstrapResult{}, err
+	}
+
+	return SystemAdminBootstrapResult{
+		User:         user,
+		Admin:        admin,
+		UserCreated:  userCreated,
+		AdminCreated: adminCreated,
+	}, nil
+}
+
 // GetUser returns one user for editing. Only system_admin is allowed.
 func (s *Service) GetUser(targetUserID int64, actor SessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
