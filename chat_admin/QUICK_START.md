@@ -18,24 +18,20 @@ http://127.0.0.1:8080
 
 ## 2. 準備管理員帳號
 
-管理員必須：
+第一次部署時，先用 CLI 建立第一個管理員帳號：
 
-1. 已存在於 `users`
-2. 已設定可登入密碼
-3. 存在於 `system_admin_users`
-
-建議先透過既有註冊流程建立使用者，再授予管理員角色：
-
-```sql
-SELECT id, source_system, external_user_id, display_name
-FROM users
-WHERE source_system = 'erp' AND external_user_id = 'admin';
-
-INSERT INTO system_admin_users (user_id)
-VALUES (<查到的 user id>);
+```bash
+go run . seed-admin --account admin01 --password Admin123! --name 系統管理員
 ```
 
-若資料已存在，請勿重複新增。不要直接寫入明文密碼；密碼需由系統註冊流程產生合法的 `password_hash`。
+此指令會：
+
+1. 讀取 `.env` 的 MySQL 設定
+2. 先套用 migration
+3. 建立 `source_system=office` 的使用者
+4. 將該使用者加入 `system_admin_users`
+
+指令可重複執行；若帳號已存在，不會覆蓋既有密碼，只會確認管理員角色存在。不要直接用 SQL 寫入明文密碼，密碼需由系統產生合法的 `password_hash`。
 
 ## 3. 登入
 
@@ -50,7 +46,7 @@ http://127.0.0.1:8080/admin/login
 - 帳號：對應 `users.external_user_id`
 - 密碼：註冊時設定的密碼
 
-登入代理目前固定使用 `source_system=erp`，成功後導向：
+登入時會先以 `source_system=office` 查找，若查無帳號再 fallback 到 `erp`。成功後導向：
 
 ```text
 http://127.0.0.1:8080/office

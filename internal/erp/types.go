@@ -116,6 +116,14 @@ type SystemAdminPage struct {
 	TotalPages int                  `json:"total_pages"`
 }
 
+// SystemAdminBootstrapResult describes an idempotent first-admin bootstrap run.
+type SystemAdminBootstrapResult struct {
+	User         User
+	Admin        SystemAdminSummary
+	UserCreated  bool
+	AdminCreated bool
+}
+
 // IPWhitelistSettings is the API-facing whitelist payload.
 type IPWhitelistSettings struct {
 	AllowAll bool     `json:"allow_all"`

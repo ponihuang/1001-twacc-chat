@@ -68,7 +68,7 @@
 
 - 檔案留存策略
 - 管理後台的使用者設備、IP 白名單與操作日誌完整 UI
-- 管理後台的對話管理與管理員管理頁面，目前仍為占位畫面
+- 管理後台的對話管理頁面目前仍為占位畫面
 - 手機版 / 嵌入式頁面的聊天資料串接
 - 三語系完整文案
 
@@ -229,8 +229,16 @@ REQUIRE_TRUSTED_DEVICE=false
 - 後台首頁：`/office`
 - 使用者管理：`/office/user`
 - 對話管理：`/office/conversations`（目前為占位畫面）
-- 管理員管理：`/office/admins`（目前為占位畫面）
+- 管理員帳號：`/office/admins`
 - 舊路由 `/admin/dashboard` 會重新導向 `/office`
+
+第一次部署時可用 CLI 建立第一個後台管理員帳號：
+
+```bash
+go run . seed-admin --account admin01 --password Admin123! --name 系統管理員
+```
+
+此指令會讀取 `.env` 的 MySQL 設定，先套用 migration，再建立 `source_system=office` 的使用者並授予 `system_admin`。指令可重複執行；若帳號已存在，不會覆蓋既有密碼，只會確認管理員角色存在。
 
 目前 `/office/user` 會從 `users` 資料表載入使用者，並以 `auth_sessions.last_used_at` 顯示最近在線時間。詳細說明請見 [`chat_admin/README.md`](chat_admin/README.md)。
 
