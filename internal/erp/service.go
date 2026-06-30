@@ -46,12 +46,21 @@ var (
 type Service struct {
 	repo                 Repository
 	sessions             SessionIssuer
+	adminSessions        AdminSessionIssuer
 	requireTrustedDevice bool
 }
 
 // NewService builds an integration-backed identity service.
 func NewService(repo Repository, sessions SessionIssuer) *Service {
 	return &Service{repo: repo, sessions: sessions}
+}
+
+// SetAdminSessions sets the session issuer used by backend admin login.
+func (s *Service) SetAdminSessions(adminSessions AdminSessionIssuer) {
+	if s == nil {
+		return
+	}
+	s.adminSessions = adminSessions
 }
 
 // SetRequireTrustedDevice controls whether non-trusted devices must be approved before login.
@@ -154,6 +163,50 @@ func (s *Service) Login(req LoginRequest, clientIP, userAgent string) (Response,
 	return response, 200, nil
 }
 
+// AdminLogin validates a backend admin account and issues an admin session token.
+func (s *Service) AdminLogin(req AdminLoginRequest, clientIP string) (Response, int, error) {
+	if s == nil || s.repo == nil || s.adminSessions == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+
+	account, password, deviceID, err := validateAdminLoginRequest(req)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	admin, err := s.repo.FindSystemAdminByAccount(account)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if admin.Status != "active" || !passwordMatches(password, adminPasswordHash(admin)) {
+		return Response{}, statusCode(ErrInvalidCredentials), ErrInvalidCredentials
+	}
+
+	token, expiresAt, err := s.adminSessions.Issue(admin.UserID, deviceID)
+	if err != nil {
+		return Response{}, 500, err
+	}
+	if err := s.repo.UpdateSystemAdminLastLogin(admin.UserID, clientIP, time.Now().UTC()); err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{
+		Success:   true,
+		Code:      "ADMIN_LOGIN_OK",
+		Message:   "登入成功",
+		Token:     token,
+		ExpiresAt: expiresAt.Format(time.RFC3339),
+		Data: map[string]any{
+			"role":             admin.Role,
+			"is_system_admin":  true,
+			"user_id":          admin.UserID,
+			"admin_user_id":    admin.UserID,
+			"external_user_id": admin.ExternalUserID,
+			"display_name":     admin.DisplayName,
+		},
+	}, 200, nil
+}
+
 // UpdateProfile updates the authenticated user's profile fields.
 func (s *Service) UpdateProfile(actor SessionPrincipal, req ProfileUpdateRequest) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -182,11 +235,11 @@ func (s *Service) UpdateProfile(actor SessionPrincipal, req ProfileUpdateRequest
 }
 
 // ListUsers returns users for the admin console. Only system_admin is allowed.
-func (s *Service) ListUsers(filter AdminUserFilter, actor SessionPrincipal) (Response, int, error) {
+func (s *Service) ListUsers(filter AdminUserFilter, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
-	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
 	}
 
@@ -204,11 +257,11 @@ func (s *Service) ListUsers(filter AdminUserFilter, actor SessionPrincipal) (Res
 }
 
 // ListSystemAdmins returns system-admin accounts for the admin console.
-func (s *Service) ListSystemAdmins(filter SystemAdminFilter, actor SessionPrincipal) (Response, int, error) {
+func (s *Service) ListSystemAdmins(filter SystemAdminFilter, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
-	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
 	}
 
@@ -226,11 +279,11 @@ func (s *Service) ListSystemAdmins(filter SystemAdminFilter, actor SessionPrinci
 }
 
 // CreateUser creates an active user from the admin console. Only system_admin is allowed.
-func (s *Service) CreateUser(req AdminCreateUserRequest, actor SessionPrincipal) (Response, int, error) {
+func (s *Service) CreateUser(req AdminCreateUserRequest, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
-	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
 	}
 
@@ -275,12 +328,12 @@ func (s *Service) CreateUser(req AdminCreateUserRequest, actor SessionPrincipal)
 	}, 201, nil
 }
 
-// CreateSystemAdmin creates an office user and grants system-admin access.
-func (s *Service) CreateSystemAdmin(req SystemAdminCreateRequest, actor SessionPrincipal) (Response, int, error) {
+// CreateSystemAdmin creates a backend admin account.
+func (s *Service) CreateSystemAdmin(req SystemAdminCreateRequest, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
-	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
 	}
 
@@ -292,24 +345,13 @@ func (s *Service) CreateSystemAdmin(req SystemAdminCreateRequest, actor SessionP
 		return Response{}, statusCode(ErrInvalidStatus), ErrInvalidStatus
 	}
 
-	params, err := validateRegisterRequest(RegisterRequest{
-		SourceSystem:   "office",
-		ExternalUserID: req.ExternalUserID,
-		Password:       req.Password,
-		DisplayName:    req.DisplayName,
-		Language:       "zh-Hant",
-	})
+	params, err := validateSystemAdminCreateRequest(req, actor.AdminUserID)
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
 	params.Status = status
 
-	user, err := s.createUser(params, req.Password)
-	if err != nil {
-		return Response{}, statusCode(err), err
-	}
-
-	admin, err := s.repo.CreateSystemAdmin(user, actor.UserID)
+	admin, err := s.repo.CreateSystemAdmin(params)
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
@@ -322,7 +364,7 @@ func (s *Service) CreateSystemAdmin(req SystemAdminCreateRequest, actor SessionP
 	}, 201, nil
 }
 
-// BootstrapSystemAdmin creates or promotes an office user as system_admin.
+// BootstrapSystemAdmin creates a backend system admin.
 // It is intended for first-time deployment and is safe to run more than once.
 func (s *Service) BootstrapSystemAdmin(req SystemAdminCreateRequest) (SystemAdminBootstrapResult, error) {
 	if s == nil || s.repo == nil {
@@ -337,61 +379,39 @@ func (s *Service) BootstrapSystemAdmin(req SystemAdminCreateRequest) (SystemAdmi
 		return SystemAdminBootstrapResult{}, ErrInvalidStatus
 	}
 
-	params, err := validateRegisterRequest(RegisterRequest{
-		SourceSystem:   "office",
-		ExternalUserID: req.ExternalUserID,
-		Password:       req.Password,
-		DisplayName:    req.DisplayName,
-		Language:       "zh-Hant",
-	})
+	params, err := validateSystemAdminCreateRequest(req, 0)
 	if err != nil {
 		return SystemAdminBootstrapResult{}, err
 	}
 	params.Status = status
 
-	user, err := s.createUser(params, req.Password)
-	userCreated := true
-	if errors.Is(err, ErrUserAlreadyExists) {
-		user, err = s.repo.FindUserByExternal("office", params.ExternalUserID)
-		userCreated = false
-	}
-	if err != nil {
-		return SystemAdminBootstrapResult{}, err
-	}
-
-	admin, err := s.repo.CreateSystemAdmin(user, 0)
+	admin, err := s.repo.CreateSystemAdmin(params)
 	adminCreated := true
 	if errors.Is(err, ErrUserAlreadyExists) {
 		adminCreated = false
-		admin = SystemAdminSummary{
-			UserID:         user.ID,
-			ExternalUserID: user.ExternalUserID,
-			DisplayName:    user.DisplayName,
-			Role:           "system_admin",
-			RoleName:       "系統管理員",
-			Status:         user.Status,
+		admin, err = s.repo.FindSystemAdminByAccount(params.Account)
+		if err != nil {
+			return SystemAdminBootstrapResult{}, err
 		}
 	} else if err != nil {
 		return SystemAdminBootstrapResult{}, err
 	}
 
 	return SystemAdminBootstrapResult{
-		User:         user,
 		Admin:        admin,
-		UserCreated:  userCreated,
 		AdminCreated: adminCreated,
 	}, nil
 }
 
 // GetUser returns one user for editing. Only system_admin is allowed.
-func (s *Service) GetUser(targetUserID int64, actor SessionPrincipal) (Response, int, error) {
+func (s *Service) GetUser(targetUserID int64, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
 	if targetUserID <= 0 {
 		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
 	}
-	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
 	}
 
@@ -409,14 +429,14 @@ func (s *Service) GetUser(targetUserID int64, actor SessionPrincipal) (Response,
 }
 
 // UpdateUser updates mutable user fields. A blank password keeps the current password.
-func (s *Service) UpdateUser(targetUserID int64, req AdminUpdateUserRequest, actor SessionPrincipal) (Response, int, error) {
+func (s *Service) UpdateUser(targetUserID int64, req AdminUpdateUserRequest, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
 	if targetUserID <= 0 {
 		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
 	}
-	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
 	}
 
@@ -459,15 +479,88 @@ func (s *Service) UpdateUser(targetUserID int64, req AdminUpdateUserRequest, act
 	}, 200, nil
 }
 
+// GetSystemAdmin returns one backend admin for editing. Only system_admin is allowed.
+func (s *Service) GetSystemAdmin(targetAdminID int64, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if targetAdminID <= 0 {
+		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	admin, err := s.repo.FindSystemAdminByID(targetAdminID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "SYSTEM_ADMIN_OK",
+		Message: "管理員讀取成功",
+		Data:    admin,
+	}, 200, nil
+}
+
+// UpdateSystemAdmin updates mutable backend admin fields. A blank password keeps the current password.
+func (s *Service) UpdateSystemAdmin(targetAdminID int64, req SystemAdminCreateRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if targetAdminID <= 0 {
+		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	displayName := strings.TrimSpace(req.DisplayName)
+	role := normalizeSystemAdminRole(req.Role)
+	status := strings.TrimSpace(req.Status)
+	if displayName == "" || len([]rune(displayName)) > 100 {
+		return Response{}, statusCode(ErrInvalidDisplayName), ErrInvalidDisplayName
+	}
+	if status != "active" && status != "inactive" {
+		return Response{}, statusCode(ErrInvalidStatus), ErrInvalidStatus
+	}
+
+	params := SystemAdminUpdateParams{
+		DisplayName: displayName,
+		Role:        role,
+		Status:      status,
+	}
+	if strings.TrimSpace(req.Password) != "" {
+		passwordHash, err := hashPassword(req.Password)
+		if err != nil {
+			return Response{}, statusCode(err), err
+		}
+		params.PasswordHash = passwordHash
+	}
+
+	admin, err := s.repo.UpdateSystemAdmin(targetAdminID, params)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "SYSTEM_ADMIN_UPDATED",
+		Message: "管理員資料已更新",
+		Data:    admin,
+	}, 200, nil
+}
+
 // ListDevices returns the recent devices for a target user. Only system_admin is allowed.
-func (s *Service) ListDevices(targetUserID int64, actor SessionPrincipal) (Response, int, error) {
+func (s *Service) ListDevices(targetUserID int64, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
 	if targetUserID <= 0 {
 		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
 	}
-	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
 	}
 
@@ -496,14 +589,14 @@ func (s *Service) ListDevices(targetUserID int64, actor SessionPrincipal) (Respo
 }
 
 // UpdateIPWhitelist replaces a user's whitelist settings. Only system_admin is allowed.
-func (s *Service) UpdateIPWhitelist(targetUserID int64, actor SessionPrincipal, req IPWhitelistUpdateRequest) (Response, int, error) {
+func (s *Service) UpdateIPWhitelist(targetUserID int64, actor AdminSessionPrincipal, req IPWhitelistUpdateRequest) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
 	if targetUserID <= 0 {
 		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
 	}
-	if err := s.requireSystemAdmin(actor.UserID); err != nil {
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
 	}
 
@@ -659,6 +752,64 @@ func validateLoginRequest(req LoginRequest) (string, string, string, string, err
 	return sourceSystem, externalUserID, password, deviceID, nil
 }
 
+func validateAdminLoginRequest(req AdminLoginRequest) (string, string, string, error) {
+	account := strings.TrimSpace(req.Account)
+	password := strings.TrimSpace(req.Password)
+	deviceID := strings.TrimSpace(req.DeviceID)
+
+	if account == "" || len([]rune(account)) > 100 {
+		return "", "", "", ErrInvalidExternalUserID
+	}
+	if err := validatePassword(password); err != nil {
+		return "", "", "", err
+	}
+	if deviceID == "" {
+		return "", "", "", ErrDeviceIDRequired
+	}
+
+	return account, password, deviceID, nil
+}
+
+func validateSystemAdminCreateRequest(req SystemAdminCreateRequest, createdBy int64) (SystemAdminCreateParams, error) {
+	account := strings.TrimSpace(req.ExternalUserID)
+	displayName := strings.TrimSpace(req.DisplayName)
+	status := strings.TrimSpace(req.Status)
+	if status == "" {
+		status = "active"
+	}
+	if account == "" || len([]rune(account)) > 100 {
+		return SystemAdminCreateParams{}, ErrInvalidExternalUserID
+	}
+	if displayName == "" || len([]rune(displayName)) > 100 {
+		return SystemAdminCreateParams{}, ErrInvalidDisplayName
+	}
+	if status != "active" && status != "inactive" {
+		return SystemAdminCreateParams{}, ErrInvalidStatus
+	}
+
+	passwordHash, err := hashPassword(req.Password)
+	if err != nil {
+		return SystemAdminCreateParams{}, err
+	}
+
+	return SystemAdminCreateParams{
+		Account:      account,
+		PasswordHash: passwordHash,
+		DisplayName:  displayName,
+		Role:         normalizeSystemAdminRole(req.Role),
+		Status:       status,
+		CreatedBy:    createdBy,
+	}, nil
+}
+
+func normalizeSystemAdminRole(role string) string {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return "system_admin"
+	}
+	return role
+}
+
 func validatePassword(password string) error {
 	if !passwordPattern.MatchString(strings.TrimSpace(password)) {
 		return ErrInvalidPassword
@@ -738,15 +889,22 @@ func (s *Service) requireSystemAdmin(userID int64) error {
 	if userID <= 0 {
 		return ErrInsufficientRole
 	}
-	isAdmin, err := s.repo.IsSystemAdmin(userID)
+	admin, err := s.repo.FindSystemAdminByID(userID)
 	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return ErrInsufficientRole
+		}
 		return err
 	}
-	if !isAdmin {
+	if admin.Status != "active" || admin.Role != "system_admin" {
 		return ErrInsufficientRole
 	}
 
 	return nil
+}
+
+func adminPasswordHash(admin SystemAdminSummary) string {
+	return admin.PasswordHash
 }
 
 func (s *Service) profileResponseData(user User) (map[string]any, error) {

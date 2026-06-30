@@ -1,6 +1,6 @@
 # TWACC 聊天系統管理後台
 
-`chat_admin/` 是聊天室系統的管理後台前端，與聊天室前台 `web/` 共用同一個 Go server、MySQL、session 與權限模型。
+`chat_admin/` 是聊天室系統的管理後台前端，與聊天室前台 `web/` 共用同一個 Go server 與 MySQL，但後台管理員帳號使用 `admin_users`，聊天室玩家使用 `users`。
 
 ## 目前狀態
 
@@ -21,7 +21,6 @@
 尚未完成：
 
 - 對話管理 `/office/conversations`
-- 管理員管理 `/office/admins`
 - 新版介面中的設備、IP 白名單與操作日誌頁面
 - 批次操作、稽核記錄與完整多語系
 - 依路由拆分模板與頁面 JavaScript
@@ -54,7 +53,7 @@ chat_admin/
 | `/office/user/create` | 新增一般使用者 |
 | `/office/user/{user_id}/edit` | 編輯一般使用者 |
 | `/office/conversations` | 對話管理占位頁 |
-| `/office/admins` | 管理員管理占位頁 |
+| `/office/admins` | 管理員管理，已串接資料 |
 
 ## 使用者列表 API
 
@@ -128,7 +127,7 @@ const USER_COLUMNS = [
 ## 權限
 
 - 管理 API 需帶 Bearer session token。
-- 後端會確認操作者存在於 `system_admin_users`。
+- 後端會確認操作者存在於 `admin_users` 且角色為 `system_admin`。
 - `system_admin` 不可使用聊天 API。
 - 前端權限檢查只作為使用體驗防呆，實際權限以後端為準。
 
