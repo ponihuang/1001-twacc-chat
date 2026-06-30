@@ -28,10 +28,10 @@ go run . seed-admin --account admin01 --password Admin123! --name 系統管理�
 
 1. 讀取 `.env` 的 MySQL 設定
 2. 先套用 migration
-3. 建立 `source_system=office` 的使用者
-4. 將該使用者加入 `system_admin_users`
+3. 建立 `admin_users` 後台管理員帳號
+4. 後台登入 session 會寫入 `admin_auth_sessions`
 
-指令可重複執行；若帳號已存在，不會覆蓋既有密碼，只會確認管理員角色存在。不要直接用 SQL 寫入明文密碼，密碼需由系統產生合法的 `password_hash`。
+指令可重複執行；若帳號已存在，不會覆蓋既有密碼，只會確認管理員帳號存在。不要直接用 SQL 寫入明文密碼，密碼需由系統產生合法的 `password_hash`。
 
 ## 3. 登入
 
@@ -43,10 +43,10 @@ http://127.0.0.1:8080/admin/login
 
 目前後台登入表單需要：
 
-- 帳號：對應 `users.external_user_id`
+- 帳號：對應 `admin_users.account`
 - 密碼：註冊時設定的密碼
 
-登入時會先以 `source_system=office` 查找，若查無帳號再 fallback 到 `erp`。成功後導向：
+登入時只查後台管理員資料表，不會用聊天室玩家帳號登入。成功後導向：
 
 ```text
 http://127.0.0.1:8080/office
@@ -82,7 +82,7 @@ Authorization: Bearer <session-token>
 ## 5. 目前限制
 
 - 使用者列表的「編輯」可進入 `/office/user/{user_id}/edit` 查看不可修改的帳號，並修改密碼、暱稱、Email 與狀態；密碼留空時保留原密碼。
-- `/office/conversations` 與 `/office/admins` 目前是占位頁。
+- `/office/conversations` 目前是占位頁；`/office/admins` 已提供管理員列表、新增與編輯。
 - 設備與 IP 白名單 API 已存在，但新版後台尚未提供對應頁面。
 - 使用者列表預設每頁顯示 10 筆，並可切換為 20、50 或 100 筆。
 
@@ -90,7 +90,7 @@ Authorization: Bearer <session-token>
 
 ### 登入後立即被導回登入頁
 
-- 確認帳號存在於 `system_admin_users`
+- 確認帳號存在於 `admin_users`
 - 確認瀏覽器 Local Storage 有 `admin_session_token`
 - 確認 session 尚未過期
 

@@ -926,6 +926,7 @@
     const payload = {
       external_user_id: elements.createAdminAccount?.value?.trim() || '',
       display_name: elements.createAdminDisplayName?.value?.trim() || '',
+      role: elements.createAdminRole?.value || 'system_admin',
       password,
       status: elements.createAdminStatus?.value || 'active'
     };
@@ -967,7 +968,7 @@
 
     if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = true;
     try {
-      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingAdminUserID)}`);
+      const response = await makeAuthenticatedRequest(`/api/system-admin/admins/${encodeURIComponent(editingAdminUserID)}`);
       if (!response) return;
 
       const data = await response.json();
@@ -981,6 +982,7 @@
         password: '',
         displayName: admin.display_name || '',
         email: admin.email || '',
+        role: admin.role || 'system_admin',
         status: admin.status || 'active'
       };
       resetAdminEditForm();
@@ -1022,6 +1024,7 @@
     const payload = {
       password,
       display_name: elements.editAdminDisplayName?.value?.trim() || '',
+      role: originalEditableAdmin.role || 'system_admin',
       email: originalEditableAdmin.email,
       status: elements.editAdminStatus?.value || 'active'
     };
@@ -1032,7 +1035,7 @@
 
     if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = true;
     try {
-      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingAdminUserID)}`, {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/admins/${encodeURIComponent(editingAdminUserID)}`, {
         method: 'PATCH',
         body: JSON.stringify(payload)
       });

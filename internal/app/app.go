@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"1001-twacc-chat/internal/adminauth"
 	"1001-twacc-chat/internal/auth"
 	"1001-twacc-chat/internal/chat"
 	"1001-twacc-chat/internal/config"
@@ -46,12 +47,15 @@ func Run() error {
 		}
 
 		sessionService := auth.NewService(storemysql.NewSessionRepository(dbStore.DB()), cfg.LoginTokenTTL)
+		adminSessionService := adminauth.NewService(storemysql.NewAdminSessionRepository(dbStore.DB()), cfg.LoginTokenTTL)
 		integrationRepo := storemysql.NewIntegrationRepository(dbStore.DB())
 		integrationService := erp.NewService(integrationRepo, sessionService)
+		integrationService.SetAdminSessions(adminSessionService)
 		integrationService.SetRequireTrustedDevice(cfg.RequireTrustedDevice)
 		integrationHandler = erp.NewHandler(
 			integrationService,
 			sessionService,
+			adminSessionService,
 			cfg.IntegrationSharedToken,
 			cfg.IntegrationSignatureSecret,
 			cfg.IntegrationTimestampTolerance,
@@ -62,6 +66,7 @@ func Run() error {
 		chatHandler = chat.NewHandler(chatService, sessionService, realtimeHub, chat.NewLocalFileStore(filepath.Join("web", "uploads")))
 	} else {
 		integrationHandler = erp.NewHandler(
+			nil,
 			nil,
 			nil,
 			cfg.IntegrationSharedToken,

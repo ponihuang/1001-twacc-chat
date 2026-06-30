@@ -35,8 +35,24 @@ func (s *stubIntegrationRepository) ListSystemAdmins(filter SystemAdminFilter) (
 	return SystemAdminPage{Items: []SystemAdminSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
 
-func (s *stubIntegrationRepository) CreateSystemAdmin(user User, createdBy int64) (SystemAdminSummary, error) {
-	return SystemAdminSummary{ID: 1, UserID: user.ID, ExternalUserID: user.ExternalUserID, DisplayName: user.DisplayName, Role: "system_admin", RoleName: "系統管理員", Status: user.Status}, nil
+func (s *stubIntegrationRepository) FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error) {
+	return SystemAdminSummary{ID: adminUserID, UserID: adminUserID, AdminUserID: adminUserID, ExternalUserID: "admin", DisplayName: "Admin", Role: "system_admin", RoleName: "系統管理員", Status: "active"}, nil
+}
+
+func (s *stubIntegrationRepository) FindSystemAdminByAccount(account string) (SystemAdminSummary, error) {
+	return SystemAdminSummary{}, ErrUserNotFound
+}
+
+func (s *stubIntegrationRepository) CreateSystemAdmin(params SystemAdminCreateParams) (SystemAdminSummary, error) {
+	return SystemAdminSummary{ID: 1, UserID: 1, AdminUserID: 1, ExternalUserID: params.Account, DisplayName: params.DisplayName, Role: params.Role, RoleName: "系統管理員", Status: params.Status}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateSystemAdmin(adminUserID int64, params SystemAdminUpdateParams) (SystemAdminSummary, error) {
+	return SystemAdminSummary{ID: adminUserID, UserID: adminUserID, AdminUserID: adminUserID, ExternalUserID: "admin", DisplayName: params.DisplayName, Role: params.Role, RoleName: "系統管理員", Status: params.Status}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateSystemAdminLastLogin(adminUserID int64, ip string, at time.Time) error {
+	return nil
 }
 
 func (s *stubIntegrationRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
@@ -87,6 +103,7 @@ func TestRegisterRejectsMissingSignatureWhenSecretConfigured(t *testing.T) {
 	handler := NewHandler(
 		NewService(&stubIntegrationRepository{}, nil),
 		nil,
+		nil,
 		"shared-token",
 		"signature-secret",
 		5*time.Minute,
@@ -115,6 +132,7 @@ func TestRegisterRejectsMissingSignatureWhenSecretConfigured(t *testing.T) {
 func TestRegisterRejectsExpiredTimestamp(t *testing.T) {
 	handler := NewHandler(
 		NewService(&stubIntegrationRepository{}, nil),
+		nil,
 		nil,
 		"shared-token",
 		"signature-secret",
@@ -147,6 +165,7 @@ func TestRegisterRejectsExpiredTimestamp(t *testing.T) {
 func TestRegisterAcceptsValidSignedRequest(t *testing.T) {
 	handler := NewHandler(
 		NewService(&stubIntegrationRepository{}, nil),
+		nil,
 		nil,
 		"shared-token",
 		"signature-secret",

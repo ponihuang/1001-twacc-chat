@@ -242,7 +242,7 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) (erp.Admin
 	}, nil
 }
 
-// ListSystemAdmins returns one page of users granted system-admin access.
+// ListSystemAdmins returns one page of backend admin accounts.
 func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (erp.SystemAdminPage, error) {
 	page := filter.Page
 	if page < 1 {
@@ -263,34 +263,24 @@ func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (
 		where.WriteString(" AND " + column + " LIKE ?")
 		args = append(args, "%"+value+"%")
 	}
-	addLikeFilter("u.external_user_id", strings.TrimSpace(filter.ExternalUserID))
-	addLikeFilter("u.display_name", strings.TrimSpace(filter.DisplayName))
+	addLikeFilter("a.account", strings.TrimSpace(filter.ExternalUserID))
+	addLikeFilter("a.display_name", strings.TrimSpace(filter.DisplayName))
 	if value := strings.TrimSpace(filter.Status); value != "" {
-		where.WriteString(" AND u.status = ?")
+		where.WriteString(" AND a.status = ?")
 		args = append(args, value)
 	}
 
-	from := ` FROM system_admin_users sau
-		  JOIN users u ON u.id = sau.user_id
-		  LEFT JOIN auth_sessions latest_session
-		    ON latest_session.id = (
-		      SELECT s.id
-		        FROM auth_sessions s
-		       WHERE s.user_id = u.id
-		       ORDER BY s.last_used_at DESC, s.id DESC
-		       LIMIT 1
-		    )
-		  LEFT JOIN devices d ON d.user_id = u.id AND d.device_id = latest_session.device_id`
+	from := ` FROM admin_users a`
 
 	var total int
 	if err := r.db.QueryRow("SELECT COUNT(*)"+from+where.String(), args...).Scan(&total); err != nil {
 		return erp.SystemAdminPage{}, fmt.Errorf("count system admins: %w", err)
 	}
 
-	query := `SELECT sau.id, u.id, u.external_user_id, u.display_name, sau.role, u.status,
-	                 latest_session.last_used_at, COALESCE(d.ip, '')
+	query := `SELECT a.id, a.id, a.account, a.display_name, a.password_hash, a.role, a.status,
+	                 a.last_login_at, COALESCE(a.last_login_ip, '')
 	            ` + from + where.String() + `
-	        ORDER BY sau.created_at DESC, sau.id DESC
+	        ORDER BY a.created_at DESC, a.id DESC
 	           LIMIT ? OFFSET ?`
 	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
 
@@ -309,6 +299,7 @@ func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (
 			&admin.UserID,
 			&admin.ExternalUserID,
 			&admin.DisplayName,
+			&admin.PasswordHash,
 			&admin.Role,
 			&admin.Status,
 			&lastLogin,
@@ -316,6 +307,7 @@ func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (
 		); err != nil {
 			return erp.SystemAdminPage{}, fmt.Errorf("scan system admin list: %w", err)
 		}
+		admin.AdminUserID = admin.UserID
 		if lastLogin.Valid {
 			admin.LastLoginAt = &lastLogin.Time
 		}
@@ -339,13 +331,62 @@ func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (
 	}, nil
 }
 
-// CreateSystemAdmin grants system-admin access to an existing user.
-func (r *IntegrationRepository) CreateSystemAdmin(user erp.User, createdBy int64) (erp.SystemAdminSummary, error) {
+// FindSystemAdminByID loads a backend admin by numeric id.
+func (r *IntegrationRepository) FindSystemAdminByID(adminUserID int64) (erp.SystemAdminSummary, error) {
+	return r.findSystemAdmin("a.id = ?", adminUserID)
+}
+
+// FindSystemAdminByAccount loads a backend admin by login account.
+func (r *IntegrationRepository) FindSystemAdminByAccount(account string) (erp.SystemAdminSummary, error) {
+	return r.findSystemAdmin("a.account = ?", strings.TrimSpace(account))
+}
+
+func (r *IntegrationRepository) findSystemAdmin(predicate string, arg any) (erp.SystemAdminSummary, error) {
+	var admin erp.SystemAdminSummary
+	var lastLogin sql.NullTime
+	row := r.db.QueryRow(
+		`SELECT a.id, a.id, a.account, a.display_name, a.password_hash, a.role, a.status,
+		        a.last_login_at, COALESCE(a.last_login_ip, '')
+		   FROM admin_users a
+		  WHERE `+predicate+`
+		  LIMIT 1`,
+		arg,
+	)
+	if err := row.Scan(
+		&admin.ID,
+		&admin.UserID,
+		&admin.ExternalUserID,
+		&admin.DisplayName,
+		&admin.PasswordHash,
+		&admin.Role,
+		&admin.Status,
+		&lastLogin,
+		&admin.LastLoginIP,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.SystemAdminSummary{}, erp.ErrUserNotFound
+		}
+		return erp.SystemAdminSummary{}, fmt.Errorf("find system admin: %w", err)
+	}
+	admin.AdminUserID = admin.UserID
+	admin.RoleName = systemAdminRoleName(admin.Role)
+	if lastLogin.Valid {
+		admin.LastLoginAt = &lastLogin.Time
+	}
+	return admin, nil
+}
+
+// CreateSystemAdmin creates a backend admin account.
+func (r *IntegrationRepository) CreateSystemAdmin(params erp.SystemAdminCreateParams) (erp.SystemAdminSummary, error) {
 	result, err := r.db.Exec(
-		`INSERT INTO system_admin_users (user_id, role, created_by)
-		 VALUES (?, 'system_admin', ?)`,
-		user.ID,
-		nullableInt64(createdBy),
+		`INSERT INTO admin_users (account, display_name, password_hash, role, status, created_by)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		params.Account,
+		params.DisplayName,
+		params.PasswordHash,
+		params.Role,
+		params.Status,
+		nullableInt64(params.CreatedBy),
 	)
 	if err != nil {
 		if isDuplicate(err) {
@@ -354,21 +395,63 @@ func (r *IntegrationRepository) CreateSystemAdmin(user erp.User, createdBy int64
 		return erp.SystemAdminSummary{}, fmt.Errorf("create system admin: %w", err)
 	}
 
-	adminID, err := result.LastInsertId()
+	adminUserID, err := result.LastInsertId()
 	if err != nil {
 		return erp.SystemAdminSummary{}, fmt.Errorf("read system admin id: %w", err)
 	}
 
-	return erp.SystemAdminSummary{
-		ID:             adminID,
-		UserID:         user.ID,
-		ExternalUserID: user.ExternalUserID,
-		DisplayName:    user.DisplayName,
-		Role:           "system_admin",
-		RoleName:       systemAdminRoleName("system_admin"),
-		Status:         user.Status,
-		LastLoginIP:    "",
-	}, nil
+	return r.FindSystemAdminByID(adminUserID)
+}
+
+// UpdateSystemAdmin applies mutable backend admin fields.
+func (r *IntegrationRepository) UpdateSystemAdmin(adminUserID int64, params erp.SystemAdminUpdateParams) (erp.SystemAdminSummary, error) {
+	var err error
+	if params.PasswordHash == "" {
+		_, err = r.db.Exec(
+			`UPDATE admin_users
+			    SET display_name = ?, role = ?, status = ?
+			  WHERE id = ?`,
+			params.DisplayName,
+			params.Role,
+			params.Status,
+			adminUserID,
+		)
+	} else {
+		_, err = r.db.Exec(
+			`UPDATE admin_users
+			    SET display_name = ?, role = ?, status = ?, password_hash = ?
+			  WHERE id = ?`,
+			params.DisplayName,
+			params.Role,
+			params.Status,
+			params.PasswordHash,
+			adminUserID,
+		)
+	}
+	if err != nil {
+		if isDuplicate(err) {
+			return erp.SystemAdminSummary{}, erp.ErrUserAlreadyExists
+		}
+		return erp.SystemAdminSummary{}, fmt.Errorf("update system admin: %w", err)
+	}
+
+	return r.FindSystemAdminByID(adminUserID)
+}
+
+// UpdateSystemAdminLastLogin records the last successful backend admin login.
+func (r *IntegrationRepository) UpdateSystemAdminLastLogin(adminUserID int64, ip string, at time.Time) error {
+	_, err := r.db.Exec(
+		`UPDATE admin_users
+		    SET last_login_at = ?, last_login_ip = ?
+		  WHERE id = ?`,
+		at,
+		nullableString(strings.TrimSpace(ip)),
+		adminUserID,
+	)
+	if err != nil {
+		return fmt.Errorf("update system admin last login: %w", err)
+	}
+	return nil
 }
 
 // UpdateUser applies mutable admin-managed fields. An empty password hash keeps the existing password.

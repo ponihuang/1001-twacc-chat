@@ -26,21 +26,47 @@
 - `whatsapp_account`、`telegram_account` 為非強制欄位，僅供通知用途
 - `whatsapp_account`、`telegram_account` 不作為登入識別
 
-## 2. `system_admin_users`
+## 2. `admin_users`
 
 欄位草案：
 
 - `id`
-- `user_id`
+- `account`
+- `display_name`
+- `password_hash`
 - `role`
+- `status`
+- `last_login_at`
+- `last_login_ip`
 - `created_by`
 - `created_at`
+- `updated_at`
 
 說明：
 
-- `system_admin` 角色與聊天使用者角色需明確區分
+- 後台管理員主表，與聊天室玩家 `users` 分離
+- `account` 需唯一
+- `system_admin` 角色不可直接參與聊天
 
-## 3. `auth_sessions`
+## 3. `admin_auth_sessions`
+
+欄位草案：
+
+- `id`
+- `token_hash`
+- `admin_user_id`
+- `device_id`
+- `expires_at`
+- `created_at`
+- `last_used_at`
+- `revoked_at`
+
+說明：
+
+- 保存後台管理員 Bearer session token 的雜湊值
+- `admin_user_id` 對應 `admin_users.id`
+
+## 4. `auth_sessions`
 
 欄位草案：
 
@@ -56,10 +82,10 @@
 說明：
 
 - 保存 Bearer session token 的雜湊值，不直接保存明文 token
-- `user_id` 對應登入後的 actor
+- `user_id` 對應聊天室玩家登入後的 actor
 - `device_id` 對應登入裝置，用於後續 trusted device 判斷
 
-## 4. `devices`
+## 5. `devices`
 
 欄位草案：
 
@@ -73,7 +99,7 @@
 - `is_trusted_device`
 - `trusted_by`
 
-## 5. `ip_whitelists`
+## 6. `ip_whitelists`
 
 欄位草案：
 
