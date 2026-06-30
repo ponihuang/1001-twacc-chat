@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"1001-twacc-chat/internal/adminauth"
 	"1001-twacc-chat/internal/auth"
 )
 
@@ -22,16 +23,18 @@ import (
 type Handler struct {
 	service                       *Service
 	sessions                      SessionAuthenticator
+	adminSessions                 AdminSessionAuthenticator
 	integrationSharedToken        string
 	integrationSignatureSecret    string
 	integrationTimestampTolerance time.Duration
 }
 
 // NewHandler builds the HTTP handler for external-system access flows.
-func NewHandler(service *Service, sessions SessionAuthenticator, integrationSharedToken, integrationSignatureSecret string, integrationTimestampTolerance time.Duration) *Handler {
+func NewHandler(service *Service, sessions SessionAuthenticator, adminSessions AdminSessionAuthenticator, integrationSharedToken, integrationSignatureSecret string, integrationTimestampTolerance time.Duration) *Handler {
 	return &Handler{
 		service:                       service,
 		sessions:                      sessions,
+		adminSessions:                 adminSessions,
 		integrationSharedToken:        strings.TrimSpace(integrationSharedToken),
 		integrationSignatureSecret:    strings.TrimSpace(integrationSignatureSecret),
 		integrationTimestampTolerance: integrationTimestampTolerance,
@@ -90,6 +93,28 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// AdminLogin handles POST /admin/api/login.
+func (h *Handler) AdminLogin(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	var req AdminLoginRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.AdminLogin(req, clientIP(r))
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // UpdateProfile handles PATCH /api/users/me/profile.
 func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {
@@ -119,12 +144,12 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 // ListUsers handles GET /api/system-admin/users.
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	if h.service == nil || h.sessions == nil {
+	if h.service == nil || h.adminSessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
 		return
 	}
 
-	principal, ok := h.requireSession(w, r)
+	principal, ok := h.requireAdminSession(w, r)
 	if !ok {
 		return
 	}
@@ -146,12 +171,12 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 // ListSystemAdmins handles GET /api/system-admin/admins.
 func (h *Handler) ListSystemAdmins(w http.ResponseWriter, r *http.Request) {
-	if h.service == nil || h.sessions == nil {
+	if h.service == nil || h.adminSessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
 		return
 	}
 
-	principal, ok := h.requireSession(w, r)
+	principal, ok := h.requireAdminSession(w, r)
 	if !ok {
 		return
 	}
@@ -173,12 +198,12 @@ func (h *Handler) ListSystemAdmins(w http.ResponseWriter, r *http.Request) {
 
 // CreateUser handles POST /api/system-admin/users.
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	if h.service == nil || h.sessions == nil {
+	if h.service == nil || h.adminSessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
 		return
 	}
 
-	principal, ok := h.requireSession(w, r)
+	principal, ok := h.requireAdminSession(w, r)
 	if !ok {
 		return
 	}
@@ -200,12 +225,12 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 // CreateSystemAdmin handles POST /api/system-admin/admins.
 func (h *Handler) CreateSystemAdmin(w http.ResponseWriter, r *http.Request) {
-	if h.service == nil || h.sessions == nil {
+	if h.service == nil || h.adminSessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
 		return
 	}
 
-	principal, ok := h.requireSession(w, r)
+	principal, ok := h.requireAdminSession(w, r)
 	if !ok {
 		return
 	}
@@ -227,12 +252,12 @@ func (h *Handler) CreateSystemAdmin(w http.ResponseWriter, r *http.Request) {
 
 // GetUser handles GET /api/system-admin/users/{user_id}.
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
-	if h.service == nil || h.sessions == nil {
+	if h.service == nil || h.adminSessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
 		return
 	}
 
-	principal, ok := h.requireSession(w, r)
+	principal, ok := h.requireAdminSession(w, r)
 	if !ok {
 		return
 	}
@@ -251,12 +276,12 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 
 // UpdateUser handles PATCH /api/system-admin/users/{user_id}.
 func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	if h.service == nil || h.sessions == nil {
+	if h.service == nil || h.adminSessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
 		return
 	}
 
-	principal, ok := h.requireSession(w, r)
+	principal, ok := h.requireAdminSession(w, r)
 	if !ok {
 		return
 	}
@@ -279,14 +304,68 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
-// ListDevices handles GET /api/system-admin/users/{user_id}/devices.
-func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
-	if h.service == nil || h.sessions == nil {
+// GetSystemAdmin handles GET /api/system-admin/admins/{user_id}.
+func (h *Handler) GetSystemAdmin(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
 		return
 	}
 
-	principal, ok := h.requireSession(w, r)
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+	targetAdminID, ok := parseUserIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, err := h.service.GetSystemAdmin(targetAdminID, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
+// UpdateSystemAdmin handles PATCH /api/system-admin/admins/{user_id}.
+func (h *Handler) UpdateSystemAdmin(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+	targetAdminID, ok := parseUserIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	var req SystemAdminCreateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.UpdateSystemAdmin(targetAdminID, req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
+// ListDevices handles GET /api/system-admin/users/{user_id}/devices.
+func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
 	if !ok {
 		return
 	}
@@ -307,12 +386,12 @@ func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 
 // UpdateIPWhitelist handles PUT /api/system-admin/users/{user_id}/ip-whitelist.
 func (h *Handler) UpdateIPWhitelist(w http.ResponseWriter, r *http.Request) {
-	if h.service == nil || h.sessions == nil {
+	if h.service == nil || h.adminSessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
 		return
 	}
 
-	principal, ok := h.requireSession(w, r)
+	principal, ok := h.requireAdminSession(w, r)
 	if !ok {
 		return
 	}
@@ -470,6 +549,28 @@ func (h *Handler) requireSession(w http.ResponseWriter, r *http.Request) (Sessio
 		}
 		writeJSON(w, http.StatusUnauthorized, Response{Success: false, Code: "UNAUTHORIZED", Message: "session token 无效"})
 		return SessionPrincipal{}, false
+	}
+
+	return session, true
+}
+
+func (h *Handler) requireAdminSession(w http.ResponseWriter, r *http.Request) (AdminSessionPrincipal, bool) {
+	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+	const prefix = "Bearer "
+	if !strings.HasPrefix(authHeader, prefix) {
+		writeJSON(w, http.StatusUnauthorized, Response{Success: false, Code: "UNAUTHORIZED", Message: "缺少有效 admin session token"})
+		return AdminSessionPrincipal{}, false
+	}
+
+	token := strings.TrimSpace(strings.TrimPrefix(authHeader, prefix))
+	session, err := h.adminSessions.Authenticate(token)
+	if err != nil {
+		if errors.Is(err, adminauth.ErrSessionExpired) {
+			writeJSON(w, http.StatusUnauthorized, Response{Success: false, Code: "SESSION_EXPIRED", Message: "admin session 已过期，请重新登录"})
+			return AdminSessionPrincipal{}, false
+		}
+		writeJSON(w, http.StatusUnauthorized, Response{Success: false, Code: "UNAUTHORIZED", Message: "admin session token 无效"})
+		return AdminSessionPrincipal{}, false
 	}
 
 	return session, true

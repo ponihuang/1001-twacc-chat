@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"1001-twacc-chat/internal/auth"
 	"1001-twacc-chat/internal/config"
 	"1001-twacc-chat/internal/erp"
 	storemysql "1001-twacc-chat/internal/store/mysql"
@@ -61,8 +60,7 @@ func SeedAdmin(args []string) error {
 	}
 
 	repo := storemysql.NewIntegrationRepository(dbStore.DB())
-	sessionService := auth.NewService(storemysql.NewSessionRepository(dbStore.DB()), cfg.LoginTokenTTL)
-	service := erp.NewService(repo, sessionService)
+	service := erp.NewService(repo, nil)
 
 	result, err := service.BootstrapSystemAdmin(erp.SystemAdminCreateRequest{
 		ExternalUserID: *account,
@@ -74,9 +72,8 @@ func SeedAdmin(args []string) error {
 		return err
 	}
 
-	fmt.Printf("system admin ready: account=%s source=office user_created=%t admin_created=%t\n",
-		result.User.ExternalUserID,
-		result.UserCreated,
+	fmt.Printf("system admin ready: account=%s admin_created=%t\n",
+		result.Admin.ExternalUserID,
 		result.AdminCreated,
 	)
 	return nil

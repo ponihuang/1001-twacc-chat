@@ -150,10 +150,7 @@
         // 產生一個裝置 ID 給後端（後台登入只需帳號/密碼，使用隨機裝置 ID 作為占位）
         const deviceId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('admin-' + Math.random().toString(36).slice(2, 12));
 
-        let { response, data, sourceSystem } = await loginWithSource('office', externalUserId, password, deviceId);
-        if ((!response.ok || !data.success) && data.code === 'USER_NOT_FOUND') {
-          ({ response, data, sourceSystem } = await loginWithSource('erp', externalUserId, password, deviceId));
-        }
+        const { response, data } = await loginAdmin(externalUserId, password, deviceId);
 
         if (!response.ok || !data.success) {
           showError(data.message || '登入失敗，請檢查您的認證資訊');
@@ -179,7 +176,7 @@
         localStorage.setItem('admin_session_token', sessionToken);
         localStorage.setItem('admin_user_id', userId);
         localStorage.setItem('admin_external_user_id', externalUserId);
-        localStorage.setItem('admin_source_system', sourceSystem);
+        localStorage.removeItem('admin_source_system');
 
         // 導向首頁
         window.location.href = '/office';
@@ -199,15 +196,14 @@
       errorMessage.hidden = false;
     }
 
-    async function loginWithSource(sourceSystem, externalUserId, password, deviceId) {
+    async function loginAdmin(externalUserId, password, deviceId) {
       const response = await fetch('/admin/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          source_system: sourceSystem,
-          external_user_id: externalUserId,
+          account: externalUserId,
           password: password,
           device_id: deviceId
         })
@@ -220,7 +216,7 @@
         data = { success: false, message: '登入回應格式錯誤' };
       }
 
-      return { response, data, sourceSystem };
+      return { response, data };
     }
 
     // 響應式調整

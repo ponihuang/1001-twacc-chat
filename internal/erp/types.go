@@ -3,6 +3,7 @@ package erp
 import (
 	"time"
 
+	"1001-twacc-chat/internal/adminauth"
 	"1001-twacc-chat/internal/auth"
 )
 
@@ -98,8 +99,10 @@ type SystemAdminFilter struct {
 type SystemAdminSummary struct {
 	ID             int64      `json:"id"`
 	UserID         int64      `json:"user_id"`
+	AdminUserID    int64      `json:"admin_user_id"`
 	ExternalUserID string     `json:"external_user_id"`
 	DisplayName    string     `json:"display_name"`
+	PasswordHash   string     `json:"-"`
 	Role           string     `json:"role"`
 	RoleName       string     `json:"role_name"`
 	Status         string     `json:"status"`
@@ -118,9 +121,7 @@ type SystemAdminPage struct {
 
 // SystemAdminBootstrapResult describes an idempotent first-admin bootstrap run.
 type SystemAdminBootstrapResult struct {
-	User         User
 	Admin        SystemAdminSummary
-	UserCreated  bool
 	AdminCreated bool
 }
 
@@ -133,14 +134,27 @@ type IPWhitelistSettings struct {
 // SessionPrincipal describes the authenticated actor from a session token.
 type SessionPrincipal = auth.Session
 
+// AdminSessionPrincipal describes the authenticated admin actor from an admin session token.
+type AdminSessionPrincipal = adminauth.Session
+
 // SessionIssuer creates a Bearer session token.
 type SessionIssuer interface {
 	Issue(userID int64, deviceID string) (string, time.Time, error)
 }
 
+// AdminSessionIssuer creates a Bearer session token for backend admins.
+type AdminSessionIssuer interface {
+	Issue(adminUserID int64, deviceID string) (string, time.Time, error)
+}
+
 // SessionAuthenticator validates a Bearer session token.
 type SessionAuthenticator interface {
 	Authenticate(token string) (auth.Session, error)
+}
+
+// AdminSessionAuthenticator validates a Bearer admin session token.
+type AdminSessionAuthenticator interface {
+	Authenticate(token string) (adminauth.Session, error)
 }
 
 // RegisterRequest is the external-system registration payload.
@@ -171,6 +185,7 @@ type SystemAdminCreateRequest struct {
 	ExternalUserID string `json:"external_user_id"`
 	Password       string `json:"password"`
 	DisplayName    string `json:"display_name"`
+	Role           string `json:"role"`
 	Status         string `json:"status"`
 }
 
@@ -188,6 +203,13 @@ type LoginRequest struct {
 	ExternalUserID string `json:"external_user_id"`
 	Password       string `json:"password"`
 	DeviceID       string `json:"device_id"`
+}
+
+// AdminLoginRequest is the backend admin login payload.
+type AdminLoginRequest struct {
+	Account  string `json:"account"`
+	Password string `json:"password"`
+	DeviceID string `json:"device_id"`
 }
 
 // ProfileUpdateRequest is the current-user profile update payload.
@@ -224,6 +246,24 @@ type RegisterParams struct {
 	Status          string
 }
 
+// SystemAdminCreateParams carries validated backend admin fields into storage.
+type SystemAdminCreateParams struct {
+	Account      string
+	PasswordHash string
+	DisplayName  string
+	Role         string
+	Status       string
+	CreatedBy    int64
+}
+
+// SystemAdminUpdateParams carries mutable backend admin edits into storage.
+type SystemAdminUpdateParams struct {
+	PasswordHash string
+	DisplayName  string
+	Role         string
+	Status       string
+}
+
 // AdminUpdateUserParams carries validated admin edits into storage.
 type AdminUpdateUserParams struct {
 	PasswordHash string
@@ -239,7 +279,11 @@ type Repository interface {
 	FindUserByExternal(sourceSystem, externalUserID string) (User, error)
 	ListUsers(filter AdminUserFilter) (AdminUserPage, error)
 	ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error)
-	CreateSystemAdmin(user User, createdBy int64) (SystemAdminSummary, error)
+	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)
+	FindSystemAdminByAccount(account string) (SystemAdminSummary, error)
+	CreateSystemAdmin(params SystemAdminCreateParams) (SystemAdminSummary, error)
+	UpdateSystemAdmin(adminUserID int64, params SystemAdminUpdateParams) (SystemAdminSummary, error)
+	UpdateSystemAdminLastLogin(adminUserID int64, ip string, at time.Time) error
 	UpdateUser(userID int64, params AdminUpdateUserParams) (User, error)
 	UpdateUserProfile(userID int64, displayName string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)

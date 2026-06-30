@@ -1,12 +1,8 @@
 package httpx
 
 import (
-	"bytes"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"html/template"
-	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -106,62 +102,6 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
-}
-
-func adminLoginProxyHandler(handler *erp.Handler, sharedToken string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Ensure we preserve and possibly augment the JSON request body
-		// so that downstream integration.Login receives a device_id.
-		if r.Body != nil {
-			body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-			_ = r.Body.Close()
-			if err == nil && len(body) > 0 {
-				var payload map[string]any
-				if json.Unmarshal(body, &payload) == nil {
-					if _, ok := payload["device_id"]; !ok {
-						// generate a short random device id
-						b := make([]byte, 8)
-						if _, err := rand.Read(b); err == nil {
-							payload["device_id"] = "admin-" + hex.EncodeToString(b)
-						} else {
-							payload["device_id"] = "admin-unknown"
-						}
-						if nb, err := json.Marshal(payload); err == nil {
-							r.Body = io.NopCloser(bytes.NewReader(nb))
-							r.ContentLength = int64(len(nb))
-						} else {
-							r.Body = io.NopCloser(bytes.NewReader(body))
-						}
-					} else {
-						r.Body = io.NopCloser(bytes.NewReader(body))
-					}
-				} else {
-					// not JSON or unmarshal failed, restore original body
-					r.Body = io.NopCloser(bytes.NewReader(body))
-				}
-			} else {
-				// empty body: create minimal JSON with a device_id
-				payload := map[string]any{"device_id": "admin-unknown"}
-				if nb, err := json.Marshal(payload); err == nil {
-					r.Body = io.NopCloser(bytes.NewReader(nb))
-					r.ContentLength = int64(len(nb))
-				}
-			}
-		}
-
-		if handler == nil {
-			writeJSONResponse(w, http.StatusServiceUnavailable, map[string]any{"success": false, "code": "SERVICE_UNAVAILABLE", "message": "服务尚未完成初始化"})
-			return
-		}
-
-		if strings.TrimSpace(sharedToken) == "" {
-			writeJSONResponse(w, http.StatusInternalServerError, map[string]any{"success": false, "code": "INTEGRATION_TOKEN_MISSING", "message": "服务尚未配置对接凭证"})
-			return
-		}
-
-		r.Header.Set("Authorization", "Bearer "+strings.TrimSpace(sharedToken))
-		handler.Login(w, r)
-	}
 }
 
 func writeJSONResponse(w http.ResponseWriter, status int, payload any) {

@@ -11,6 +11,8 @@ type mockRepository struct {
 	usersByID          map[int64]User
 	usersByExternal    map[string]User
 	systemAdmins       map[int64]bool
+	adminsByID         map[int64]SystemAdminSummary
+	adminsByAccount    map[string]SystemAdminSummary
 	settingsByUserID   map[int64]UserSecuritySettings
 	whitelistRules     map[int64][]string
 	devicesByKey       map[string]Device
@@ -89,16 +91,20 @@ func (m *mockRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error
 
 func (m *mockRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
 	admins := make([]SystemAdminSummary, 0)
-	for userID := range m.systemAdmins {
-		if user, ok := m.usersByID[userID]; ok {
+	for _, admin := range m.adminsByID {
+		admins = append(admins, admin)
+	}
+	if len(admins) == 0 {
+		for userID := range m.systemAdmins {
 			admins = append(admins, SystemAdminSummary{
 				ID:             userID,
 				UserID:         userID,
-				ExternalUserID: user.ExternalUserID,
-				DisplayName:    user.DisplayName,
+				AdminUserID:    userID,
+				ExternalUserID: "admin",
+				DisplayName:    "Admin",
 				Role:           "system_admin",
 				RoleName:       "系統管理員",
-				Status:         user.Status,
+				Status:         "active",
 			})
 		}
 	}
@@ -111,24 +117,77 @@ func (m *mockRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdmin
 	}, nil
 }
 
-func (m *mockRepository) CreateSystemAdmin(user User, createdBy int64) (SystemAdminSummary, error) {
-	if m.systemAdmins == nil {
-		m.systemAdmins = map[int64]bool{}
+func (m *mockRepository) FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error) {
+	if admin, ok := m.adminsByID[adminUserID]; ok {
+		return admin, nil
 	}
-	if m.systemAdmins[user.ID] {
+	if m.systemAdmins[adminUserID] {
+		return SystemAdminSummary{ID: adminUserID, UserID: adminUserID, AdminUserID: adminUserID, ExternalUserID: "admin", DisplayName: "Admin", PasswordHash: "pbkdf2-sha256:120000:bad:bad", Role: "system_admin", RoleName: "系統管理員", Status: "active"}, nil
+	}
+	return SystemAdminSummary{}, ErrUserNotFound
+}
+
+func (m *mockRepository) FindSystemAdminByAccount(account string) (SystemAdminSummary, error) {
+	if admin, ok := m.adminsByAccount[account]; ok {
+		return admin, nil
+	}
+	return SystemAdminSummary{}, ErrUserNotFound
+}
+
+func (m *mockRepository) CreateSystemAdmin(params SystemAdminCreateParams) (SystemAdminSummary, error) {
+	if m.adminsByID == nil {
+		m.adminsByID = map[int64]SystemAdminSummary{}
+	}
+	if m.adminsByAccount == nil {
+		m.adminsByAccount = map[string]SystemAdminSummary{}
+	}
+	if _, ok := m.adminsByAccount[params.Account]; ok {
 		return SystemAdminSummary{}, ErrUserAlreadyExists
 	}
-	m.systemAdmins[user.ID] = true
+	adminID := int64(len(m.adminsByID) + 1)
 	m.createdAdmin = SystemAdminSummary{
-		ID:             user.ID,
-		UserID:         user.ID,
-		ExternalUserID: user.ExternalUserID,
-		DisplayName:    user.DisplayName,
-		Role:           "system_admin",
+		ID:             adminID,
+		UserID:         adminID,
+		AdminUserID:    adminID,
+		ExternalUserID: params.Account,
+		DisplayName:    params.DisplayName,
+		PasswordHash:   params.PasswordHash,
+		Role:           params.Role,
 		RoleName:       "系統管理員",
-		Status:         user.Status,
+		Status:         params.Status,
 	}
+	m.adminsByID[adminID] = m.createdAdmin
+	m.adminsByAccount[params.Account] = m.createdAdmin
 	return m.createdAdmin, nil
+}
+
+func (m *mockRepository) UpdateSystemAdmin(adminUserID int64, params SystemAdminUpdateParams) (SystemAdminSummary, error) {
+	admin, ok := m.adminsByID[adminUserID]
+	if !ok {
+		return SystemAdminSummary{}, ErrUserNotFound
+	}
+	admin.DisplayName = params.DisplayName
+	admin.Role = params.Role
+	admin.RoleName = "系統管理員"
+	admin.Status = params.Status
+	if params.PasswordHash != "" {
+		admin.PasswordHash = params.PasswordHash
+	}
+	m.adminsByID[adminUserID] = admin
+	m.adminsByAccount[admin.ExternalUserID] = admin
+	return admin, nil
+}
+
+func (m *mockRepository) UpdateSystemAdminLastLogin(adminUserID int64, ip string, at time.Time) error {
+	admin, ok := m.adminsByID[adminUserID]
+	if !ok {
+		return ErrUserNotFound
+	}
+	admin.LastLoginAt = &at
+	admin.LastLoginIP = ip
+	m.adminsByID[adminUserID] = admin
+	m.adminsByAccount[admin.ExternalUserID] = admin
+	return nil
 }
 
 func (m *mockRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
@@ -483,7 +542,7 @@ func TestUpdateIPWhitelistRejectsInvalidRule(t *testing.T) {
 	}
 	service := NewService(repo, &mockSessions{})
 
-	_, _, err := service.UpdateIPWhitelist(1, SessionPrincipal{UserID: 9}, IPWhitelistUpdateRequest{AllowAll: false, Rules: []string{"not-an-ip"}})
+	_, _, err := service.UpdateIPWhitelist(1, AdminSessionPrincipal{AdminUserID: 9}, IPWhitelistUpdateRequest{AllowAll: false, Rules: []string{"not-an-ip"}})
 	if !errors.Is(err, ErrInvalidIPWhitelistRule) {
 		t.Fatalf("expected ErrInvalidIPWhitelistRule, got %v", err)
 	}
@@ -496,7 +555,7 @@ func TestListUsersRequiresSystemAdmin(t *testing.T) {
 	}
 	service := NewService(repo, &mockSessions{})
 
-	_, _, err := service.ListUsers(AdminUserFilter{}, SessionPrincipal{UserID: 1})
+	_, _, err := service.ListUsers(AdminUserFilter{}, AdminSessionPrincipal{AdminUserID: 1})
 	if !errors.Is(err, ErrInsufficientRole) {
 		t.Fatalf("expected ErrInsufficientRole, got %v", err)
 	}
@@ -512,7 +571,7 @@ func TestListUsersReturnsRepositoryUsers(t *testing.T) {
 	}
 	service := NewService(repo, &mockSessions{})
 
-	resp, status, err := service.ListUsers(AdminUserFilter{}, SessionPrincipal{UserID: 9})
+	resp, status, err := service.ListUsers(AdminUserFilter{}, AdminSessionPrincipal{AdminUserID: 9})
 	if err != nil {
 		t.Fatalf("ListUsers returned error: %v", err)
 	}
@@ -538,7 +597,7 @@ func TestCreateUserRequiresSystemAdmin(t *testing.T) {
 		ExternalUserID: "new-user",
 		DisplayName:    "New User",
 		Password:       "pass123!",
-	}, SessionPrincipal{UserID: 1})
+	}, AdminSessionPrincipal{AdminUserID: 1})
 	if !errors.Is(err, ErrInsufficientRole) {
 		t.Fatalf("expected ErrInsufficientRole, got %v", err)
 	}
@@ -560,7 +619,7 @@ func TestCreateUserCreatesUserWithHashedPassword(t *testing.T) {
 		Password:       "pass123!",
 		Language:       "zh-Hant",
 		Status:         "inactive",
-	}, SessionPrincipal{UserID: 9})
+	}, AdminSessionPrincipal{AdminUserID: 9})
 	if err != nil {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
@@ -583,11 +642,13 @@ func TestCreateUserCreatesUserWithHashedPassword(t *testing.T) {
 	}
 }
 
-func TestCreateSystemAdminCreatesOfficeUserAndGrantsAdmin(t *testing.T) {
+func TestCreateSystemAdminCreatesBackendAdmin(t *testing.T) {
 	repo := &mockRepository{
 		usersByID:       map[int64]User{9: {ID: 9}},
 		usersByExternal: map[string]User{},
 		systemAdmins:    map[int64]bool{9: true},
+		adminsByID:      map[int64]SystemAdminSummary{},
+		adminsByAccount: map[string]SystemAdminSummary{},
 	}
 	service := NewService(repo, &mockSessions{})
 
@@ -596,7 +657,7 @@ func TestCreateSystemAdminCreatesOfficeUserAndGrantsAdmin(t *testing.T) {
 		DisplayName:    "管理員一",
 		Password:       "pass123!",
 		Status:         "active",
-	}, SessionPrincipal{UserID: 9})
+	}, AdminSessionPrincipal{AdminUserID: 9})
 	if err != nil {
 		t.Fatalf("CreateSystemAdmin returned error: %v", err)
 	}
@@ -607,15 +668,15 @@ func TestCreateSystemAdminCreatesOfficeUserAndGrantsAdmin(t *testing.T) {
 		t.Fatalf("code = %q, want SYSTEM_ADMIN_CREATED", resp.Code)
 	}
 
-	created, ok := repo.usersByExternal["office:manager01"]
+	created, ok := repo.adminsByAccount["manager01"]
 	if !ok {
-		t.Fatal("created system admin user not stored")
-	}
-	if !repo.systemAdmins[created.ID] {
-		t.Fatal("created user was not granted system admin")
+		t.Fatal("created system admin not stored")
 	}
 	if created.PasswordHash == "" || created.PasswordHash == "pass123!" {
 		t.Fatal("password was not hashed")
+	}
+	if _, ok := repo.usersByExternal["office:manager01"]; ok {
+		t.Fatal("system admin should not be stored as a chat user")
 	}
 }
 
@@ -624,6 +685,8 @@ func TestBootstrapSystemAdminCreatesFirstAdmin(t *testing.T) {
 		usersByID:       map[int64]User{},
 		usersByExternal: map[string]User{},
 		systemAdmins:    map[int64]bool{},
+		adminsByID:      map[int64]SystemAdminSummary{},
+		adminsByAccount: map[string]SystemAdminSummary{},
 	}
 	service := NewService(repo, nil)
 
@@ -635,19 +698,13 @@ func TestBootstrapSystemAdminCreatesFirstAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BootstrapSystemAdmin returned error: %v", err)
 	}
-	if !result.UserCreated {
-		t.Fatal("UserCreated = false, want true")
-	}
 	if !result.AdminCreated {
 		t.Fatal("AdminCreated = false, want true")
 	}
 
-	created, ok := repo.usersByExternal["office:admin01"]
+	created, ok := repo.adminsByAccount["admin01"]
 	if !ok {
-		t.Fatal("bootstrap user not stored")
-	}
-	if !repo.systemAdmins[created.ID] {
-		t.Fatal("bootstrap user was not granted system admin")
+		t.Fatal("bootstrap admin not stored")
 	}
 	if created.PasswordHash == "" || created.PasswordHash == "pass123!" {
 		t.Fatal("password was not hashed")
@@ -656,11 +713,13 @@ func TestBootstrapSystemAdminCreatesFirstAdmin(t *testing.T) {
 
 func TestBootstrapSystemAdminIsIdempotent(t *testing.T) {
 	hash := mustHashPassword(t, "oldpass!")
-	user := User{ID: 1, SourceSystem: "office", ExternalUserID: "admin01", DisplayName: "Existing Admin", PasswordHash: hash, Status: "active"}
+	admin := SystemAdminSummary{ID: 1, UserID: 1, AdminUserID: 1, ExternalUserID: "admin01", DisplayName: "Existing Admin", PasswordHash: hash, Role: "system_admin", RoleName: "系統管理員", Status: "active"}
 	repo := &mockRepository{
-		usersByID:       map[int64]User{1: user},
-		usersByExternal: map[string]User{"office:admin01": user},
-		systemAdmins:    map[int64]bool{1: true},
+		usersByID:       map[int64]User{},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{},
+		adminsByID:      map[int64]SystemAdminSummary{1: admin},
+		adminsByAccount: map[string]SystemAdminSummary{"admin01": admin},
 	}
 	service := NewService(repo, nil)
 
@@ -672,13 +731,10 @@ func TestBootstrapSystemAdminIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BootstrapSystemAdmin returned error: %v", err)
 	}
-	if result.UserCreated {
-		t.Fatal("UserCreated = true, want false")
-	}
 	if result.AdminCreated {
 		t.Fatal("AdminCreated = true, want false")
 	}
-	if repo.usersByID[1].PasswordHash != hash {
+	if repo.adminsByID[1].PasswordHash != hash {
 		t.Fatal("bootstrap should not replace an existing password")
 	}
 }
@@ -700,7 +756,7 @@ func TestUpdateUserKeepsPasswordWhenBlank(t *testing.T) {
 		Email:       "updated@example.com",
 		Status:      "inactive",
 		Password:    "",
-	}, SessionPrincipal{UserID: 9})
+	}, AdminSessionPrincipal{AdminUserID: 9})
 	if err != nil {
 		t.Fatalf("UpdateUser returned error: %v", err)
 	}
@@ -731,7 +787,7 @@ func TestUpdateUserChangesPasswordWhenProvided(t *testing.T) {
 		DisplayName: "User",
 		Status:      "active",
 		Password:    "newpass!",
-	}, SessionPrincipal{UserID: 9})
+	}, AdminSessionPrincipal{AdminUserID: 9})
 	if err != nil {
 		t.Fatalf("UpdateUser returned error: %v", err)
 	}
@@ -750,7 +806,7 @@ func TestUpdateIPWhitelistRequiresSystemAdmin(t *testing.T) {
 	}
 	service := NewService(repo, &mockSessions{})
 
-	_, _, err := service.UpdateIPWhitelist(1, SessionPrincipal{UserID: 2}, IPWhitelistUpdateRequest{AllowAll: true})
+	_, _, err := service.UpdateIPWhitelist(1, AdminSessionPrincipal{AdminUserID: 2}, IPWhitelistUpdateRequest{AllowAll: true})
 	if !errors.Is(err, ErrInsufficientRole) {
 		t.Fatalf("expected ErrInsufficientRole, got %v", err)
 	}
