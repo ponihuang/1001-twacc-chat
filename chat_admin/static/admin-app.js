@@ -1470,7 +1470,7 @@
 
       if (response.ok) {
         if (elements.healthApiTime) {
-          elements.healthApiTime.textContent = now.toLocaleTimeString();
+          elements.healthApiTime.textContent = formatDate(now);
         }
       }
 
@@ -1556,7 +1556,10 @@
   function formatDate(dateStr) {
     if (!dateStr) return '--';
     try {
-      return new Date(dateStr).toLocaleString('zh-TW');
+      const date = new Date(dateStr);
+      if (Number.isNaN(date.getTime())) return '--';
+      const pad = value => String(value).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     } catch {
       return '--';
     }
