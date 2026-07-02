@@ -38,7 +38,6 @@
     users: '/office/user',
     userCreate: '/office/user/create',
     userEdit: null,
-    conversations: '/office/conversations',
     admins: '/office/admins',
     adminCreate: '/office/admins/create',
     adminEdit: null
@@ -404,8 +403,6 @@
         break;
       case 'userEdit':
         loadUserForEdit();
-        break;
-      case 'conversations':
         break;
       case 'admins':
         loadAdmins();
