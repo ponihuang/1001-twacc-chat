@@ -6,7 +6,7 @@
 (function() {
   'use strict';
 
-  const { getSessionToken, getUserId, logout, makeAuthenticatedRequest, STORAGE_KEYS } = window.adminAuth;
+  const { getSessionToken, getUserId, isAuthenticated, logout, makeAuthenticatedRequest, STORAGE_KEYS } = window.adminAuth;
 
   // DOM Elements
   let elements = {};
@@ -68,6 +68,10 @@
    * Initialize the app
    */
   async function initApp() {
+    if (!isAuthenticated()) {
+      return;
+    }
+
     cacheElements();
     renderTableColumns(elements.usersTable, elements.usersColgroup, elements.usersThead, USER_COLUMNS);
     setupOverlayScrollbar(document.getElementById('users-table-scroll'));
@@ -488,7 +492,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/users?${buildUserQuery().toString()}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入用戶列表失敗');
       }
@@ -775,7 +779,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/admins?${buildAdminQuery().toString()}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入管理員列表失敗');
       }
@@ -940,7 +944,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '建立管理員失敗');
       }
@@ -968,7 +972,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/admins/${encodeURIComponent(editingAdminUserID)}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入管理員資料失敗');
       }
@@ -1038,7 +1042,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '更新管理員失敗');
       }
@@ -1091,7 +1095,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '建立用戶失敗');
       }
@@ -1119,7 +1123,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingUserID)}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入用戶資料失敗');
       }
@@ -1188,7 +1192,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '更新用戶失敗');
       }
@@ -1233,7 +1237,7 @@
 
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
 
       if (!data.success) {
         showError(data.message || '載入設備失敗');
@@ -1419,7 +1423,7 @@
 
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
 
       if (!data.success) {
         showError(data.message || '保存失敗');
@@ -1560,6 +1564,17 @@
     } catch {
       return '--';
     }
+  }
+
+  async function readJSONResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return response.json();
+    }
+
+    const body = await response.text();
+    const detail = body.trim() || `HTTP ${response.status}`;
+    throw new Error(`API 回應不是 JSON（${detail}）`);
   }
 
   /**
