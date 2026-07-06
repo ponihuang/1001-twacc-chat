@@ -6,7 +6,7 @@
 (function() {
   'use strict';
 
-  const { getSessionToken, getUserId, logout, makeAuthenticatedRequest, STORAGE_KEYS } = window.adminAuth;
+  const { getSessionToken, getUserId, isAuthenticated, logout, makeAuthenticatedRequest, STORAGE_KEYS } = window.adminAuth;
 
   // DOM Elements
   let elements = {};
@@ -38,7 +38,6 @@
     users: '/office/user',
     userCreate: '/office/user/create',
     userEdit: null,
-    conversations: '/office/conversations',
     admins: '/office/admins',
     adminCreate: '/office/admins/create',
     adminEdit: null
@@ -69,6 +68,10 @@
    * Initialize the app
    */
   async function initApp() {
+    if (!isAuthenticated()) {
+      return;
+    }
+
     cacheElements();
     renderTableColumns(elements.usersTable, elements.usersColgroup, elements.usersThead, USER_COLUMNS);
     setupOverlayScrollbar(document.getElementById('users-table-scroll'));
@@ -405,8 +408,6 @@
       case 'userEdit':
         loadUserForEdit();
         break;
-      case 'conversations':
-        break;
       case 'admins':
         loadAdmins();
         break;
@@ -491,7 +492,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/users?${buildUserQuery().toString()}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入用戶列表失敗');
       }
@@ -778,7 +779,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/admins?${buildAdminQuery().toString()}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入管理員列表失敗');
       }
@@ -943,7 +944,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '建立管理員失敗');
       }
@@ -971,7 +972,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/admins/${encodeURIComponent(editingAdminUserID)}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入管理員資料失敗');
       }
@@ -1041,7 +1042,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '更新管理員失敗');
       }
@@ -1094,7 +1095,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '建立用戶失敗');
       }
@@ -1122,7 +1123,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingUserID)}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入用戶資料失敗');
       }
@@ -1191,7 +1192,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '更新用戶失敗');
       }
@@ -1236,7 +1237,7 @@
 
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
 
       if (!data.success) {
         showError(data.message || '載入設備失敗');
@@ -1422,7 +1423,7 @@
 
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
 
       if (!data.success) {
         showError(data.message || '保存失敗');
@@ -1470,7 +1471,7 @@
 
       if (response.ok) {
         if (elements.healthApiTime) {
-          elements.healthApiTime.textContent = now.toLocaleTimeString();
+          elements.healthApiTime.textContent = formatDate(now);
         }
       }
 
@@ -1556,10 +1557,24 @@
   function formatDate(dateStr) {
     if (!dateStr) return '--';
     try {
-      return new Date(dateStr).toLocaleString('zh-TW');
+      const date = new Date(dateStr);
+      if (Number.isNaN(date.getTime())) return '--';
+      const pad = value => String(value).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     } catch {
       return '--';
     }
+  }
+
+  async function readJSONResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return response.json();
+    }
+
+    const body = await response.text();
+    const detail = body.trim() || `HTTP ${response.status}`;
+    throw new Error(`API 回應不是 JSON（${detail}）`);
   }
 
   /**

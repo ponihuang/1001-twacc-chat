@@ -50,7 +50,8 @@
   async function makeAuthenticatedRequest(url, options = {}) {
     const token = getSessionToken();
     if (!token) {
-      throw new Error('Not authenticated');
+      logout();
+      return null;
     }
 
     const headers = {
@@ -81,7 +82,9 @@
     const pageElement = document.querySelector('[data-admin-app]');
     if (!pageElement) return;
 
-    const redirectUrl = pageElement.getAttribute('data-require-auth-redirect');
+    const redirectUrl = pageElement.getAttribute('data-require-auth-redirect')
+      || document.body?.getAttribute('data-require-auth-redirect')
+      || '/admin/login';
 
     if (!isAuthenticated()) {
       if (redirectUrl) {

@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
   <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260626-4">
-  <script defer src="/admin/static/admin-auth.js?v=1"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260626-4"></script>
+  <script defer src="/admin/static/admin-auth.js?v=2"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260703-1"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
-  <div class="admin-shell" data-admin-app data-logout-redirect="/admin/login">
+  <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
     <aside class="admin-sidebar">
       <nav class="sidebar-menu" data-sidebar-menu aria-label="管理功能">
         <button type="button" class="sidebar-root" data-menu-item="dashboard">
@@ -31,10 +31,6 @@
           </div>
         </div>
 
-        <button type="button" class="sidebar-root" data-menu-item="conversations">
-          <span class="menu-glyph" aria-hidden="true">●</span>
-          <span>對話</span>
-        </button>
         <div class="sidebar-group" data-sidebar-group="system">
           <button type="button" class="sidebar-root" data-sidebar-toggle>
             <span class="menu-glyph" aria-hidden="true">▧</span>
@@ -287,15 +283,6 @@
                 <button type="button" class="btn btn-compact" id="reset-edit-user">重置</button>
               </div>
             </form>
-          </div>
-        </section>
-
-        <section data-view="conversations" hidden>
-          <div class="admin-page-panel">
-            <p class="admin-breadcrumb">首頁 / 對話</p>
-            <div class="placeholder-panel">
-              <h2>對話管理</h2>
-            </div>
           </div>
         </section>
 
