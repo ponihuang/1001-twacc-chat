@@ -25,6 +25,8 @@ var (
 	ErrInvalidExternalUserID     = errors.New("invalid external user id")
 	ErrInvalidDisplayName        = errors.New("invalid display name")
 	ErrInvalidEmail              = errors.New("invalid email")
+	ErrEmailAlreadyExists        = errors.New("email already exists")
+	ErrUserInvitationPending     = errors.New("user invitation pending")
 	ErrInvalidStatus             = errors.New("invalid status")
 	ErrInvalidPassword           = errors.New("invalid password")
 	ErrInvalidCredentials        = errors.New("invalid credentials")
@@ -48,11 +50,14 @@ type Service struct {
 	sessions             SessionIssuer
 	adminSessions        AdminSessionIssuer
 	requireTrustedDevice bool
+	invitationTTL        time.Duration
+	invitationMailer     InvitationMailer
+	invitationBaseURL    string
 }
 
 // NewService builds an integration-backed identity service.
 func NewService(repo Repository, sessions SessionIssuer) *Service {
-	return &Service{repo: repo, sessions: sessions}
+	return &Service{repo: repo, sessions: sessions, invitationTTL: 7 * 24 * time.Hour}
 }
 
 // SetAdminSessions sets the session issuer used by backend admin login.
@@ -69,6 +74,30 @@ func (s *Service) SetRequireTrustedDevice(require bool) {
 		return
 	}
 	s.requireTrustedDevice = require
+}
+
+// SetInvitationTTL overrides the user invitation lifetime.
+func (s *Service) SetInvitationTTL(ttl time.Duration) {
+	if s == nil || ttl <= 0 {
+		return
+	}
+	s.invitationTTL = ttl
+}
+
+// SetInvitationMailer sets the sender used for user invitations.
+func (s *Service) SetInvitationMailer(mailer InvitationMailer) {
+	if s == nil {
+		return
+	}
+	s.invitationMailer = mailer
+}
+
+// SetInvitationBaseURL sets the public URL prefix for invitation links.
+func (s *Service) SetInvitationBaseURL(baseURL string) {
+	if s == nil {
+		return
+	}
+	s.invitationBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }
 
 // Register creates a user if it does not exist yet.
@@ -324,6 +353,78 @@ func (s *Service) CreateUser(req AdminCreateUserRequest, actor AdminSessionPrinc
 			Status:         user.Status,
 			SourceSystem:   user.SourceSystem,
 			CreatedAt:      user.CreatedAt,
+		},
+	}, 201, nil
+}
+
+// InviteUser creates a pending user invitation. The invited user completes account setup separately.
+func (s *Service) InviteUser(req AdminInviteUserRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	email := normalizeEmail(req.Email)
+	if !isValidEmail(email) {
+		return Response{}, statusCode(ErrInvalidEmail), ErrInvalidEmail
+	}
+
+	if _, err := s.repo.FindUserByEmail(email); err == nil {
+		return Response{}, statusCode(ErrEmailAlreadyExists), ErrEmailAlreadyExists
+	} else if !errors.Is(err, ErrUserNotFound) {
+		return Response{}, statusCode(err), err
+	}
+
+	now := time.Now().UTC()
+	if invitation, err := s.repo.FindUserInvitationByEmail(email); err == nil {
+		if invitation.Status == "pending" && now.Before(invitation.ExpiresAt) {
+			return Response{}, statusCode(ErrUserInvitationPending), ErrUserInvitationPending
+		}
+		return Response{}, statusCode(ErrEmailAlreadyExists), ErrEmailAlreadyExists
+	} else if !errors.Is(err, ErrUserNotFound) {
+		return Response{}, statusCode(err), err
+	}
+
+	token, tokenHash, err := newInvitationToken()
+	if err != nil {
+		return Response{}, 500, err
+	}
+	expiresAt := now.Add(s.invitationTTL)
+	invitation, err := s.repo.CreateUserInvitation(UserInvitationCreateParams{
+		Email:            email,
+		TokenHash:        tokenHash,
+		Status:           "pending",
+		InvitedByAdminID: actor.AdminUserID,
+		ExpiresAt:        expiresAt,
+	})
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	inviteURL := buildInvitationURL(s.invitationBaseURL, token)
+	if s.invitationMailer != nil {
+		if err := s.invitationMailer.SendUserInvitation(invitation.Email, inviteURL, invitation.ExpiresAt); err != nil {
+			return Response{}, 502, err
+		}
+		sentAt := time.Now().UTC()
+		if err := s.repo.MarkUserInvitationSent(invitation.ID, sentAt); err != nil {
+			return Response{}, 500, err
+		}
+		invitation.SentAt = &sentAt
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_INVITATION_CREATED",
+		Message: "邀請已建立",
+		Data: map[string]any{
+			"id":         invitation.ID,
+			"email":      invitation.Email,
+			"token":      token,
+			"invite_url": inviteURL,
+			"expires_at": invitation.ExpiresAt.Format(time.RFC3339),
 		},
 	}, 201, nil
 }
@@ -705,6 +806,36 @@ func validateRegisterRequest(req RegisterRequest) (RegisterParams, error) {
 	return params, nil
 }
 
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func isValidEmail(email string) bool {
+	if email == "" || len(email) > 255 {
+		return false
+	}
+	at := strings.Index(email, "@")
+	return at > 0 && at < len(email)-1 && strings.Contains(email[at+1:], ".")
+}
+
+func newInvitationToken() (string, string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", fmt.Errorf("generate invitation token: %w", err)
+	}
+
+	token := hex.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(token))
+	return token, hex.EncodeToString(sum[:]), nil
+}
+
+func buildInvitationURL(baseURL, token string) string {
+	if strings.TrimSpace(baseURL) == "" {
+		return "/invite?token=" + token
+	}
+	return strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/invite?token=" + token
+}
+
 func (s *Service) createUser(params RegisterParams, password string) (User, error) {
 	passwordHash, err := hashPassword(password)
 	if err != nil {
@@ -1011,6 +1142,9 @@ func statusCode(err error) int {
 		errors.Is(err, ErrDeviceNotFound):
 		return 404
 	case errors.Is(err, ErrUserAlreadyExists):
+		return 409
+	case errors.Is(err, ErrEmailAlreadyExists),
+		errors.Is(err, ErrUserInvitationPending):
 		return 409
 	default:
 		return 500

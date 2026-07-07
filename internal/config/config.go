@@ -36,6 +36,9 @@ type Config struct {
 	IntegrationTimestampTolerance time.Duration
 	LoginTokenTTL                 time.Duration
 	RequireTrustedDevice          bool
+	AppURL                        string
+	UserInvitationTTL             time.Duration
+	Mail                          MailConfig
 }
 
 // ServerConfig groups HTTP server settings.
@@ -59,6 +62,16 @@ type MySQLConfig struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
+}
+
+// MailConfig groups SMTP settings for outbound emails.
+type MailConfig struct {
+	SMTPHost    string
+	SMTPPort    int
+	Username    string
+	Password    string
+	FromAddress string
+	FromName    string
 }
 
 // Load reads runtime configuration from environment variables.
@@ -95,6 +108,16 @@ func Load() Config {
 		IntegrationTimestampTolerance: durationEnv("INTEGRATION_TIMESTAMP_TOLERANCE", 5*time.Minute),
 		LoginTokenTTL:                 durationEnv("LOGIN_TOKEN_TTL", 24*time.Hour),
 		RequireTrustedDevice:          boolEnv("REQUIRE_TRUSTED_DEVICE", false),
+		AppURL:                        strings.TrimRight(strings.TrimSpace(os.Getenv("APP_URL")), "/"),
+		UserInvitationTTL:             durationEnv("USER_INVITATION_TTL", 7*24*time.Hour),
+		Mail: MailConfig{
+			SMTPHost:    envOrDefault("MAIL_SMTP_HOST", "smtp.gmail.com"),
+			SMTPPort:    intEnv("MAIL_SMTP_PORT", 587),
+			Username:    strings.TrimSpace(os.Getenv("MAIL_SMTP_USERNAME")),
+			Password:    os.Getenv("MAIL_SMTP_PASSWORD"),
+			FromAddress: strings.TrimSpace(os.Getenv("MAIL_FROM_ADDRESS")),
+			FromName:    envOrDefault("MAIL_FROM_NAME", "TWACC 聊天系統"),
+		},
 	}
 }
 
@@ -169,6 +192,19 @@ func (c MySQLConfig) FormattedDSN() string {
 	}
 
 	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?%s", c.User, c.Password, c.Host, c.Port, c.Database, c.Params)
+}
+
+// Enabled returns true when enough SMTP settings are present to send mail.
+func (c MailConfig) Enabled() bool {
+	return c.SMTPHost != "" && c.SMTPPort > 0 && c.Username != "" && c.Password != ""
+}
+
+// SenderAddress returns the configured From address or the SMTP username.
+func (c MailConfig) SenderAddress() string {
+	if c.FromAddress != "" {
+		return c.FromAddress
+	}
+	return c.Username
 }
 
 func envOrDefault(key, fallback string) string {

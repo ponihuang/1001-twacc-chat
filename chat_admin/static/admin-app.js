@@ -6,7 +6,7 @@
 (function() {
   'use strict';
 
-  const { getSessionToken, getUserId, logout, makeAuthenticatedRequest, STORAGE_KEYS } = window.adminAuth;
+  const { getSessionToken, getUserId, isAuthenticated, logout, makeAuthenticatedRequest, STORAGE_KEYS } = window.adminAuth;
 
   // DOM Elements
   let elements = {};
@@ -37,8 +37,8 @@
     dashboard: '/office',
     users: '/office/user',
     userCreate: '/office/user/create',
+    userInvite: '/office/user/invite',
     userEdit: null,
-    conversations: '/office/conversations',
     admins: '/office/admins',
     adminCreate: '/office/admins/create',
     adminEdit: null
@@ -69,6 +69,10 @@
    * Initialize the app
    */
   async function initApp() {
+    if (!isAuthenticated()) {
+      return;
+    }
+
     cacheElements();
     renderTableColumns(elements.usersTable, elements.usersColgroup, elements.usersThead, USER_COLUMNS);
     setupOverlayScrollbar(document.getElementById('users-table-scroll'));
@@ -121,6 +125,9 @@
       createUserStatus: document.getElementById('create-user-status'),
       createUserPassword: document.getElementById('create-user-password'),
       submitCreateUser: document.getElementById('submit-create-user'),
+      userInviteForm: document.getElementById('user-invite-form'),
+      inviteUserEmail: document.getElementById('invite-user-email'),
+      submitInviteUser: document.getElementById('submit-invite-user'),
       userEditForm: document.getElementById('user-edit-form'),
       editUserAccount: document.getElementById('edit-user-account'),
       editUserPassword: document.getElementById('edit-user-password'),
@@ -264,6 +271,9 @@
     if (elements.userCreateForm) {
       elements.userCreateForm.addEventListener('submit', createUser);
     }
+    if (elements.userInviteForm) {
+      elements.userInviteForm.addEventListener('submit', inviteUser);
+    }
     if (elements.userEditForm) {
       elements.userEditForm.addEventListener('submit', updateUser);
     }
@@ -373,7 +383,7 @@
     }
 
     // Update menu items
-    const activeMenuItem = viewName === 'userCreate' || viewName === 'userEdit'
+    const activeMenuItem = viewName === 'userCreate' || viewName === 'userInvite' || viewName === 'userEdit'
       ? 'users'
       : viewName === 'adminCreate' || viewName === 'adminEdit' ? 'admins' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
@@ -402,10 +412,12 @@
       case 'userCreate':
         elements.createUserAccount?.focus();
         break;
+      case 'userInvite':
+        elements.userInviteForm?.reset();
+        elements.inviteUserEmail?.focus();
+        break;
       case 'userEdit':
         loadUserForEdit();
-        break;
-      case 'conversations':
         break;
       case 'admins':
         loadAdmins();
@@ -491,7 +503,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/users?${buildUserQuery().toString()}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入用戶列表失敗');
       }
@@ -778,7 +790,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/admins?${buildAdminQuery().toString()}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入管理員列表失敗');
       }
@@ -943,7 +955,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '建立管理員失敗');
       }
@@ -971,7 +983,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/admins/${encodeURIComponent(editingAdminUserID)}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入管理員資料失敗');
       }
@@ -1041,7 +1053,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '更新管理員失敗');
       }
@@ -1094,7 +1106,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '建立用戶失敗');
       }
@@ -1106,6 +1118,41 @@
       showError(err.message || '建立用戶失敗');
     } finally {
       if (elements.submitCreateUser) elements.submitCreateUser.disabled = false;
+    }
+  }
+
+  async function inviteUser(event) {
+    event.preventDefault();
+
+    const payload = {
+      email: elements.inviteUserEmail?.value?.trim() || ''
+    };
+    if (!payload.email) {
+      showError('請填寫 Email');
+      elements.inviteUserEmail?.focus();
+      return;
+    }
+
+    if (elements.submitInviteUser) elements.submitInviteUser.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/user-invitations', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '發送註冊邀請失敗');
+      }
+
+      elements.userInviteForm?.reset();
+      showSuccess('註冊邀請已發送');
+      switchView('users');
+    } catch (err) {
+      showError(err.message || '發送註冊邀請失敗');
+    } finally {
+      if (elements.submitInviteUser) elements.submitInviteUser.disabled = false;
     }
   }
 
@@ -1122,7 +1169,7 @@
       const response = await makeAuthenticatedRequest(`/api/system-admin/users/${encodeURIComponent(editingUserID)}`);
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '載入用戶資料失敗');
       }
@@ -1191,7 +1238,7 @@
       });
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || '更新用戶失敗');
       }
@@ -1236,7 +1283,7 @@
 
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
 
       if (!data.success) {
         showError(data.message || '載入設備失敗');
@@ -1422,7 +1469,7 @@
 
       if (!response) return;
 
-      const data = await response.json();
+      const data = await readJSONResponse(response);
 
       if (!data.success) {
         showError(data.message || '保存失敗');
@@ -1470,7 +1517,7 @@
 
       if (response.ok) {
         if (elements.healthApiTime) {
-          elements.healthApiTime.textContent = now.toLocaleTimeString();
+          elements.healthApiTime.textContent = formatDate(now);
         }
       }
 
@@ -1556,10 +1603,24 @@
   function formatDate(dateStr) {
     if (!dateStr) return '--';
     try {
-      return new Date(dateStr).toLocaleString('zh-TW');
+      const date = new Date(dateStr);
+      if (Number.isNaN(date.getTime())) return '--';
+      const pad = value => String(value).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     } catch {
       return '--';
     }
+  }
+
+  async function readJSONResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return response.json();
+    }
+
+    const body = await response.text();
+    const detail = body.trim() || `HTTP ${response.status}`;
+    throw new Error(`API 回應不是 JSON（${detail}）`);
   }
 
   /**

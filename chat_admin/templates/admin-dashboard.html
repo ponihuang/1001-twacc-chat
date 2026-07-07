@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260626-4">
-  <script defer src="/admin/static/admin-auth.js?v=1"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260626-4"></script>
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260708-1">
+  <script defer src="/admin/static/admin-auth.js?v=2"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260708-1"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
-  <div class="admin-shell" data-admin-app data-logout-redirect="/admin/login">
+  <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
     <aside class="admin-sidebar">
       <nav class="sidebar-menu" data-sidebar-menu aria-label="管理功能">
         <button type="button" class="sidebar-root" data-menu-item="dashboard">
@@ -31,10 +31,6 @@
           </div>
         </div>
 
-        <button type="button" class="sidebar-root" data-menu-item="conversations">
-          <span class="menu-glyph" aria-hidden="true">●</span>
-          <span>對話</span>
-        </button>
         <div class="sidebar-group" data-sidebar-group="system">
           <button type="button" class="sidebar-root" data-sidebar-toggle>
             <span class="menu-glyph" aria-hidden="true">▧</span>
@@ -154,6 +150,7 @@
               <div class="filter-actions">
                 <button type="submit" class="btn" id="refresh-users-btn">搜尋</button>
                 <button type="button" class="btn btn-primary" data-menu-item="userCreate">新增</button>
+                <button type="button" class="btn btn-primary btn-registration-invite" data-menu-item="userInvite">註冊邀請</button>
               </div>
             </form>
 
@@ -244,6 +241,33 @@
           </div>
         </section>
 
+        <section data-view="userInvite" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="users" aria-label="返回用戶管理">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="users">用戶管理</button>
+              <span>/</span>
+              <span>註冊邀請</span>
+            </nav>
+
+            <form class="user-create-form" id="user-invite-form">
+              <div class="user-create-fields">
+                <label class="user-create-field">
+                  <span>Email</span>
+                  <input type="email" id="invite-user-email" maxlength="255" autocomplete="off" required>
+                </label>
+              </div>
+
+              <div class="user-create-actions">
+                <button type="submit" class="btn btn-primary btn-compact" id="submit-invite-user">發送註冊邀請</button>
+                <button type="reset" class="btn btn-compact">重置</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
         <section data-view="userEdit" hidden>
           <div class="admin-page-panel">
             <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
@@ -287,15 +311,6 @@
                 <button type="button" class="btn btn-compact" id="reset-edit-user">重置</button>
               </div>
             </form>
-          </div>
-        </section>
-
-        <section data-view="conversations" hidden>
-          <div class="admin-page-panel">
-            <p class="admin-breadcrumb">首頁 / 對話</p>
-            <div class="placeholder-panel">
-              <h2>對話管理</h2>
-            </div>
           </div>
         </section>
 

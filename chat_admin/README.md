@@ -11,6 +11,7 @@
 - 舊 `/admin/dashboard` 導向 `/office`
 - `/office/user` 使用者管理頁
 - `/office/user/create` 新增使用者頁
+- `/office/user/invite` 邀請使用者頁
 - `/office/user/{user_id}/edit` 編輯使用者頁
 - 從 `users` 資料表載入使用者列表
 - 以 `auth_sessions.last_used_at` 顯示最近在線
@@ -51,6 +52,7 @@ chat_admin/
 | `/office` | 後台首頁 |
 | `/office/user` | 使用者管理，已串接資料 |
 | `/office/user/create` | 新增一般使用者 |
+| `/office/user/invite` | 邀請一般使用者 |
 | `/office/user/{user_id}/edit` | 編輯一般使用者 |
 | `/office/conversations` | 對話管理占位頁 |
 | `/office/admins` | 管理員管理，已串接資料 |
@@ -86,6 +88,16 @@ Content-Type: application/json
 ```
 
 新增頁欄位依序為帳號、密碼、暱稱、Email 與狀態。頁面固定使用 `source_system=office` 與 `language=zh-Hant`；狀態可選啟用或停用，預設為啟用。
+
+邀請使用者：
+
+```http
+POST /api/system-admin/user-invitations
+Authorization: Bearer <session-token>
+Content-Type: application/json
+```
+
+邀請頁只填 Email；後端會檢查 `users.email` 與既有邀請，避免重複。若已設定 SMTP 環境變數，會寄出註冊邀請信。
 
 取得與更新單一使用者：
 

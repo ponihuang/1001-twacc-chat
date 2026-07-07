@@ -3,6 +3,7 @@ package erp
 import (
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -16,6 +17,7 @@ type mockRepository struct {
 	settingsByUserID   map[int64]UserSecuritySettings
 	whitelistRules     map[int64][]string
 	devicesByKey       map[string]Device
+	invitationsByEmail map[string]UserInvitation
 	replaceAllowAll    bool
 	replaceRules       []string
 	replaceCalled      bool
@@ -25,6 +27,9 @@ type mockRepository struct {
 	approvedDeviceID   string
 	trustedDeviceCount map[int64]int
 	createdAdmin       SystemAdminSummary
+	createdInvitation  UserInvitation
+	sentInvitationID   int64
+	sentAt             time.Time
 }
 
 type mockSessions struct {
@@ -39,7 +44,7 @@ func (m *mockRepository) CreateUser(params RegisterParams) (User, error) {
 	if _, ok := m.usersByExternal[key]; ok {
 		return User{}, ErrUserAlreadyExists
 	}
-	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, PasswordHash: params.PasswordHash, Language: params.Language, Status: params.Status}
+	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, PasswordHash: params.PasswordHash, Email: params.Email, Language: params.Language, Status: params.Status}
 	if m.usersByID == nil {
 		m.usersByID = map[int64]User{}
 	}
@@ -65,6 +70,63 @@ func (m *mockRepository) FindUserByExternal(sourceSystem, externalUserID string)
 		return User{}, ErrUserNotFound
 	}
 	return user, nil
+}
+
+func (m *mockRepository) FindUserByEmail(email string) (User, error) {
+	for _, user := range m.usersByID {
+		if strings.EqualFold(user.Email, strings.TrimSpace(email)) {
+			return user, nil
+		}
+	}
+	return User{}, ErrUserNotFound
+}
+
+func (m *mockRepository) FindUserInvitationByEmail(email string) (UserInvitation, error) {
+	if m.invitationsByEmail == nil {
+		return UserInvitation{}, ErrUserNotFound
+	}
+	invitation, ok := m.invitationsByEmail[strings.ToLower(strings.TrimSpace(email))]
+	if !ok {
+		return UserInvitation{}, ErrUserNotFound
+	}
+	return invitation, nil
+}
+
+func (m *mockRepository) CreateUserInvitation(params UserInvitationCreateParams) (UserInvitation, error) {
+	if m.invitationsByEmail == nil {
+		m.invitationsByEmail = map[string]UserInvitation{}
+	}
+	key := strings.ToLower(strings.TrimSpace(params.Email))
+	if _, ok := m.invitationsByEmail[key]; ok {
+		return UserInvitation{}, ErrUserInvitationPending
+	}
+	now := time.Now().UTC()
+	m.createdInvitation = UserInvitation{
+		ID:               int64(len(m.invitationsByEmail) + 1),
+		Email:            params.Email,
+		TokenHash:        params.TokenHash,
+		Status:           params.Status,
+		InvitedByAdminID: params.InvitedByAdminID,
+		ExpiresAt:        params.ExpiresAt,
+		SentAt:           params.SentAt,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	m.invitationsByEmail[key] = m.createdInvitation
+	return m.createdInvitation, nil
+}
+
+func (m *mockRepository) MarkUserInvitationSent(invitationID int64, sentAt time.Time) error {
+	m.sentInvitationID = invitationID
+	m.sentAt = sentAt
+	for key, invitation := range m.invitationsByEmail {
+		if invitation.ID == invitationID {
+			invitation.SentAt = &sentAt
+			m.invitationsByEmail[key] = invitation
+			return nil
+		}
+	}
+	return ErrUserNotFound
 }
 
 func (m *mockRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error) {
@@ -639,6 +701,92 @@ func TestCreateUserCreatesUserWithHashedPassword(t *testing.T) {
 	}
 	if created.Status != "inactive" {
 		t.Fatalf("status = %q, want inactive", created.Status)
+	}
+}
+
+func TestInviteUserCreatesPendingInvitation(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:          map[int64]User{9: {ID: 9}},
+		usersByExternal:    map[string]User{},
+		invitationsByEmail: map[string]UserInvitation{},
+		systemAdmins:       map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+	service.SetInvitationTTL(time.Hour)
+	service.SetInvitationBaseURL("https://chat.example.com")
+
+	resp, status, err := service.InviteUser(AdminInviteUserRequest{Email: "New@Example.COM"}, AdminSessionPrincipal{AdminUserID: 9})
+	if err != nil {
+		t.Fatalf("InviteUser returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+	if resp.Code != "USER_INVITATION_CREATED" {
+		t.Fatalf("code = %q, want USER_INVITATION_CREATED", resp.Code)
+	}
+	if repo.createdInvitation.Email != "new@example.com" {
+		t.Fatalf("email = %q, want normalized new@example.com", repo.createdInvitation.Email)
+	}
+	if repo.createdInvitation.TokenHash == "" {
+		t.Fatal("token hash was not stored")
+	}
+	data, ok := resp.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("data = %#v, want map", resp.Data)
+	}
+	token, _ := data["token"].(string)
+	inviteURL, _ := data["invite_url"].(string)
+	if token == "" || !strings.Contains(inviteURL, token) {
+		t.Fatalf("token/invite_url not returned correctly: %#v", data)
+	}
+	if repo.createdInvitation.Status != "pending" {
+		t.Fatalf("status = %q, want pending", repo.createdInvitation.Status)
+	}
+}
+
+func TestInviteUserRejectsExistingUserEmail(t *testing.T) {
+	repo := &mockRepository{
+		usersByID: map[int64]User{
+			1: {ID: 1, Email: "new@example.com"},
+			9: {ID: 9},
+		},
+		usersByExternal: map[string]User{},
+		systemAdmins:    map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, status, err := service.InviteUser(AdminInviteUserRequest{Email: "NEW@example.com"}, AdminSessionPrincipal{AdminUserID: 9})
+	if !errors.Is(err, ErrEmailAlreadyExists) {
+		t.Fatalf("expected ErrEmailAlreadyExists, got %v", err)
+	}
+	if status != 409 {
+		t.Fatalf("status = %d, want 409", status)
+	}
+}
+
+func TestInviteUserRejectsPendingInvitation(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{9: {ID: 9}},
+		usersByExternal: map[string]User{},
+		invitationsByEmail: map[string]UserInvitation{
+			"new@example.com": {
+				ID:        1,
+				Email:     "new@example.com",
+				Status:    "pending",
+				ExpiresAt: time.Now().UTC().Add(time.Hour),
+			},
+		},
+		systemAdmins: map[int64]bool{9: true},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, status, err := service.InviteUser(AdminInviteUserRequest{Email: "new@example.com"}, AdminSessionPrincipal{AdminUserID: 9})
+	if !errors.Is(err, ErrUserInvitationPending) {
+		t.Fatalf("expected ErrUserInvitationPending, got %v", err)
+	}
+	if status != 409 {
+		t.Fatalf("status = %d, want 409", status)
 	}
 }
 

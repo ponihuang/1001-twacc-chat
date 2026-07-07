@@ -86,6 +86,21 @@ type AdminUserPage struct {
 	TotalPages int                `json:"total_pages"`
 }
 
+// UserInvitation stores a pending invitation for a user to complete registration.
+type UserInvitation struct {
+	ID               int64
+	Email            string
+	TokenHash        string
+	Status           string
+	InvitedByAdminID int64
+	AcceptedUserID   int64
+	ExpiresAt        time.Time
+	SentAt           *time.Time
+	AcceptedAt       *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 // SystemAdminFilter contains supported filters for the system-admin list.
 type SystemAdminFilter struct {
 	ExternalUserID string
@@ -147,6 +162,11 @@ type AdminSessionIssuer interface {
 	Issue(adminUserID int64, deviceID string) (string, time.Time, error)
 }
 
+// InvitationMailer sends user registration invitations.
+type InvitationMailer interface {
+	SendUserInvitation(email, inviteURL string, expiresAt time.Time) error
+}
+
 // SessionAuthenticator validates a Bearer session token.
 type SessionAuthenticator interface {
 	Authenticate(token string) (auth.Session, error)
@@ -178,6 +198,11 @@ type AdminCreateUserRequest struct {
 	Email          string `json:"email"`
 	Language       string `json:"language"`
 	Status         string `json:"status"`
+}
+
+// AdminInviteUserRequest is the system-admin payload for inviting a user by email.
+type AdminInviteUserRequest struct {
+	Email string `json:"email"`
 }
 
 // SystemAdminCreateRequest is the payload for creating an office system admin.
@@ -272,12 +297,26 @@ type AdminUpdateUserParams struct {
 	Status       string
 }
 
+// UserInvitationCreateParams carries validated invitation fields into storage.
+type UserInvitationCreateParams struct {
+	Email            string
+	TokenHash        string
+	Status           string
+	InvitedByAdminID int64
+	ExpiresAt        time.Time
+	SentAt           *time.Time
+}
+
 // Repository defines persistence required by external identity, login, and admin flows.
 type Repository interface {
 	CreateUser(params RegisterParams) (User, error)
 	FindUserByID(userID int64) (User, error)
 	FindUserByExternal(sourceSystem, externalUserID string) (User, error)
+	FindUserByEmail(email string) (User, error)
 	ListUsers(filter AdminUserFilter) (AdminUserPage, error)
+	FindUserInvitationByEmail(email string) (UserInvitation, error)
+	CreateUserInvitation(params UserInvitationCreateParams) (UserInvitation, error)
+	MarkUserInvitationSent(invitationID int64, sentAt time.Time) error
 	ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)
 	FindSystemAdminByAccount(account string) (SystemAdminSummary, error)
