@@ -748,6 +748,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "EMAIL_ALREADY_EXISTS", Message: "Email 已存在"}
 	case errors.Is(err, ErrUserInvitationPending):
 		return Response{Success: false, Code: "USER_INVITATION_PENDING", Message: "该 Email 已有待完成邀請"}
+	case errors.Is(err, ErrInvitationMailerUnavailable):
+		return Response{Success: false, Code: "MAILER_UNAVAILABLE", Message: "寄信服務尚未設定"}
 	case errors.Is(err, ErrSystemAdminCannotChat):
 		return Response{Success: false, Code: "SYSTEM_ADMIN_CANNOT_CHAT", Message: "system_admin 不可使用聊天功能"}
 	case errors.Is(err, ErrInsufficientRole):

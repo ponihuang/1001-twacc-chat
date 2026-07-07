@@ -176,6 +176,7 @@ func (r *IntegrationRepository) FindUserInvitationByEmail(email string) (erp.Use
 		        expires_at, sent_at, accepted_at, created_at, updated_at
 		   FROM user_invitations
 		  WHERE LOWER(email) = LOWER(?)
+		  ORDER BY created_at DESC, id DESC
 		  LIMIT 1`,
 		strings.TrimSpace(email),
 	)
@@ -236,6 +237,41 @@ func (r *IntegrationRepository) CreateUserInvitation(params erp.UserInvitationCr
 		return erp.UserInvitation{}, fmt.Errorf("read user invitation id: %w", err)
 	}
 	return r.findUserInvitationByID(invitationID)
+}
+
+// RefreshUserInvitation replaces the token on an existing unsent pending invitation.
+func (r *IntegrationRepository) RefreshUserInvitation(params erp.UserInvitationRefreshParams) (erp.UserInvitation, error) {
+	result, err := r.db.Exec(
+		`UPDATE user_invitations
+		    SET token_hash = ?,
+		        status = 'pending',
+		        invited_by_admin_id = ?,
+		        accepted_user_id = NULL,
+		        expires_at = ?,
+		        sent_at = NULL,
+		        accepted_at = NULL,
+		        updated_at = CURRENT_TIMESTAMP
+		  WHERE id = ? AND status = 'pending'`,
+		params.TokenHash,
+		nullableInt64(params.InvitedByAdminID),
+		params.ExpiresAt,
+		params.ID,
+	)
+	if err != nil {
+		if isDuplicate(err) {
+			return erp.UserInvitation{}, erp.ErrUserInvitationPending
+		}
+		return erp.UserInvitation{}, fmt.Errorf("refresh user invitation: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return erp.UserInvitation{}, fmt.Errorf("refresh user invitation rows affected: %w", err)
+	}
+	if affected == 0 {
+		return erp.UserInvitation{}, erp.ErrUserNotFound
+	}
+
+	return r.findUserInvitationByID(params.ID)
 }
 
 // MarkUserInvitationSent records successful email delivery.

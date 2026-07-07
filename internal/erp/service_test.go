@@ -9,27 +9,28 @@ import (
 )
 
 type mockRepository struct {
-	usersByID          map[int64]User
-	usersByExternal    map[string]User
-	systemAdmins       map[int64]bool
-	adminsByID         map[int64]SystemAdminSummary
-	adminsByAccount    map[string]SystemAdminSummary
-	settingsByUserID   map[int64]UserSecuritySettings
-	whitelistRules     map[int64][]string
-	devicesByKey       map[string]Device
-	invitationsByEmail map[string]UserInvitation
-	replaceAllowAll    bool
-	replaceRules       []string
-	replaceCalled      bool
-	approveCalled      bool
-	approvedTrustedBy  int64
-	approvedUserID     int64
-	approvedDeviceID   string
-	trustedDeviceCount map[int64]int
-	createdAdmin       SystemAdminSummary
-	createdInvitation  UserInvitation
-	sentInvitationID   int64
-	sentAt             time.Time
+	usersByID           map[int64]User
+	usersByExternal     map[string]User
+	systemAdmins        map[int64]bool
+	adminsByID          map[int64]SystemAdminSummary
+	adminsByAccount     map[string]SystemAdminSummary
+	settingsByUserID    map[int64]UserSecuritySettings
+	whitelistRules      map[int64][]string
+	devicesByKey        map[string]Device
+	invitationsByEmail  map[string]UserInvitation
+	replaceAllowAll     bool
+	replaceRules        []string
+	replaceCalled       bool
+	approveCalled       bool
+	approvedTrustedBy   int64
+	approvedUserID      int64
+	approvedDeviceID    string
+	trustedDeviceCount  map[int64]int
+	createdAdmin        SystemAdminSummary
+	createdInvitation   UserInvitation
+	refreshedInvitation UserInvitation
+	sentInvitationID    int64
+	sentAt              time.Time
 }
 
 type mockSessions struct {
@@ -37,6 +38,20 @@ type mockSessions struct {
 	issuedDeviceID string
 	token          string
 	expiresAt      time.Time
+}
+
+type mockInvitationMailer struct {
+	email     string
+	inviteURL string
+	expiresAt time.Time
+	err       error
+}
+
+func (m *mockInvitationMailer) SendUserInvitation(email, inviteURL string, expiresAt time.Time) error {
+	m.email = email
+	m.inviteURL = inviteURL
+	m.expiresAt = expiresAt
+	return m.err
 }
 
 func (m *mockRepository) CreateUser(params RegisterParams) (User, error) {
@@ -114,6 +129,25 @@ func (m *mockRepository) CreateUserInvitation(params UserInvitationCreateParams)
 	}
 	m.invitationsByEmail[key] = m.createdInvitation
 	return m.createdInvitation, nil
+}
+
+func (m *mockRepository) RefreshUserInvitation(params UserInvitationRefreshParams) (UserInvitation, error) {
+	for key, invitation := range m.invitationsByEmail {
+		if invitation.ID != params.ID {
+			continue
+		}
+		invitation.TokenHash = params.TokenHash
+		invitation.InvitedByAdminID = params.InvitedByAdminID
+		invitation.ExpiresAt = params.ExpiresAt
+		invitation.SentAt = nil
+		invitation.AcceptedAt = nil
+		invitation.AcceptedUserID = 0
+		invitation.UpdatedAt = time.Now().UTC()
+		m.refreshedInvitation = invitation
+		m.invitationsByEmail[key] = invitation
+		return invitation, nil
+	}
+	return UserInvitation{}, ErrUserNotFound
 }
 
 func (m *mockRepository) MarkUserInvitationSent(invitationID int64, sentAt time.Time) error {
@@ -710,10 +744,13 @@ func TestInviteUserCreatesPendingInvitation(t *testing.T) {
 		usersByExternal:    map[string]User{},
 		invitationsByEmail: map[string]UserInvitation{},
 		systemAdmins:       map[int64]bool{9: true},
+		adminsByID:         map[int64]SystemAdminSummary{9: {ID: 9, UserID: 9, AdminUserID: 9, Role: "system_admin", Status: "active"}},
 	}
 	service := NewService(repo, &mockSessions{})
 	service.SetInvitationTTL(time.Hour)
 	service.SetInvitationBaseURL("https://chat.example.com")
+	mailer := &mockInvitationMailer{}
+	service.SetInvitationMailer(mailer)
 
 	resp, status, err := service.InviteUser(AdminInviteUserRequest{Email: "New@Example.COM"}, AdminSessionPrincipal{AdminUserID: 9})
 	if err != nil {
@@ -743,6 +780,34 @@ func TestInviteUserCreatesPendingInvitation(t *testing.T) {
 	if repo.createdInvitation.Status != "pending" {
 		t.Fatalf("status = %q, want pending", repo.createdInvitation.Status)
 	}
+	if mailer.email != "new@example.com" || mailer.inviteURL == "" {
+		t.Fatalf("mailer was not called correctly: %#v", mailer)
+	}
+	if repo.sentInvitationID != repo.createdInvitation.ID {
+		t.Fatalf("sent invitation id = %d, want %d", repo.sentInvitationID, repo.createdInvitation.ID)
+	}
+}
+
+func TestInviteUserRequiresMailer(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:          map[int64]User{9: {ID: 9}},
+		usersByExternal:    map[string]User{},
+		invitationsByEmail: map[string]UserInvitation{},
+		systemAdmins:       map[int64]bool{9: true},
+		adminsByID:         map[int64]SystemAdminSummary{9: {ID: 9, UserID: 9, AdminUserID: 9, Role: "system_admin", Status: "active"}},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, status, err := service.InviteUser(AdminInviteUserRequest{Email: "new@example.com"}, AdminSessionPrincipal{AdminUserID: 9})
+	if !errors.Is(err, ErrInvitationMailerUnavailable) {
+		t.Fatalf("expected ErrInvitationMailerUnavailable, got %v", err)
+	}
+	if status != 503 {
+		t.Fatalf("status = %d, want 503", status)
+	}
+	if len(repo.invitationsByEmail) != 0 {
+		t.Fatal("invitation should not be created when mailer is unavailable")
+	}
 }
 
 func TestInviteUserRejectsExistingUserEmail(t *testing.T) {
@@ -753,6 +818,7 @@ func TestInviteUserRejectsExistingUserEmail(t *testing.T) {
 		},
 		usersByExternal: map[string]User{},
 		systemAdmins:    map[int64]bool{9: true},
+		adminsByID:      map[int64]SystemAdminSummary{9: {ID: 9, UserID: 9, AdminUserID: 9, Role: "system_admin", Status: "active"}},
 	}
 	service := NewService(repo, &mockSessions{})
 
@@ -766,6 +832,7 @@ func TestInviteUserRejectsExistingUserEmail(t *testing.T) {
 }
 
 func TestInviteUserRejectsPendingInvitation(t *testing.T) {
+	sentAt := time.Now().UTC().Add(-time.Minute)
 	repo := &mockRepository{
 		usersByID:       map[int64]User{9: {ID: 9}},
 		usersByExternal: map[string]User{},
@@ -775,11 +842,14 @@ func TestInviteUserRejectsPendingInvitation(t *testing.T) {
 				Email:     "new@example.com",
 				Status:    "pending",
 				ExpiresAt: time.Now().UTC().Add(time.Hour),
+				SentAt:    &sentAt,
 			},
 		},
 		systemAdmins: map[int64]bool{9: true},
+		adminsByID:   map[int64]SystemAdminSummary{9: {ID: 9, UserID: 9, AdminUserID: 9, Role: "system_admin", Status: "active"}},
 	}
 	service := NewService(repo, &mockSessions{})
+	service.SetInvitationMailer(&mockInvitationMailer{})
 
 	_, status, err := service.InviteUser(AdminInviteUserRequest{Email: "new@example.com"}, AdminSessionPrincipal{AdminUserID: 9})
 	if !errors.Is(err, ErrUserInvitationPending) {
@@ -787,6 +857,52 @@ func TestInviteUserRejectsPendingInvitation(t *testing.T) {
 	}
 	if status != 409 {
 		t.Fatalf("status = %d, want 409", status)
+	}
+}
+
+func TestInviteUserRefreshesUnsentPendingInvitation(t *testing.T) {
+	repo := &mockRepository{
+		usersByID:       map[int64]User{9: {ID: 9}},
+		usersByExternal: map[string]User{},
+		invitationsByEmail: map[string]UserInvitation{
+			"new@example.com": {
+				ID:        7,
+				Email:     "new@example.com",
+				TokenHash: "old-token-hash",
+				Status:    "pending",
+				ExpiresAt: time.Now().UTC().Add(time.Hour),
+			},
+		},
+		systemAdmins: map[int64]bool{9: true},
+		adminsByID:   map[int64]SystemAdminSummary{9: {ID: 9, UserID: 9, AdminUserID: 9, Role: "system_admin", Status: "active"}},
+	}
+	mailer := &mockInvitationMailer{}
+	service := NewService(repo, &mockSessions{})
+	service.SetInvitationMailer(mailer)
+	service.SetInvitationBaseURL("https://chat.example.com")
+
+	resp, status, err := service.InviteUser(AdminInviteUserRequest{Email: "new@example.com"}, AdminSessionPrincipal{AdminUserID: 9})
+	if err != nil {
+		t.Fatalf("InviteUser returned error: %v", err)
+	}
+	if status != 201 {
+		t.Fatalf("status = %d, want 201", status)
+	}
+	if repo.refreshedInvitation.ID != 7 {
+		t.Fatalf("refreshed invitation id = %d, want 7", repo.refreshedInvitation.ID)
+	}
+	if repo.refreshedInvitation.TokenHash == "" || repo.refreshedInvitation.TokenHash == "old-token-hash" {
+		t.Fatalf("token hash was not refreshed: %q", repo.refreshedInvitation.TokenHash)
+	}
+	if mailer.email != "new@example.com" {
+		t.Fatalf("mailer email = %q, want new@example.com", mailer.email)
+	}
+	if repo.sentInvitationID != 7 {
+		t.Fatalf("sent invitation id = %d, want 7", repo.sentInvitationID)
+	}
+	data, ok := resp.Data.(map[string]any)
+	if !ok || data["token"] == "" {
+		t.Fatalf("response did not include new token: %#v", resp.Data)
 	}
 }
 

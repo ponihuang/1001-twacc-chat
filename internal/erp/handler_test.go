@@ -47,6 +47,17 @@ func (s *stubIntegrationRepository) CreateUserInvitation(params UserInvitationCr
 	}, nil
 }
 
+func (s *stubIntegrationRepository) RefreshUserInvitation(params UserInvitationRefreshParams) (UserInvitation, error) {
+	return UserInvitation{
+		ID:               params.ID,
+		Email:            "invite@example.com",
+		TokenHash:        params.TokenHash,
+		Status:           "pending",
+		InvitedByAdminID: params.InvitedByAdminID,
+		ExpiresAt:        params.ExpiresAt,
+	}, nil
+}
+
 func (s *stubIntegrationRepository) MarkUserInvitationSent(invitationID int64, sentAt time.Time) error {
 	return nil
 }

@@ -307,6 +307,14 @@ type UserInvitationCreateParams struct {
 	SentAt           *time.Time
 }
 
+// UserInvitationRefreshParams carries a new token for an existing unsent invitation.
+type UserInvitationRefreshParams struct {
+	ID               int64
+	TokenHash        string
+	InvitedByAdminID int64
+	ExpiresAt        time.Time
+}
+
 // Repository defines persistence required by external identity, login, and admin flows.
 type Repository interface {
 	CreateUser(params RegisterParams) (User, error)
@@ -316,6 +324,7 @@ type Repository interface {
 	ListUsers(filter AdminUserFilter) (AdminUserPage, error)
 	FindUserInvitationByEmail(email string) (UserInvitation, error)
 	CreateUserInvitation(params UserInvitationCreateParams) (UserInvitation, error)
+	RefreshUserInvitation(params UserInvitationRefreshParams) (UserInvitation, error)
 	MarkUserInvitationSent(invitationID int64, sentAt time.Time) error
 	ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)
