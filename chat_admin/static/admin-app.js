@@ -37,6 +37,7 @@
     dashboard: '/office',
     users: '/office/user',
     userCreate: '/office/user/create',
+    userInvite: '/office/user/invite',
     userEdit: null,
     admins: '/office/admins',
     adminCreate: '/office/admins/create',
@@ -124,6 +125,9 @@
       createUserStatus: document.getElementById('create-user-status'),
       createUserPassword: document.getElementById('create-user-password'),
       submitCreateUser: document.getElementById('submit-create-user'),
+      userInviteForm: document.getElementById('user-invite-form'),
+      inviteUserEmail: document.getElementById('invite-user-email'),
+      submitInviteUser: document.getElementById('submit-invite-user'),
       userEditForm: document.getElementById('user-edit-form'),
       editUserAccount: document.getElementById('edit-user-account'),
       editUserPassword: document.getElementById('edit-user-password'),
@@ -267,6 +271,9 @@
     if (elements.userCreateForm) {
       elements.userCreateForm.addEventListener('submit', createUser);
     }
+    if (elements.userInviteForm) {
+      elements.userInviteForm.addEventListener('submit', inviteUser);
+    }
     if (elements.userEditForm) {
       elements.userEditForm.addEventListener('submit', updateUser);
     }
@@ -376,7 +383,7 @@
     }
 
     // Update menu items
-    const activeMenuItem = viewName === 'userCreate' || viewName === 'userEdit'
+    const activeMenuItem = viewName === 'userCreate' || viewName === 'userInvite' || viewName === 'userEdit'
       ? 'users'
       : viewName === 'adminCreate' || viewName === 'adminEdit' ? 'admins' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
@@ -404,6 +411,10 @@
         break;
       case 'userCreate':
         elements.createUserAccount?.focus();
+        break;
+      case 'userInvite':
+        elements.userInviteForm?.reset();
+        elements.inviteUserEmail?.focus();
         break;
       case 'userEdit':
         loadUserForEdit();
@@ -1107,6 +1118,41 @@
       showError(err.message || '建立用戶失敗');
     } finally {
       if (elements.submitCreateUser) elements.submitCreateUser.disabled = false;
+    }
+  }
+
+  async function inviteUser(event) {
+    event.preventDefault();
+
+    const payload = {
+      email: elements.inviteUserEmail?.value?.trim() || ''
+    };
+    if (!payload.email) {
+      showError('請填寫 Email');
+      elements.inviteUserEmail?.focus();
+      return;
+    }
+
+    if (elements.submitInviteUser) elements.submitInviteUser.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/user-invitations', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '發送註冊邀請失敗');
+      }
+
+      elements.userInviteForm?.reset();
+      showSuccess('註冊邀請已發送');
+      switchView('users');
+    } catch (err) {
+      showError(err.message || '發送註冊邀請失敗');
+    } finally {
+      if (elements.submitInviteUser) elements.submitInviteUser.disabled = false;
     }
   }
 

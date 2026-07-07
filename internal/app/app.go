@@ -13,6 +13,7 @@ import (
 	"1001-twacc-chat/internal/config"
 	"1001-twacc-chat/internal/erp"
 	"1001-twacc-chat/internal/httpx"
+	"1001-twacc-chat/internal/mailer"
 	storemysql "1001-twacc-chat/internal/store/mysql"
 )
 
@@ -52,6 +53,11 @@ func Run() error {
 		integrationService := erp.NewService(integrationRepo, sessionService)
 		integrationService.SetAdminSessions(adminSessionService)
 		integrationService.SetRequireTrustedDevice(cfg.RequireTrustedDevice)
+		integrationService.SetInvitationTTL(cfg.UserInvitationTTL)
+		integrationService.SetInvitationBaseURL(cfg.AppURL)
+		if cfg.Mail.Enabled() {
+			integrationService.SetInvitationMailer(mailer.NewSMTPMailer(cfg.Mail))
+		}
 		integrationHandler = erp.NewHandler(
 			integrationService,
 			sessionService,
