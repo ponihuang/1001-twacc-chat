@@ -223,6 +223,33 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// InviteUser handles POST /api/system-admin/user-invitations.
+func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminInviteUserRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.InviteUser(req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // CreateSystemAdmin handles POST /api/system-admin/admins.
 func (h *Handler) CreateSystemAdmin(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -717,6 +744,10 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "NOT_FOUND", Message: "查无对应装置"}
 	case errors.Is(err, ErrUserAlreadyExists):
 		return Response{Success: false, Code: "USER_ALREADY_EXISTS", Message: "该外部用户已存在"}
+	case errors.Is(err, ErrEmailAlreadyExists):
+		return Response{Success: false, Code: "EMAIL_ALREADY_EXISTS", Message: "Email 已存在"}
+	case errors.Is(err, ErrUserInvitationPending):
+		return Response{Success: false, Code: "USER_INVITATION_PENDING", Message: "该 Email 已有待完成邀請"}
 	case errors.Is(err, ErrSystemAdminCannotChat):
 		return Response{Success: false, Code: "SYSTEM_ADMIN_CANNOT_CHAT", Message: "system_admin 不可使用聊天功能"}
 	case errors.Is(err, ErrInsufficientRole):

@@ -57,6 +57,7 @@
 - `/office/user` 使用者管理畫面、資料表列表與可設定欄位寬度
 - 使用者列表支援總筆數、分頁及每頁 10、20、50、100 筆切換
 - `/office/user/create` 新增使用者頁面與 `POST /api/system-admin/users`
+- `/office/user/invite` 邀請使用者頁面與 `POST /api/system-admin/user-invitations`
 - `/office/user/{user_id}/edit` 編輯使用者頁面與使用者查詢、更新 API；編輯時密碼留空會保留原密碼
 - trusted device 核准 API
 - 使用者、session、裝置、IP 白名單、聊天核心資料表 migration
@@ -138,6 +139,14 @@ MYSQL_USER=root
 MYSQL_PASSWORD=secret
 INTEGRATION_SHARED_TOKEN=your-shared-token
 INTEGRATION_SIGNATURE_SECRET=your-signature-secret
+APP_URL=https://your-domain.example
+MAIL_SMTP_HOST=smtp.gmail.com
+MAIL_SMTP_PORT=587
+MAIL_SMTP_USERNAME=1001.chat.1@gmail.com
+MAIL_SMTP_PASSWORD=your-gmail-app-password
+MAIL_FROM_ADDRESS=1001.chat.1@gmail.com
+MAIL_FROM_NAME=TWACC 聊天系統
+USER_INVITATION_TTL=168h
 INTEGRATION_TIMESTAMP_TOLERANCE=5m
 REQUIRE_TRUSTED_DEVICE=false
 ```

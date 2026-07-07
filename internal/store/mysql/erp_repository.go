@@ -130,6 +130,181 @@ func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID 
 	return user, nil
 }
 
+// FindUserByEmail loads a user via email.
+func (r *IntegrationRepository) FindUserByEmail(email string) (erp.User, error) {
+	var user erp.User
+	row := r.db.QueryRow(
+		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
+		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
+		   FROM users
+		  WHERE LOWER(COALESCE(email, '')) = LOWER(?)
+		  LIMIT 1`,
+		strings.TrimSpace(email),
+	)
+	if err := row.Scan(
+		&user.ID,
+		&user.SourceSystem,
+		&user.ExternalUserID,
+		&user.DisplayName,
+		&user.PasswordHash,
+		&user.Email,
+		&user.Language,
+		&user.WhatsAppAccount,
+		&user.TelegramAccount,
+		&user.Status,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.User{}, erp.ErrUserNotFound
+		}
+		return erp.User{}, fmt.Errorf("find user by email: %w", err)
+	}
+
+	return user, nil
+}
+
+// FindUserInvitationByEmail loads the latest invitation for an email.
+func (r *IntegrationRepository) FindUserInvitationByEmail(email string) (erp.UserInvitation, error) {
+	var invitation erp.UserInvitation
+	var invitedByAdminID sql.NullInt64
+	var acceptedUserID sql.NullInt64
+	var sentAt sql.NullTime
+	var acceptedAt sql.NullTime
+	row := r.db.QueryRow(
+		`SELECT id, email, token_hash, status, invited_by_admin_id, accepted_user_id,
+		        expires_at, sent_at, accepted_at, created_at, updated_at
+		   FROM user_invitations
+		  WHERE LOWER(email) = LOWER(?)
+		  LIMIT 1`,
+		strings.TrimSpace(email),
+	)
+	if err := row.Scan(
+		&invitation.ID,
+		&invitation.Email,
+		&invitation.TokenHash,
+		&invitation.Status,
+		&invitedByAdminID,
+		&acceptedUserID,
+		&invitation.ExpiresAt,
+		&sentAt,
+		&acceptedAt,
+		&invitation.CreatedAt,
+		&invitation.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.UserInvitation{}, erp.ErrUserNotFound
+		}
+		return erp.UserInvitation{}, fmt.Errorf("find user invitation by email: %w", err)
+	}
+	if invitedByAdminID.Valid {
+		invitation.InvitedByAdminID = invitedByAdminID.Int64
+	}
+	if acceptedUserID.Valid {
+		invitation.AcceptedUserID = acceptedUserID.Int64
+	}
+	if sentAt.Valid {
+		invitation.SentAt = &sentAt.Time
+	}
+	if acceptedAt.Valid {
+		invitation.AcceptedAt = &acceptedAt.Time
+	}
+	return invitation, nil
+}
+
+// CreateUserInvitation inserts a pending invitation.
+func (r *IntegrationRepository) CreateUserInvitation(params erp.UserInvitationCreateParams) (erp.UserInvitation, error) {
+	result, err := r.db.Exec(
+		`INSERT INTO user_invitations (email, token_hash, status, invited_by_admin_id, expires_at, sent_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		params.Email,
+		params.TokenHash,
+		params.Status,
+		nullableInt64(params.InvitedByAdminID),
+		params.ExpiresAt,
+		nullableTime(params.SentAt),
+	)
+	if err != nil {
+		if isDuplicate(err) {
+			return erp.UserInvitation{}, erp.ErrUserInvitationPending
+		}
+		return erp.UserInvitation{}, fmt.Errorf("create user invitation: %w", err)
+	}
+
+	invitationID, err := result.LastInsertId()
+	if err != nil {
+		return erp.UserInvitation{}, fmt.Errorf("read user invitation id: %w", err)
+	}
+	return r.findUserInvitationByID(invitationID)
+}
+
+// MarkUserInvitationSent records successful email delivery.
+func (r *IntegrationRepository) MarkUserInvitationSent(invitationID int64, sentAt time.Time) error {
+	result, err := r.db.Exec(
+		`UPDATE user_invitations SET sent_at = ? WHERE id = ?`,
+		sentAt,
+		invitationID,
+	)
+	if err != nil {
+		return fmt.Errorf("mark user invitation sent: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("mark user invitation sent rows affected: %w", err)
+	}
+	if affected == 0 {
+		return erp.ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *IntegrationRepository) findUserInvitationByID(invitationID int64) (erp.UserInvitation, error) {
+	var invitation erp.UserInvitation
+	var invitedByAdminID sql.NullInt64
+	var acceptedUserID sql.NullInt64
+	var sentAt sql.NullTime
+	var acceptedAt sql.NullTime
+	row := r.db.QueryRow(
+		`SELECT id, email, token_hash, status, invited_by_admin_id, accepted_user_id,
+		        expires_at, sent_at, accepted_at, created_at, updated_at
+		   FROM user_invitations
+		  WHERE id = ?
+		  LIMIT 1`,
+		invitationID,
+	)
+	if err := row.Scan(
+		&invitation.ID,
+		&invitation.Email,
+		&invitation.TokenHash,
+		&invitation.Status,
+		&invitedByAdminID,
+		&acceptedUserID,
+		&invitation.ExpiresAt,
+		&sentAt,
+		&acceptedAt,
+		&invitation.CreatedAt,
+		&invitation.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.UserInvitation{}, erp.ErrUserNotFound
+		}
+		return erp.UserInvitation{}, fmt.Errorf("find user invitation by id: %w", err)
+	}
+	if invitedByAdminID.Valid {
+		invitation.InvitedByAdminID = invitedByAdminID.Int64
+	}
+	if acceptedUserID.Valid {
+		invitation.AcceptedUserID = acceptedUserID.Int64
+	}
+	if sentAt.Valid {
+		invitation.SentAt = &sentAt.Time
+	}
+	if acceptedAt.Valid {
+		invitation.AcceptedAt = &acceptedAt.Time
+	}
+	return invitation, nil
+}
+
 // ListUsers returns one page of users and their most recent authenticated activity.
 func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) (erp.AdminUserPage, error) {
 	page := filter.Page
@@ -740,6 +915,14 @@ func nullableInt64(value int64) any {
 	}
 
 	return value
+}
+
+func nullableTime(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+
+	return *value
 }
 
 func systemAdminRoleName(role string) string {
