@@ -89,6 +89,7 @@ type AdminUserPage struct {
 // AdminUserInvitationFilter contains supported filters for the invitation list.
 type AdminUserInvitationFilter struct {
 	Email   string
+	Status  string
 	Page    int
 	PerPage int
 }

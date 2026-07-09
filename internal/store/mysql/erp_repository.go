@@ -312,6 +312,10 @@ func (r *IntegrationRepository) ListUserInvitations(filter erp.AdminUserInvitati
 		where.WriteString(" AND ui.email LIKE ?")
 		args = append(args, "%"+email+"%")
 	}
+	if status := strings.TrimSpace(filter.Status); status != "" && validUserInvitationStatus(status) {
+		where.WriteString(" AND ui.status = ?")
+		args = append(args, status)
+	}
 
 	from := ` FROM user_invitations ui
 	          LEFT JOIN admin_users a ON a.id = ui.invited_by_admin_id`
@@ -388,6 +392,15 @@ func (r *IntegrationRepository) ListUserInvitations(filter erp.AdminUserInvitati
 		PerPage:    perPage,
 		TotalPages: totalPages,
 	}, nil
+}
+
+func validUserInvitationStatus(status string) bool {
+	switch status {
+	case "pending", "accepted", "expired":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *IntegrationRepository) findUserInvitationByID(invitationID int64) (erp.UserInvitation, error) {

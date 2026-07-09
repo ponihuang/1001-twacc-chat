@@ -130,6 +130,7 @@
       submitCreateUser: document.getElementById('submit-create-user'),
       userInvitationsFilterForm: document.getElementById('user-invitations-filter-form'),
       userInvitationEmailFilter: document.getElementById('user-invitation-email-filter'),
+      userInvitationStatusFilter: document.getElementById('user-invitation-status-filter'),
       userInvitationsTable: document.getElementById('user-invitations-table'),
       userInvitationsTbody: document.getElementById('user-invitations-tbody'),
       userInvitationsLoading: document.getElementById('user-invitations-loading'),
@@ -861,7 +862,9 @@
   function buildUserInvitationQuery() {
     const params = new URLSearchParams();
     const email = elements.userInvitationEmailFilter?.value?.trim();
+    const status = elements.userInvitationStatusFilter?.value?.trim();
     if (email) params.set('email', email);
+    if (status) params.set('status', status);
     params.set('page', String(userInvitationsPage));
     params.set('per_page', String(userInvitationsPerPage));
     return params;
@@ -904,7 +907,7 @@
   function invitationStatusLabel(status) {
     switch (status) {
       case 'pending':
-        return '待完成';
+        return '待註冊';
       case 'accepted':
         return '已完成';
       case 'expired':

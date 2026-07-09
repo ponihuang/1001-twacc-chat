@@ -347,10 +347,7 @@ button:disabled {
 
 .user-filter-panel {
   display: grid;
-  grid-template-columns:
-    minmax(150px, 1.15fr)
-    minmax(150px, 1.15fr)
-    repeat(6, minmax(120px, 1fr));
+  grid-template-columns: 220px 220px 320px 150px 150px 180px;
   gap: 14px 26px;
   align-items: end;
   padding: 0 0 10px;
@@ -367,11 +364,22 @@ button:disabled {
 }
 
 .user-filter-panel .filter-email {
-  grid-column: span 2;
+  grid-column: auto;
 }
 
 .user-filter-panel .filter-start-time {
   grid-column: 1;
+}
+
+.invitation-filter-panel {
+  grid-template-columns: 320px 150px auto;
+  gap: 14px 18px;
+  max-width: 760px;
+}
+
+.invitation-filter-panel .filter-actions {
+  grid-column: auto;
+  min-width: 0;
 }
 
 .admin-filter-panel {

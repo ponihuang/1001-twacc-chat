@@ -686,6 +686,7 @@ func parseAdminUserInvitationFilter(r *http.Request) (AdminUserInvitationFilter,
 	query := r.URL.Query()
 	filter := AdminUserInvitationFilter{
 		Email:   strings.TrimSpace(query.Get("email")),
+		Status:  strings.TrimSpace(query.Get("status")),
 		Page:    1,
 		PerPage: 10,
 	}
@@ -799,7 +800,7 @@ func errorResponse(err error) Response {
 	case errors.Is(err, ErrEmailAlreadyExists):
 		return Response{Success: false, Code: "EMAIL_ALREADY_EXISTS", Message: "Email 已存在"}
 	case errors.Is(err, ErrUserInvitationPending):
-		return Response{Success: false, Code: "USER_INVITATION_PENDING", Message: "该 Email 已有待完成邀請"}
+		return Response{Success: false, Code: "USER_INVITATION_PENDING", Message: "該 Email 已有待註冊邀請"}
 	case errors.Is(err, ErrInvitationMailerUnavailable):
 		return Response{Success: false, Code: "MAILER_UNAVAILABLE", Message: "寄信服務尚未設定"}
 	case errors.Is(err, ErrSystemAdminCannotChat):
