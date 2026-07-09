@@ -169,6 +169,33 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// ListUserInvitations handles GET /api/system-admin/user-invitations.
+func (h *Handler) ListUserInvitations(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	filter, err := parseAdminUserInvitationFilter(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	resp, status, err := h.service.ListUserInvitations(filter, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // ListSystemAdmins handles GET /api/system-admin/admins.
 func (h *Handler) ListSystemAdmins(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -649,6 +676,31 @@ func parseAdminUserFilter(r *http.Request) (AdminUserFilter, error) {
 		filter.CreatedTo, err = parseAdminDate(value, true)
 		if err != nil {
 			return AdminUserFilter{}, fmt.Errorf("結束時間格式錯誤")
+		}
+	}
+
+	return filter, nil
+}
+
+func parseAdminUserInvitationFilter(r *http.Request) (AdminUserInvitationFilter, error) {
+	query := r.URL.Query()
+	filter := AdminUserInvitationFilter{
+		Email:   strings.TrimSpace(query.Get("email")),
+		Page:    1,
+		PerPage: 10,
+	}
+
+	var err error
+	if value := strings.TrimSpace(query.Get("page")); value != "" {
+		filter.Page, err = strconv.Atoi(value)
+		if err != nil || filter.Page < 1 {
+			return AdminUserInvitationFilter{}, fmt.Errorf("頁碼格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("per_page")); value != "" {
+		filter.PerPage, err = strconv.Atoi(value)
+		if err != nil || !validAdminPerPage(filter.PerPage) {
+			return AdminUserInvitationFilter{}, fmt.Errorf("每頁筆數格式錯誤")
 		}
 	}
 

@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260708-1">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260709-1">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260708-1"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260709-1"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
@@ -27,6 +27,10 @@
             <button type="button" class="sidebar-subitem is-active" data-menu-item="users">
               <span class="menu-glyph" aria-hidden="true">▣</span>
               <span>用戶管理</span>
+            </button>
+            <button type="button" class="sidebar-subitem" data-menu-item="userInvitations">
+              <span class="menu-glyph" aria-hidden="true">◇</span>
+              <span>註冊邀請</span>
             </button>
           </div>
         </div>
@@ -150,7 +154,6 @@
               <div class="filter-actions">
                 <button type="submit" class="btn" id="refresh-users-btn">搜尋</button>
                 <button type="button" class="btn btn-primary" data-menu-item="userCreate">新增</button>
-                <button type="button" class="btn btn-primary btn-registration-invite" data-menu-item="userInvite">註冊邀請</button>
               </div>
             </form>
 
@@ -241,7 +244,7 @@
           </div>
         </section>
 
-        <section data-view="userInvite" hidden>
+        <section data-view="userInvitations" hidden>
           <div class="admin-page-panel">
             <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
               <button type="button" class="breadcrumb-back" data-menu-item="users" aria-label="返回用戶管理">←</button>
@@ -252,19 +255,52 @@
               <span>註冊邀請</span>
             </nav>
 
-            <form class="user-create-form" id="user-invite-form">
-              <div class="user-create-fields">
-                <label class="user-create-field">
-                  <span>Email</span>
-                  <input type="email" id="invite-user-email" maxlength="255" autocomplete="off" required>
-                </label>
-              </div>
-
-              <div class="user-create-actions">
-                <button type="submit" class="btn btn-primary btn-compact" id="submit-invite-user">發送註冊邀請</button>
-                <button type="reset" class="btn btn-compact">重置</button>
+            <form class="user-filter-panel invitation-filter-panel" id="user-invitations-filter-form" aria-label="註冊邀請篩選">
+              <label class="filter-email">
+                <span>Email</span>
+                <input type="search" id="user-invitation-email-filter" inputmode="email" placeholder="請輸入Email" autocomplete="off">
+              </label>
+              <div class="filter-actions">
+                <button type="submit" class="btn" id="refresh-user-invitations-btn">搜尋</button>
+                <button type="button" class="btn btn-primary" id="open-user-invite-modal">發送註冊邀請</button>
               </div>
             </form>
+
+            <section class="user-table-card invitation-table-card">
+              <div class="is-empty" id="user-invitations-loading" hidden>
+                <div class="loading"></div>
+                <p>載入中...</p>
+              </div>
+              <div class="is-empty" id="user-invitations-empty" hidden>
+                <p>找不到註冊邀請</p>
+              </div>
+              <table class="data-table invitation-list-table" id="user-invitations-table">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>狀態</th>
+                    <th>寄送時間</th>
+                    <th>到期時間</th>
+                    <th>完成註冊時間</th>
+                    <th>邀請人</th>
+                  </tr>
+                </thead>
+                <tbody id="user-invitations-tbody"></tbody>
+              </table>
+            </section>
+            <div class="table-pagination" id="user-invitations-pagination" hidden>
+              <span class="pagination-total">總筆數: <strong id="user-invitations-total">0</strong></span>
+              <nav class="pagination-pages" id="user-invitations-pages" aria-label="註冊邀請列表分頁"></nav>
+              <label class="pagination-size">
+                <span class="sr-only">每頁筆數</span>
+                <select id="user-invitations-per-page">
+                  <option value="10" selected>10 / 頁</option>
+                  <option value="20">20 / 頁</option>
+                  <option value="50">50 / 頁</option>
+                  <option value="100">100 / 頁</option>
+                </select>
+              </label>
+            </div>
           </div>
         </section>
 
@@ -481,6 +517,29 @@
         <button type="button" class="btn" id="modal-cancel-btn">取消</button>
         <button type="button" class="btn btn-primary" id="modal-confirm-btn">確認</button>
       </div>
+    </div>
+  </div>
+  <div class="modal invite-modal" id="user-invite-modal" hidden>
+    <div class="modal-content invite-modal-content" role="dialog" aria-modal="true" aria-labelledby="user-invite-modal-title">
+      <div class="modal-header">
+        <strong id="user-invite-modal-title">發送註冊邀請</strong>
+        <button type="button" class="modal-close" id="close-user-invite-modal" aria-label="關閉">×</button>
+      </div>
+      <form class="user-create-form invitation-create-form" id="user-invite-form">
+        <div class="modal-body">
+          <div class="user-create-fields">
+            <label class="user-create-field">
+              <span>Email</span>
+              <input type="email" id="invite-user-email" maxlength="255" autocomplete="off" required>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary btn-compact" id="submit-invite-user">發送註冊邀請</button>
+          <button type="reset" class="btn btn-compact">重置</button>
+        </div>
+      </form>
     </div>
   </div>
 </body>

@@ -185,6 +185,31 @@ func (m *mockRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error
 	}, nil
 }
 
+func (m *mockRepository) ListUserInvitations(filter AdminUserInvitationFilter) (AdminUserInvitationPage, error) {
+	invitations := make([]AdminUserInvitationSummary, 0, len(m.invitationsByEmail))
+	for _, invitation := range m.invitationsByEmail {
+		invitations = append(invitations, AdminUserInvitationSummary{
+			ID:               invitation.ID,
+			Email:            invitation.Email,
+			Status:           invitation.Status,
+			InvitedByAdminID: invitation.InvitedByAdminID,
+			AcceptedUserID:   invitation.AcceptedUserID,
+			ExpiresAt:        invitation.ExpiresAt,
+			SentAt:           invitation.SentAt,
+			AcceptedAt:       invitation.AcceptedAt,
+			CreatedAt:        invitation.CreatedAt,
+			UpdatedAt:        invitation.UpdatedAt,
+		})
+	}
+	return AdminUserInvitationPage{
+		Items:      invitations,
+		Total:      len(invitations),
+		Page:       filter.Page,
+		PerPage:    filter.PerPage,
+		TotalPages: 1,
+	}, nil
+}
+
 func (m *mockRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
 	admins := make([]SystemAdminSummary, 0)
 	for _, admin := range m.adminsByID {

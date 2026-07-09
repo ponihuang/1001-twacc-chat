@@ -286,6 +286,28 @@ func (s *Service) ListUsers(filter AdminUserFilter, actor AdminSessionPrincipal)
 	}, 200, nil
 }
 
+// ListUserInvitations returns registration invitations for the admin console.
+func (s *Service) ListUserInvitations(filter AdminUserInvitationFilter, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	invitations, err := s.repo.ListUserInvitations(filter)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_INVITATIONS_OK",
+		Message: "註冊邀請列表讀取成功",
+		Data:    invitations,
+	}, 200, nil
+}
+
 // ListSystemAdmins returns system-admin accounts for the admin console.
 func (s *Service) ListSystemAdmins(filter SystemAdminFilter, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {

@@ -933,6 +933,18 @@ button:disabled {
   padding: 24px 28px;
 }
 
+.invite-modal .user-create-form {
+  width: 100%;
+}
+
+.invite-modal-content {
+  width: min(560px, calc(100vw - 40px));
+}
+
+.invitation-create-form .modal-body {
+  min-height: 96px;
+}
+
 .modal-close {
   width: 34px;
   height: 34px;

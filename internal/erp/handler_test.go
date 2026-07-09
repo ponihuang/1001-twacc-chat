@@ -66,6 +66,10 @@ func (s *stubIntegrationRepository) ListUsers(filter AdminUserFilter) (AdminUser
 	return AdminUserPage{Items: []AdminUserSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
 
+func (s *stubIntegrationRepository) ListUserInvitations(filter AdminUserInvitationFilter) (AdminUserInvitationPage, error) {
+	return AdminUserInvitationPage{Items: []AdminUserInvitationSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
+}
+
 func (s *stubIntegrationRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
 	return SystemAdminPage{Items: []SystemAdminSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
