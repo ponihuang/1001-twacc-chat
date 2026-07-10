@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260710-5">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260710-6">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260710-5"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260710-6"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
@@ -279,7 +279,7 @@
               </label>
               <div class="filter-actions">
                 <button type="submit" class="btn" id="refresh-user-invitations-btn">搜尋</button>
-                <button type="button" class="btn btn-primary" id="open-user-invite-modal">發送註冊邀請</button>
+                <button type="button" class="btn btn-primary" id="open-user-invite-modal">新增</button>
               </div>
             </form>
 
@@ -298,7 +298,7 @@
                     <th>狀態</th>
                     <th>寄送時間</th>
                     <th>到期時間</th>
-                    <th>完成註冊時間</th>
+                    <th>完成時間</th>
                     <th>邀請人</th>
                     <th>選項</th>
                   </tr>
@@ -554,7 +554,7 @@
         </div>
 
         <div class="modal-footer">
-          <button type="submit" class="btn btn-primary btn-compact" id="submit-invite-user">發送註冊邀請</button>
+          <button type="submit" class="btn btn-primary btn-compact" id="submit-invite-user">發送</button>
           <button type="reset" class="btn btn-compact">重置</button>
         </div>
       </form>

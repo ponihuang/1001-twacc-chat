@@ -984,6 +984,11 @@ button:disabled {
   color: var(--admin-text);
 }
 
+.confirm-modal-email {
+  color: var(--admin-accent);
+  font-weight: 600;
+}
+
 .confirm-modal .modal-footer {
   padding: 0 28px 26px;
 }

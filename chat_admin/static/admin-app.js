@@ -1402,9 +1402,13 @@
 
     openConfirmModal(
       '重新發送註冊邀請',
-      `確定要重新發送註冊邀請給 ${email}？`,
+      [
+        '確定要重新發送註冊邀請給 ',
+        { text: email, className: 'confirm-modal-email' },
+        '？'
+      ],
       () => resendUserInvitation(email, button),
-      '確認發送'
+      '確認'
     );
   }
 
@@ -1876,7 +1880,17 @@
       elements.modalBody.replaceChildren();
       const messageEl = document.createElement('p');
       messageEl.className = 'confirm-modal-message';
-      messageEl.textContent = message;
+      const messageParts = Array.isArray(message) ? message : [message];
+      messageParts.forEach((part) => {
+        const span = document.createElement('span');
+        if (part && typeof part === 'object') {
+          span.textContent = part.text || '';
+          if (part.className) span.className = part.className;
+        } else {
+          span.textContent = String(part ?? '');
+        }
+        messageEl.appendChild(span);
+      });
       elements.modalBody.appendChild(messageEl);
     }
     if (elements.modalConfirmBtn) {
