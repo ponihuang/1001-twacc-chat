@@ -90,6 +90,7 @@ type AdminUserPage struct {
 type AdminUserInvitationFilter struct {
 	Email   string
 	Status  string
+	Sorting string
 	Page    int
 	PerPage int
 }

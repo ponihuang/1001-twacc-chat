@@ -372,14 +372,24 @@ button:disabled {
 }
 
 .invitation-filter-panel {
-  grid-template-columns: 320px 150px auto;
+  grid-template-columns: 280px 140px 170px auto;
   gap: 14px 18px;
-  max-width: 760px;
+  max-width: 920px;
 }
 
 .invitation-filter-panel .filter-actions {
   grid-column: auto;
   min-width: 0;
+}
+
+.invitation-list-table {
+  min-width: 1180px;
+}
+
+.invitation-action-btn {
+  min-width: 64px;
+  height: 32px;
+  padding: 0 14px;
 }
 
 .admin-filter-panel {
@@ -939,6 +949,43 @@ button:disabled {
 .modal-body {
   min-height: 120px;
   padding: 24px 28px;
+}
+
+.modal.confirm-modal {
+  background: rgba(36, 24, 16, 0.38);
+}
+
+.confirm-modal .modal-content {
+  width: min(460px, calc(100vw - 40px));
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(36, 24, 16, 0.22);
+}
+
+.confirm-modal .modal-header,
+.confirm-modal .modal-footer {
+  min-height: auto;
+  border: 0;
+}
+
+.confirm-modal .modal-header {
+  padding: 26px 28px 8px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.confirm-modal .modal-body {
+  min-height: auto;
+  padding: 6px 28px 20px;
+}
+
+.confirm-modal-message {
+  margin: 0;
+  line-height: 1.7;
+  color: var(--admin-text);
+}
+
+.confirm-modal .modal-footer {
+  padding: 0 28px 26px;
 }
 
 .invite-modal .user-create-form {

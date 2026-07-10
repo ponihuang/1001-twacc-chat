@@ -277,6 +277,33 @@ func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// ResendUserInvitation handles POST /api/system-admin/user-invitations/resend.
+func (h *Handler) ResendUserInvitation(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminInviteUserRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.ResendUserInvitation(req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // CreateSystemAdmin handles POST /api/system-admin/admins.
 func (h *Handler) CreateSystemAdmin(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -687,6 +714,7 @@ func parseAdminUserInvitationFilter(r *http.Request) (AdminUserInvitationFilter,
 	filter := AdminUserInvitationFilter{
 		Email:   strings.TrimSpace(query.Get("email")),
 		Status:  strings.TrimSpace(query.Get("status")),
+		Sorting: strings.TrimSpace(query.Get("sorting")),
 		Page:    1,
 		PerPage: 10,
 	}
@@ -801,6 +829,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "EMAIL_ALREADY_EXISTS", Message: "Email 已存在"}
 	case errors.Is(err, ErrUserInvitationPending):
 		return Response{Success: false, Code: "USER_INVITATION_PENDING", Message: "該 Email 已有待註冊邀請"}
+	case errors.Is(err, ErrUserInvitationCompleted):
+		return Response{Success: false, Code: "USER_INVITATION_COMPLETED", Message: "該註冊邀請已完成"}
 	case errors.Is(err, ErrInvitationMailerUnavailable):
 		return Response{Success: false, Code: "MAILER_UNAVAILABLE", Message: "寄信服務尚未設定"}
 	case errors.Is(err, ErrSystemAdminCannotChat):

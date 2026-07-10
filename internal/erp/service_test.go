@@ -137,6 +137,7 @@ func (m *mockRepository) RefreshUserInvitation(params UserInvitationRefreshParam
 			continue
 		}
 		invitation.TokenHash = params.TokenHash
+		invitation.Status = "pending"
 		invitation.InvitedByAdminID = params.InvitedByAdminID
 		invitation.ExpiresAt = params.ExpiresAt
 		invitation.SentAt = nil
@@ -928,6 +929,86 @@ func TestInviteUserRefreshesUnsentPendingInvitation(t *testing.T) {
 	data, ok := resp.Data.(map[string]any)
 	if !ok || data["token"] == "" {
 		t.Fatalf("response did not include new token: %#v", resp.Data)
+	}
+}
+
+func TestResendUserInvitationRefreshesPendingInvitation(t *testing.T) {
+	sentAt := time.Now().UTC().Add(-time.Hour)
+	repo := &mockRepository{
+		usersByID:       map[int64]User{9: {ID: 9}},
+		usersByExternal: map[string]User{},
+		invitationsByEmail: map[string]UserInvitation{
+			"new@example.com": {
+				ID:        12,
+				Email:     "new@example.com",
+				TokenHash: "old-token-hash",
+				Status:    "pending",
+				ExpiresAt: time.Now().UTC().Add(time.Hour),
+				SentAt:    &sentAt,
+			},
+		},
+		systemAdmins: map[int64]bool{9: true},
+		adminsByID:   map[int64]SystemAdminSummary{9: {ID: 9, UserID: 9, AdminUserID: 9, Role: "system_admin", Status: "active"}},
+	}
+	mailer := &mockInvitationMailer{}
+	service := NewService(repo, &mockSessions{})
+	service.SetInvitationMailer(mailer)
+	service.SetInvitationBaseURL("https://chat.example.com")
+
+	resp, status, err := service.ResendUserInvitation(AdminInviteUserRequest{Email: "new@example.com"}, AdminSessionPrincipal{AdminUserID: 9})
+	if err != nil {
+		t.Fatalf("ResendUserInvitation returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if resp.Code != "USER_INVITATION_RESENT" {
+		t.Fatalf("code = %q, want USER_INVITATION_RESENT", resp.Code)
+	}
+	if repo.refreshedInvitation.ID != 12 {
+		t.Fatalf("refreshed invitation id = %d, want 12", repo.refreshedInvitation.ID)
+	}
+	if repo.refreshedInvitation.TokenHash == "" || repo.refreshedInvitation.TokenHash == "old-token-hash" {
+		t.Fatalf("token hash was not refreshed: %q", repo.refreshedInvitation.TokenHash)
+	}
+	if mailer.email != "new@example.com" {
+		t.Fatalf("mailer email = %q, want new@example.com", mailer.email)
+	}
+	if repo.sentInvitationID != 12 {
+		t.Fatalf("sent invitation id = %d, want 12", repo.sentInvitationID)
+	}
+}
+
+func TestResendUserInvitationRejectsCompletedInvitation(t *testing.T) {
+	acceptedAt := time.Now().UTC().Add(-time.Hour)
+	repo := &mockRepository{
+		usersByID:       map[int64]User{9: {ID: 9}},
+		usersByExternal: map[string]User{},
+		invitationsByEmail: map[string]UserInvitation{
+			"new@example.com": {
+				ID:             12,
+				Email:          "new@example.com",
+				Status:         "accepted",
+				AcceptedUserID: 88,
+				AcceptedAt:     &acceptedAt,
+				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+			},
+		},
+		systemAdmins: map[int64]bool{9: true},
+		adminsByID:   map[int64]SystemAdminSummary{9: {ID: 9, UserID: 9, AdminUserID: 9, Role: "system_admin", Status: "active"}},
+	}
+	service := NewService(repo, &mockSessions{})
+	service.SetInvitationMailer(&mockInvitationMailer{})
+
+	_, status, err := service.ResendUserInvitation(AdminInviteUserRequest{Email: "new@example.com"}, AdminSessionPrincipal{AdminUserID: 9})
+	if !errors.Is(err, ErrUserInvitationCompleted) {
+		t.Fatalf("expected ErrUserInvitationCompleted, got %v", err)
+	}
+	if status != 409 {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if repo.refreshedInvitation.ID != 0 {
+		t.Fatal("completed invitation should not be refreshed")
 	}
 }
 

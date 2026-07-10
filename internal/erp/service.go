@@ -27,6 +27,7 @@ var (
 	ErrInvalidEmail                = errors.New("invalid email")
 	ErrEmailAlreadyExists          = errors.New("email already exists")
 	ErrUserInvitationPending       = errors.New("user invitation pending")
+	ErrUserInvitationCompleted     = errors.New("user invitation completed")
 	ErrInvitationMailerUnavailable = errors.New("invitation mailer unavailable")
 	ErrInvalidStatus               = errors.New("invalid status")
 	ErrInvalidPassword             = errors.New("invalid password")
@@ -467,6 +468,77 @@ func (s *Service) InviteUser(req AdminInviteUserRequest, actor AdminSessionPrinc
 			"expires_at": invitation.ExpiresAt.Format(time.RFC3339),
 		},
 	}, 201, nil
+}
+
+// ResendUserInvitation refreshes and resends an invitation that has not been completed.
+func (s *Service) ResendUserInvitation(req AdminInviteUserRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	email := normalizeEmail(req.Email)
+	if !isValidEmail(email) {
+		return Response{}, statusCode(ErrInvalidEmail), ErrInvalidEmail
+	}
+
+	if _, err := s.repo.FindUserByEmail(email); err == nil {
+		return Response{}, statusCode(ErrEmailAlreadyExists), ErrEmailAlreadyExists
+	} else if !errors.Is(err, ErrUserNotFound) {
+		return Response{}, statusCode(err), err
+	}
+
+	if s.invitationMailer == nil {
+		return Response{}, statusCode(ErrInvitationMailerUnavailable), ErrInvitationMailerUnavailable
+	}
+
+	existingInvitation, err := s.repo.FindUserInvitationByEmail(email)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if existingInvitation.Status == "accepted" || existingInvitation.AcceptedAt != nil || existingInvitation.AcceptedUserID > 0 {
+		return Response{}, statusCode(ErrUserInvitationCompleted), ErrUserInvitationCompleted
+	}
+
+	token, tokenHash, err := newInvitationToken()
+	if err != nil {
+		return Response{}, 500, err
+	}
+	expiresAt := time.Now().UTC().Add(s.invitationTTL)
+	invitation, err := s.repo.RefreshUserInvitation(UserInvitationRefreshParams{
+		ID:               existingInvitation.ID,
+		TokenHash:        tokenHash,
+		InvitedByAdminID: actor.AdminUserID,
+		ExpiresAt:        expiresAt,
+	})
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	inviteURL := buildInvitationURL(s.invitationBaseURL, token)
+	if err := s.invitationMailer.SendUserInvitation(invitation.Email, inviteURL, invitation.ExpiresAt); err != nil {
+		return Response{}, 502, err
+	}
+	sentAt := time.Now().UTC()
+	if err := s.repo.MarkUserInvitationSent(invitation.ID, sentAt); err != nil {
+		return Response{}, 500, err
+	}
+	invitation.SentAt = &sentAt
+
+	return Response{
+		Success: true,
+		Code:    "USER_INVITATION_RESENT",
+		Message: "註冊邀請已重新發送",
+		Data: map[string]any{
+			"id":         invitation.ID,
+			"email":      invitation.Email,
+			"token":      token,
+			"invite_url": inviteURL,
+			"expires_at": invitation.ExpiresAt.Format(time.RFC3339),
+		},
+	}, 200, nil
 }
 
 // CreateSystemAdmin creates a backend admin account.
@@ -1186,7 +1258,8 @@ func statusCode(err error) int {
 	case errors.Is(err, ErrUserAlreadyExists):
 		return 409
 	case errors.Is(err, ErrEmailAlreadyExists),
-		errors.Is(err, ErrUserInvitationPending):
+		errors.Is(err, ErrUserInvitationPending),
+		errors.Is(err, ErrUserInvitationCompleted):
 		return 409
 	default:
 		return 500

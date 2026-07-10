@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260710-1">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-office-20260710-5">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-office-20260710-1"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-office-20260710-5"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
@@ -269,6 +269,14 @@
                   <option value="expired">已過期</option>
                 </select>
               </label>
+              <label class="filter-sort">
+                <span>排序</span>
+                <select id="user-invitation-sort">
+                  <option value="sent_at">寄送時間</option>
+                  <option value="expires_at">到期時間</option>
+                  <option value="accepted_at">完成時間</option>
+                </select>
+              </label>
               <div class="filter-actions">
                 <button type="submit" class="btn" id="refresh-user-invitations-btn">搜尋</button>
                 <button type="button" class="btn btn-primary" id="open-user-invite-modal">發送註冊邀請</button>
@@ -292,6 +300,7 @@
                     <th>到期時間</th>
                     <th>完成註冊時間</th>
                     <th>邀請人</th>
+                    <th>選項</th>
                   </tr>
                 </thead>
                 <tbody id="user-invitations-tbody"></tbody>
@@ -521,7 +530,7 @@
   <div class="modal" id="admin-modal" hidden>
     <div class="modal-content">
       <div class="modal-header" id="modal-title">標題</div>
-      <div id="modal-body"></div>
+      <div class="modal-body" id="modal-body"></div>
       <div class="modal-footer">
         <button type="button" class="btn" id="modal-cancel-btn">取消</button>
         <button type="button" class="btn btn-primary" id="modal-confirm-btn">確認</button>

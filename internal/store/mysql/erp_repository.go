@@ -239,7 +239,7 @@ func (r *IntegrationRepository) CreateUserInvitation(params erp.UserInvitationCr
 	return r.findUserInvitationByID(invitationID)
 }
 
-// RefreshUserInvitation replaces the token on an existing unsent pending invitation.
+// RefreshUserInvitation replaces the token on an unfinished invitation.
 func (r *IntegrationRepository) RefreshUserInvitation(params erp.UserInvitationRefreshParams) (erp.UserInvitation, error) {
 	result, err := r.db.Exec(
 		`UPDATE user_invitations
@@ -251,7 +251,7 @@ func (r *IntegrationRepository) RefreshUserInvitation(params erp.UserInvitationR
 		        sent_at = NULL,
 		        accepted_at = NULL,
 		        updated_at = CURRENT_TIMESTAMP
-		  WHERE id = ? AND status = 'pending'`,
+		  WHERE id = ? AND status <> 'accepted'`,
 		params.TokenHash,
 		nullableInt64(params.InvitedByAdminID),
 		params.ExpiresAt,
@@ -330,7 +330,7 @@ func (r *IntegrationRepository) ListUserInvitations(filter erp.AdminUserInvitati
 	                 ui.accepted_user_id, ui.expires_at, ui.sent_at, ui.accepted_at,
 	                 ui.created_at, ui.updated_at
 	            ` + from + where.String() + `
-	        ORDER BY ui.created_at DESC, ui.id DESC
+	        ` + userInvitationOrderBy(filter.Sorting) + `
 	           LIMIT ? OFFSET ?`
 	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
 
@@ -400,6 +400,17 @@ func validUserInvitationStatus(status string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func userInvitationOrderBy(sorting string) string {
+	switch strings.TrimSpace(sorting) {
+	case "expires_at":
+		return "ORDER BY ui.expires_at DESC, ui.id DESC"
+	case "accepted_at":
+		return "ORDER BY ui.accepted_at IS NULL, ui.accepted_at DESC, ui.id DESC"
+	default:
+		return "ORDER BY ui.sent_at IS NULL, ui.sent_at DESC, ui.created_at DESC, ui.id DESC"
 	}
 }
 

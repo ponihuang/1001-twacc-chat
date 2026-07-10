@@ -20,6 +20,7 @@
   let userInvitationsPerPage = 10;
   let adminsPage = 1;
   let adminsPerPage = 10;
+  let modalConfirmHandler = null;
 
   // Adjust each user-table column here. Use width for a fixed width or
   // minWidth when the column may grow with the available table width.
@@ -131,6 +132,7 @@
       userInvitationsFilterForm: document.getElementById('user-invitations-filter-form'),
       userInvitationEmailFilter: document.getElementById('user-invitation-email-filter'),
       userInvitationStatusFilter: document.getElementById('user-invitation-status-filter'),
+      userInvitationSort: document.getElementById('user-invitation-sort'),
       userInvitationsTable: document.getElementById('user-invitations-table'),
       userInvitationsTbody: document.getElementById('user-invitations-tbody'),
       userInvitationsLoading: document.getElementById('user-invitations-loading'),
@@ -394,7 +396,22 @@
       elements.modalCancelBtn.addEventListener('click', closeModal);
     }
     if (elements.modalConfirmBtn) {
-      elements.modalConfirmBtn.addEventListener('click', closeModal);
+      elements.modalConfirmBtn.addEventListener('click', async () => {
+        if (!modalConfirmHandler) {
+          closeModal();
+          return;
+        }
+
+        elements.modalConfirmBtn.disabled = true;
+        try {
+          await modalConfirmHandler();
+          closeModal();
+        } catch (err) {
+          // Keep the modal open so the admin can retry after the visible error.
+        } finally {
+          elements.modalConfirmBtn.disabled = false;
+        }
+      });
     }
 
     // Logout
@@ -863,8 +880,10 @@
     const params = new URLSearchParams();
     const email = elements.userInvitationEmailFilter?.value?.trim();
     const status = elements.userInvitationStatusFilter?.value?.trim();
+    const sorting = elements.userInvitationSort?.value?.trim();
     if (email) params.set('email', email);
     if (status) params.set('status', status);
+    if (sorting) params.set('sorting', sorting);
     params.set('page', String(userInvitationsPage));
     params.set('per_page', String(userInvitationsPerPage));
     return params;
@@ -882,7 +901,8 @@
         formatDate(invitation.sent_at),
         formatDate(invitation.expires_at),
         formatDate(invitation.accepted_at),
-        invitationInviter(invitation)
+        invitationInviter(invitation),
+        null
       ].forEach((value, index) => {
         const cell = document.createElement('td');
         if (index === 0) {
@@ -895,6 +915,17 @@
           status.className = 'status-badge';
           status.textContent = invitationStatusLabel(invitation.status);
           cell.appendChild(status);
+        } else if (index === 6) {
+          if (canResendInvitation(invitation)) {
+            const resendButton = document.createElement('button');
+            resendButton.type = 'button';
+            resendButton.className = 'btn invitation-action-btn';
+            resendButton.textContent = '重送';
+            resendButton.addEventListener('click', () => confirmResendUserInvitation(invitation, resendButton));
+            cell.appendChild(resendButton);
+          } else {
+            cell.textContent = '--';
+          }
         } else {
           cell.textContent = value;
         }
@@ -902,6 +933,10 @@
       });
       elements.userInvitationsTbody.appendChild(row);
     });
+  }
+
+  function canResendInvitation(invitation) {
+    return invitation && invitation.email && invitation.status !== 'accepted';
   }
 
   function invitationStatusLabel(status) {
@@ -1361,6 +1396,42 @@
     }
   }
 
+  function confirmResendUserInvitation(invitation, button) {
+    const email = invitation.email || '';
+    if (!email) return;
+
+    openConfirmModal(
+      '重新發送註冊邀請',
+      `確定要重新發送註冊邀請給 ${email}？`,
+      () => resendUserInvitation(email, button),
+      '確認發送'
+    );
+  }
+
+  async function resendUserInvitation(email, button) {
+    if (button) button.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/user-invitations/resend', {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '重新發送註冊邀請失敗');
+      }
+
+      await loadUserInvitations();
+      showSuccess('註冊邀請已重新發送');
+    } catch (err) {
+      showError(err.message || '重新發送註冊邀請失敗');
+      throw err;
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
   function openUserEdit(userID) {
     editingUserID = String(userID);
     switchView('userEdit', { path: `/office/user/${encodeURIComponent(editingUserID)}/edit` });
@@ -1786,8 +1857,35 @@
    */
   function closeModal() {
     if (elements.modal) {
-      elements.modal.classList.remove('is-active');
+      elements.modal.classList.remove('is-active', 'confirm-modal');
       elements.modal.hidden = true;
+    }
+    modalConfirmHandler = null;
+    if (elements.modalConfirmBtn) {
+      elements.modalConfirmBtn.disabled = false;
+      elements.modalConfirmBtn.textContent = '確認';
+    }
+  }
+
+  function openConfirmModal(title, message, onConfirm, confirmText = '確認') {
+    modalConfirmHandler = onConfirm;
+    if (elements.modalTitle) {
+      elements.modalTitle.textContent = title;
+    }
+    if (elements.modalBody) {
+      elements.modalBody.replaceChildren();
+      const messageEl = document.createElement('p');
+      messageEl.className = 'confirm-modal-message';
+      messageEl.textContent = message;
+      elements.modalBody.appendChild(messageEl);
+    }
+    if (elements.modalConfirmBtn) {
+      elements.modalConfirmBtn.disabled = false;
+      elements.modalConfirmBtn.textContent = confirmText;
+    }
+    if (elements.modal) {
+      elements.modal.hidden = false;
+      elements.modal.classList.add('is-active', 'confirm-modal');
     }
   }
 
