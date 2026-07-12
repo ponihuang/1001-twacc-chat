@@ -169,6 +169,33 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// ListUserInvitations handles GET /api/system-admin/user-invitations.
+func (h *Handler) ListUserInvitations(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	filter, err := parseAdminUserInvitationFilter(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	resp, status, err := h.service.ListUserInvitations(filter, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // ListSystemAdmins handles GET /api/system-admin/admins.
 func (h *Handler) ListSystemAdmins(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -242,6 +269,33 @@ func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, status, err := h.service.InviteUser(req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// ResendUserInvitation handles POST /api/system-admin/user-invitations/resend.
+func (h *Handler) ResendUserInvitation(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminInviteUserRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.ResendUserInvitation(req, principal)
 	if err != nil {
 		writeJSON(w, status, errorResponse(err))
 		return
@@ -655,6 +709,33 @@ func parseAdminUserFilter(r *http.Request) (AdminUserFilter, error) {
 	return filter, nil
 }
 
+func parseAdminUserInvitationFilter(r *http.Request) (AdminUserInvitationFilter, error) {
+	query := r.URL.Query()
+	filter := AdminUserInvitationFilter{
+		Email:   strings.TrimSpace(query.Get("email")),
+		Status:  strings.TrimSpace(query.Get("status")),
+		Sorting: strings.TrimSpace(query.Get("sorting")),
+		Page:    1,
+		PerPage: 10,
+	}
+
+	var err error
+	if value := strings.TrimSpace(query.Get("page")); value != "" {
+		filter.Page, err = strconv.Atoi(value)
+		if err != nil || filter.Page < 1 {
+			return AdminUserInvitationFilter{}, fmt.Errorf("頁碼格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("per_page")); value != "" {
+		filter.PerPage, err = strconv.Atoi(value)
+		if err != nil || !validAdminPerPage(filter.PerPage) {
+			return AdminUserInvitationFilter{}, fmt.Errorf("每頁筆數格式錯誤")
+		}
+	}
+
+	return filter, nil
+}
+
 func parseSystemAdminFilter(r *http.Request) (SystemAdminFilter, error) {
 	query := r.URL.Query()
 	filter := SystemAdminFilter{
@@ -747,7 +828,11 @@ func errorResponse(err error) Response {
 	case errors.Is(err, ErrEmailAlreadyExists):
 		return Response{Success: false, Code: "EMAIL_ALREADY_EXISTS", Message: "Email 已存在"}
 	case errors.Is(err, ErrUserInvitationPending):
-		return Response{Success: false, Code: "USER_INVITATION_PENDING", Message: "该 Email 已有待完成邀請"}
+		return Response{Success: false, Code: "USER_INVITATION_PENDING", Message: "該 Email 已有待註冊邀請"}
+	case errors.Is(err, ErrUserInvitationCompleted):
+		return Response{Success: false, Code: "USER_INVITATION_COMPLETED", Message: "該註冊邀請已完成"}
+	case errors.Is(err, ErrInvitationMailerUnavailable):
+		return Response{Success: false, Code: "MAILER_UNAVAILABLE", Message: "寄信服務尚未設定"}
 	case errors.Is(err, ErrSystemAdminCannotChat):
 		return Response{Success: false, Code: "SYSTEM_ADMIN_CANNOT_CHAT", Message: "system_admin 不可使用聊天功能"}
 	case errors.Is(err, ErrInsufficientRole):

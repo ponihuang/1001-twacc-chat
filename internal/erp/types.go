@@ -86,6 +86,15 @@ type AdminUserPage struct {
 	TotalPages int                `json:"total_pages"`
 }
 
+// AdminUserInvitationFilter contains supported filters for the invitation list.
+type AdminUserInvitationFilter struct {
+	Email   string
+	Status  string
+	Sorting string
+	Page    int
+	PerPage int
+}
+
 // UserInvitation stores a pending invitation for a user to complete registration.
 type UserInvitation struct {
 	ID               int64
@@ -99,6 +108,31 @@ type UserInvitation struct {
 	AcceptedAt       *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+// AdminUserInvitationSummary is the API-facing invitation shape for the admin console.
+type AdminUserInvitationSummary struct {
+	ID                    int64      `json:"id"`
+	Email                 string     `json:"email"`
+	Status                string     `json:"status"`
+	InvitedByAdminID      int64      `json:"invited_by_admin_id,omitempty"`
+	InvitedByAdminAccount string     `json:"invited_by_admin_account,omitempty"`
+	InvitedByAdminName    string     `json:"invited_by_admin_name,omitempty"`
+	AcceptedUserID        int64      `json:"accepted_user_id,omitempty"`
+	ExpiresAt             time.Time  `json:"expires_at"`
+	SentAt                *time.Time `json:"sent_at,omitempty"`
+	AcceptedAt            *time.Time `json:"accepted_at,omitempty"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
+}
+
+// AdminUserInvitationPage is the paginated response for the invitation list.
+type AdminUserInvitationPage struct {
+	Items      []AdminUserInvitationSummary `json:"items"`
+	Total      int                          `json:"total"`
+	Page       int                          `json:"page"`
+	PerPage    int                          `json:"per_page"`
+	TotalPages int                          `json:"total_pages"`
 }
 
 // SystemAdminFilter contains supported filters for the system-admin list.
@@ -307,6 +341,14 @@ type UserInvitationCreateParams struct {
 	SentAt           *time.Time
 }
 
+// UserInvitationRefreshParams carries a new token for an existing unsent invitation.
+type UserInvitationRefreshParams struct {
+	ID               int64
+	TokenHash        string
+	InvitedByAdminID int64
+	ExpiresAt        time.Time
+}
+
 // Repository defines persistence required by external identity, login, and admin flows.
 type Repository interface {
 	CreateUser(params RegisterParams) (User, error)
@@ -314,8 +356,10 @@ type Repository interface {
 	FindUserByExternal(sourceSystem, externalUserID string) (User, error)
 	FindUserByEmail(email string) (User, error)
 	ListUsers(filter AdminUserFilter) (AdminUserPage, error)
+	ListUserInvitations(filter AdminUserInvitationFilter) (AdminUserInvitationPage, error)
 	FindUserInvitationByEmail(email string) (UserInvitation, error)
 	CreateUserInvitation(params UserInvitationCreateParams) (UserInvitation, error)
+	RefreshUserInvitation(params UserInvitationRefreshParams) (UserInvitation, error)
 	MarkUserInvitationSent(invitationID int64, sentAt time.Time) error
 	ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)

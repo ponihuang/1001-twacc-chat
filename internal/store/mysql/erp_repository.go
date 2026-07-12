@@ -176,6 +176,7 @@ func (r *IntegrationRepository) FindUserInvitationByEmail(email string) (erp.Use
 		        expires_at, sent_at, accepted_at, created_at, updated_at
 		   FROM user_invitations
 		  WHERE LOWER(email) = LOWER(?)
+		  ORDER BY created_at DESC, id DESC
 		  LIMIT 1`,
 		strings.TrimSpace(email),
 	)
@@ -238,6 +239,41 @@ func (r *IntegrationRepository) CreateUserInvitation(params erp.UserInvitationCr
 	return r.findUserInvitationByID(invitationID)
 }
 
+// RefreshUserInvitation replaces the token on an unfinished invitation.
+func (r *IntegrationRepository) RefreshUserInvitation(params erp.UserInvitationRefreshParams) (erp.UserInvitation, error) {
+	result, err := r.db.Exec(
+		`UPDATE user_invitations
+		    SET token_hash = ?,
+		        status = 'pending',
+		        invited_by_admin_id = ?,
+		        accepted_user_id = NULL,
+		        expires_at = ?,
+		        sent_at = NULL,
+		        accepted_at = NULL,
+		        updated_at = CURRENT_TIMESTAMP
+		  WHERE id = ? AND status <> 'accepted'`,
+		params.TokenHash,
+		nullableInt64(params.InvitedByAdminID),
+		params.ExpiresAt,
+		params.ID,
+	)
+	if err != nil {
+		if isDuplicate(err) {
+			return erp.UserInvitation{}, erp.ErrUserInvitationPending
+		}
+		return erp.UserInvitation{}, fmt.Errorf("refresh user invitation: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return erp.UserInvitation{}, fmt.Errorf("refresh user invitation rows affected: %w", err)
+	}
+	if affected == 0 {
+		return erp.UserInvitation{}, erp.ErrUserNotFound
+	}
+
+	return r.findUserInvitationByID(params.ID)
+}
+
 // MarkUserInvitationSent records successful email delivery.
 func (r *IntegrationRepository) MarkUserInvitationSent(invitationID int64, sentAt time.Time) error {
 	result, err := r.db.Exec(
@@ -256,6 +292,126 @@ func (r *IntegrationRepository) MarkUserInvitationSent(invitationID int64, sentA
 		return erp.ErrUserNotFound
 	}
 	return nil
+}
+
+// ListUserInvitations returns one page of registration invitations.
+func (r *IntegrationRepository) ListUserInvitations(filter erp.AdminUserInvitationFilter) (erp.AdminUserInvitationPage, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage < 1 {
+		perPage = 10
+	}
+
+	var where strings.Builder
+	where.WriteString(" WHERE 1 = 1")
+	args := make([]any, 0, 1)
+	if email := strings.TrimSpace(filter.Email); email != "" {
+		where.WriteString(" AND ui.email LIKE ?")
+		args = append(args, "%"+email+"%")
+	}
+	if status := strings.TrimSpace(filter.Status); status != "" && validUserInvitationStatus(status) {
+		where.WriteString(" AND ui.status = ?")
+		args = append(args, status)
+	}
+
+	from := ` FROM user_invitations ui
+	          LEFT JOIN admin_users a ON a.id = ui.invited_by_admin_id`
+
+	var total int
+	if err := r.db.QueryRow("SELECT COUNT(*)"+from+where.String(), args...).Scan(&total); err != nil {
+		return erp.AdminUserInvitationPage{}, fmt.Errorf("count user invitations: %w", err)
+	}
+
+	query := `SELECT ui.id, ui.email, ui.status, ui.invited_by_admin_id,
+	                 COALESCE(a.account, ''), COALESCE(a.display_name, ''),
+	                 ui.accepted_user_id, ui.expires_at, ui.sent_at, ui.accepted_at,
+	                 ui.created_at, ui.updated_at
+	            ` + from + where.String() + `
+	        ` + userInvitationOrderBy(filter.Sorting) + `
+	           LIMIT ? OFFSET ?`
+	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return erp.AdminUserInvitationPage{}, fmt.Errorf("list user invitations: %w", err)
+	}
+	defer rows.Close()
+
+	invitations := make([]erp.AdminUserInvitationSummary, 0)
+	for rows.Next() {
+		var invitation erp.AdminUserInvitationSummary
+		var invitedByAdminID sql.NullInt64
+		var acceptedUserID sql.NullInt64
+		var sentAt sql.NullTime
+		var acceptedAt sql.NullTime
+		if err := rows.Scan(
+			&invitation.ID,
+			&invitation.Email,
+			&invitation.Status,
+			&invitedByAdminID,
+			&invitation.InvitedByAdminAccount,
+			&invitation.InvitedByAdminName,
+			&acceptedUserID,
+			&invitation.ExpiresAt,
+			&sentAt,
+			&acceptedAt,
+			&invitation.CreatedAt,
+			&invitation.UpdatedAt,
+		); err != nil {
+			return erp.AdminUserInvitationPage{}, fmt.Errorf("scan user invitation list: %w", err)
+		}
+		if invitedByAdminID.Valid {
+			invitation.InvitedByAdminID = invitedByAdminID.Int64
+		}
+		if acceptedUserID.Valid {
+			invitation.AcceptedUserID = acceptedUserID.Int64
+		}
+		if sentAt.Valid {
+			invitation.SentAt = &sentAt.Time
+		}
+		if acceptedAt.Valid {
+			invitation.AcceptedAt = &acceptedAt.Time
+		}
+		invitations = append(invitations, invitation)
+	}
+	if err := rows.Err(); err != nil {
+		return erp.AdminUserInvitationPage{}, fmt.Errorf("iterate user invitation list: %w", err)
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+	return erp.AdminUserInvitationPage{
+		Items:      invitations,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func validUserInvitationStatus(status string) bool {
+	switch status {
+	case "pending", "accepted", "expired":
+		return true
+	default:
+		return false
+	}
+}
+
+func userInvitationOrderBy(sorting string) string {
+	switch strings.TrimSpace(sorting) {
+	case "expires_at":
+		return "ORDER BY ui.expires_at DESC, ui.id DESC"
+	case "accepted_at":
+		return "ORDER BY ui.accepted_at IS NULL, ui.accepted_at DESC, ui.id DESC"
+	default:
+		return "ORDER BY ui.sent_at IS NULL, ui.sent_at DESC, ui.created_at DESC, ui.id DESC"
+	}
 }
 
 func (r *IntegrationRepository) findUserInvitationByID(invitationID int64) (erp.UserInvitation, error) {
