@@ -11,7 +11,7 @@
 - 舊 `/admin/dashboard` 導向 `/office`
 - `/office/user` 使用者管理頁
 - `/office/user/create` 新增使用者頁
-- `/office/user/invite` 邀請使用者頁
+- `/office/user/invitations` 註冊邀請管理頁
 - `/office/user/{user_id}/edit` 編輯使用者頁
 - 從 `users` 資料表載入使用者列表
 - 以 `auth_sessions.last_used_at` 顯示最近在線
@@ -52,7 +52,7 @@ chat_admin/
 | `/office` | 後台首頁 |
 | `/office/user` | 使用者管理，已串接資料 |
 | `/office/user/create` | 新增一般使用者 |
-| `/office/user/invite` | 邀請一般使用者 |
+| `/office/user/invitations` | 查詢與發送一般使用者註冊邀請 |
 | `/office/user/{user_id}/edit` | 編輯一般使用者 |
 | `/office/conversations` | 對話管理占位頁 |
 | `/office/admins` | 管理員管理，已串接資料 |

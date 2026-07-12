@@ -16,8 +16,11 @@
   let originalEditableAdmin = null;
   let usersPage = 1;
   let usersPerPage = 10;
+  let userInvitationsPage = 1;
+  let userInvitationsPerPage = 10;
   let adminsPage = 1;
   let adminsPerPage = 10;
+  let modalConfirmHandler = null;
 
   // Adjust each user-table column here. Use width for a fixed width or
   // minWidth when the column may grow with the available table width.
@@ -37,7 +40,7 @@
     dashboard: '/office',
     users: '/office/user',
     userCreate: '/office/user/create',
-    userInvite: '/office/user/invite',
+    userInvitations: '/office/user/invitations',
     userEdit: null,
     admins: '/office/admins',
     adminCreate: '/office/admins/create',
@@ -48,7 +51,8 @@
     if (path) routes[path] = viewName;
     return routes;
   }, {
-    '/admin/dashboard': 'dashboard'
+    '/admin/dashboard': 'dashboard',
+    '/office/user/invite': 'userInvitations'
   });
 
   function resolveInitialView() {
@@ -125,6 +129,22 @@
       createUserStatus: document.getElementById('create-user-status'),
       createUserPassword: document.getElementById('create-user-password'),
       submitCreateUser: document.getElementById('submit-create-user'),
+      userInvitationsFilterForm: document.getElementById('user-invitations-filter-form'),
+      userInvitationEmailFilter: document.getElementById('user-invitation-email-filter'),
+      userInvitationStatusFilter: document.getElementById('user-invitation-status-filter'),
+      userInvitationSort: document.getElementById('user-invitation-sort'),
+      userInvitationsTable: document.getElementById('user-invitations-table'),
+      userInvitationsTbody: document.getElementById('user-invitations-tbody'),
+      userInvitationsLoading: document.getElementById('user-invitations-loading'),
+      userInvitationsEmpty: document.getElementById('user-invitations-empty'),
+      userInvitationsPagination: document.getElementById('user-invitations-pagination'),
+      userInvitationsTotal: document.getElementById('user-invitations-total'),
+      userInvitationsPages: document.getElementById('user-invitations-pages'),
+      userInvitationsPerPage: document.getElementById('user-invitations-per-page'),
+      refreshUserInvitationsBtn: document.getElementById('refresh-user-invitations-btn'),
+      openUserInviteModal: document.getElementById('open-user-invite-modal'),
+      userInviteModal: document.getElementById('user-invite-modal'),
+      closeUserInviteModal: document.getElementById('close-user-invite-modal'),
       userInviteForm: document.getElementById('user-invite-form'),
       inviteUserEmail: document.getElementById('invite-user-email'),
       submitInviteUser: document.getElementById('submit-invite-user'),
@@ -271,6 +291,31 @@
     if (elements.userCreateForm) {
       elements.userCreateForm.addEventListener('submit', createUser);
     }
+    if (elements.userInvitationsFilterForm) {
+      elements.userInvitationsFilterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        userInvitationsPage = 1;
+        loadUserInvitations();
+      });
+    }
+    if (elements.userInvitationsPerPage) {
+      elements.userInvitationsPerPage.addEventListener('change', () => {
+        userInvitationsPerPage = Number(elements.userInvitationsPerPage.value) || 10;
+        userInvitationsPage = 1;
+        loadUserInvitations();
+      });
+    }
+    if (elements.openUserInviteModal) {
+      elements.openUserInviteModal.addEventListener('click', openUserInviteModal);
+    }
+    if (elements.closeUserInviteModal) {
+      elements.closeUserInviteModal.addEventListener('click', closeUserInviteModal);
+    }
+    if (elements.userInviteModal) {
+      elements.userInviteModal.addEventListener('click', (e) => {
+        if (e.target === elements.userInviteModal) closeUserInviteModal();
+      });
+    }
     if (elements.userInviteForm) {
       elements.userInviteForm.addEventListener('submit', inviteUser);
     }
@@ -351,7 +396,22 @@
       elements.modalCancelBtn.addEventListener('click', closeModal);
     }
     if (elements.modalConfirmBtn) {
-      elements.modalConfirmBtn.addEventListener('click', closeModal);
+      elements.modalConfirmBtn.addEventListener('click', async () => {
+        if (!modalConfirmHandler) {
+          closeModal();
+          return;
+        }
+
+        elements.modalConfirmBtn.disabled = true;
+        try {
+          await modalConfirmHandler();
+          closeModal();
+        } catch (err) {
+          // Keep the modal open so the admin can retry after the visible error.
+        } finally {
+          elements.modalConfirmBtn.disabled = false;
+        }
+      });
     }
 
     // Logout
@@ -361,6 +421,18 @@
         logout();
       });
     }
+  }
+
+  function openUserInviteModal() {
+    if (!elements.userInviteModal) return;
+    elements.userInviteModal.hidden = false;
+    requestAnimationFrame(() => elements.inviteUserEmail?.focus());
+  }
+
+  function closeUserInviteModal() {
+    if (!elements.userInviteModal) return;
+    elements.userInviteModal.hidden = true;
+    elements.userInviteForm?.reset();
   }
 
   /**
@@ -383,7 +455,7 @@
     }
 
     // Update menu items
-    const activeMenuItem = viewName === 'userCreate' || viewName === 'userInvite' || viewName === 'userEdit'
+    const activeMenuItem = viewName === 'userCreate' || viewName === 'userEdit'
       ? 'users'
       : viewName === 'adminCreate' || viewName === 'adminEdit' ? 'admins' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
@@ -412,8 +484,8 @@
       case 'userCreate':
         elements.createUserAccount?.focus();
         break;
-      case 'userInvite':
-        elements.userInviteForm?.reset();
+      case 'userInvitations':
+        loadUserInvitations();
         elements.inviteUserEmail?.focus();
         break;
       case 'userEdit':
@@ -763,6 +835,173 @@
     });
     addButton('›', usersPage + 1, { disabled: usersPage >= totalPages || totalPages === 0 });
     elements.usersPagination.hidden = false;
+  }
+
+  async function loadUserInvitations() {
+    if (elements.userInvitationsLoading) elements.userInvitationsLoading.hidden = false;
+    if (elements.userInvitationsEmpty) elements.userInvitationsEmpty.hidden = true;
+    if (elements.userInvitationsTable) elements.userInvitationsTable.hidden = true;
+    if (elements.userInvitationsPagination) elements.userInvitationsPagination.hidden = true;
+
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/user-invitations?${buildUserInvitationQuery().toString()}`);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入註冊邀請列表失敗');
+      }
+
+      const pageData = data.data || {};
+      const invitations = Array.isArray(pageData.items) ? pageData.items : [];
+      const total = Number(pageData.total) || 0;
+      const totalPages = Number(pageData.total_pages) || 0;
+      userInvitationsPage = Number(pageData.page) || userInvitationsPage;
+      userInvitationsPerPage = Number(pageData.per_page) || userInvitationsPerPage;
+
+      if (invitations.length === 0) {
+        showUserInvitationsEmpty();
+        renderUserInvitationsPagination(total, totalPages);
+        return;
+      }
+
+      populateUserInvitationsTable(invitations);
+      if (elements.userInvitationsTable) elements.userInvitationsTable.hidden = false;
+      renderUserInvitationsPagination(total, totalPages);
+    } catch (err) {
+      showError('載入註冊邀請列表失敗: ' + err.message);
+      showUserInvitationsEmpty();
+    } finally {
+      if (elements.userInvitationsLoading) elements.userInvitationsLoading.hidden = true;
+    }
+  }
+
+  function buildUserInvitationQuery() {
+    const params = new URLSearchParams();
+    const email = elements.userInvitationEmailFilter?.value?.trim();
+    const status = elements.userInvitationStatusFilter?.value?.trim();
+    const sorting = elements.userInvitationSort?.value?.trim();
+    if (email) params.set('email', email);
+    if (status) params.set('status', status);
+    if (sorting) params.set('sorting', sorting);
+    params.set('page', String(userInvitationsPage));
+    params.set('per_page', String(userInvitationsPerPage));
+    return params;
+  }
+
+  function populateUserInvitationsTable(invitations) {
+    if (!elements.userInvitationsTbody) return;
+
+    elements.userInvitationsTbody.replaceChildren();
+    invitations.forEach(invitation => {
+      const row = document.createElement('tr');
+      [
+        invitation.email || '--',
+        null,
+        formatDate(invitation.sent_at),
+        formatDate(invitation.expires_at),
+        formatDate(invitation.accepted_at),
+        invitationInviter(invitation),
+        null
+      ].forEach((value, index) => {
+        const cell = document.createElement('td');
+        if (index === 0) {
+          const email = document.createElement('span');
+          email.className = 'account-link';
+          email.textContent = value;
+          cell.appendChild(email);
+        } else if (index === 1) {
+          const status = document.createElement('span');
+          status.className = 'status-badge';
+          status.textContent = invitationStatusLabel(invitation.status);
+          cell.appendChild(status);
+        } else if (index === 6) {
+          if (canResendInvitation(invitation)) {
+            const resendButton = document.createElement('button');
+            resendButton.type = 'button';
+            resendButton.className = 'btn invitation-action-btn';
+            resendButton.textContent = '重送';
+            resendButton.addEventListener('click', () => confirmResendUserInvitation(invitation, resendButton));
+            cell.appendChild(resendButton);
+          } else {
+            cell.textContent = '--';
+          }
+        } else {
+          cell.textContent = value;
+        }
+        row.appendChild(cell);
+      });
+      elements.userInvitationsTbody.appendChild(row);
+    });
+  }
+
+  function canResendInvitation(invitation) {
+    return invitation && invitation.email && invitation.status !== 'accepted';
+  }
+
+  function invitationStatusLabel(status) {
+    switch (status) {
+      case 'pending':
+        return '待註冊';
+      case 'accepted':
+        return '已完成';
+      case 'expired':
+        return '已過期';
+      default:
+        return status || '--';
+    }
+  }
+
+  function invitationInviter(invitation) {
+    return invitation.invited_by_admin_name
+      || invitation.invited_by_admin_account
+      || (invitation.invited_by_admin_id ? String(invitation.invited_by_admin_id) : '--');
+  }
+
+  function renderUserInvitationsPagination(total, totalPages) {
+    if (!elements.userInvitationsPagination || !elements.userInvitationsPages) return;
+
+    if (elements.userInvitationsTotal) elements.userInvitationsTotal.textContent = String(total);
+    if (elements.userInvitationsPerPage) elements.userInvitationsPerPage.value = String(userInvitationsPerPage);
+    elements.userInvitationsPages.replaceChildren();
+
+    const addButton = (label, page, options = {}) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pagination-button';
+      button.textContent = label;
+      button.disabled = Boolean(options.disabled);
+      if (options.current) {
+        button.classList.add('is-current');
+        button.setAttribute('aria-current', 'page');
+      } else if (!options.disabled) {
+        button.addEventListener('click', () => {
+          userInvitationsPage = page;
+          loadUserInvitations();
+        });
+      }
+      elements.userInvitationsPages.appendChild(button);
+    };
+
+    addButton('‹', userInvitationsPage - 1, { disabled: userInvitationsPage <= 1 });
+    paginationSequence(userInvitationsPage, totalPages).forEach(page => {
+      if (page === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '…';
+        elements.userInvitationsPages.appendChild(ellipsis);
+        return;
+      }
+      addButton(String(page), page, { current: page === userInvitationsPage });
+    });
+    addButton('›', userInvitationsPage + 1, { disabled: userInvitationsPage >= totalPages || totalPages === 0 });
+    elements.userInvitationsPagination.hidden = false;
+  }
+
+  function showUserInvitationsEmpty() {
+    if (elements.userInvitationsLoading) elements.userInvitationsLoading.hidden = true;
+    if (elements.userInvitationsEmpty) elements.userInvitationsEmpty.hidden = false;
+    if (elements.userInvitationsTable) elements.userInvitationsTable.hidden = true;
   }
 
   function paginationSequence(current, totalPages) {
@@ -1146,13 +1385,54 @@
         throw new Error(data.message || '發送註冊邀請失敗');
       }
 
-      elements.userInviteForm?.reset();
+      closeUserInviteModal();
+      userInvitationsPage = 1;
+      await loadUserInvitations();
       showSuccess('註冊邀請已發送');
-      switchView('users');
     } catch (err) {
       showError(err.message || '發送註冊邀請失敗');
     } finally {
       if (elements.submitInviteUser) elements.submitInviteUser.disabled = false;
+    }
+  }
+
+  function confirmResendUserInvitation(invitation, button) {
+    const email = invitation.email || '';
+    if (!email) return;
+
+    openConfirmModal(
+      '重新發送註冊邀請',
+      [
+        '確定要重新發送註冊邀請給 ',
+        { text: email, className: 'confirm-modal-email' },
+        '？'
+      ],
+      () => resendUserInvitation(email, button),
+      '確認'
+    );
+  }
+
+  async function resendUserInvitation(email, button) {
+    if (button) button.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/user-invitations/resend', {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '重新發送註冊邀請失敗');
+      }
+
+      await loadUserInvitations();
+      showSuccess('註冊邀請已重新發送');
+    } catch (err) {
+      showError(err.message || '重新發送註冊邀請失敗');
+      throw err;
+    } finally {
+      if (button) button.disabled = false;
     }
   }
 
@@ -1581,8 +1861,45 @@
    */
   function closeModal() {
     if (elements.modal) {
-      elements.modal.classList.remove('is-active');
+      elements.modal.classList.remove('is-active', 'confirm-modal');
       elements.modal.hidden = true;
+    }
+    modalConfirmHandler = null;
+    if (elements.modalConfirmBtn) {
+      elements.modalConfirmBtn.disabled = false;
+      elements.modalConfirmBtn.textContent = '確認';
+    }
+  }
+
+  function openConfirmModal(title, message, onConfirm, confirmText = '確認') {
+    modalConfirmHandler = onConfirm;
+    if (elements.modalTitle) {
+      elements.modalTitle.textContent = title;
+    }
+    if (elements.modalBody) {
+      elements.modalBody.replaceChildren();
+      const messageEl = document.createElement('p');
+      messageEl.className = 'confirm-modal-message';
+      const messageParts = Array.isArray(message) ? message : [message];
+      messageParts.forEach((part) => {
+        const span = document.createElement('span');
+        if (part && typeof part === 'object') {
+          span.textContent = part.text || '';
+          if (part.className) span.className = part.className;
+        } else {
+          span.textContent = String(part ?? '');
+        }
+        messageEl.appendChild(span);
+      });
+      elements.modalBody.appendChild(messageEl);
+    }
+    if (elements.modalConfirmBtn) {
+      elements.modalConfirmBtn.disabled = false;
+      elements.modalConfirmBtn.textContent = confirmText;
+    }
+    if (elements.modal) {
+      elements.modal.hidden = false;
+      elements.modal.classList.add('is-active', 'confirm-modal');
     }
   }
 
