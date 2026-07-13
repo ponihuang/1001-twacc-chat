@@ -28,7 +28,9 @@ var (
 	ErrEmailAlreadyExists          = errors.New("email already exists")
 	ErrUserInvitationPending       = errors.New("user invitation pending")
 	ErrUserInvitationCompleted     = errors.New("user invitation completed")
+	ErrUserInvitationNotFound      = errors.New("user invitation not found")
 	ErrInvitationMailerUnavailable = errors.New("invitation mailer unavailable")
+	ErrPasswordConfirmation        = errors.New("password confirmation mismatch")
 	ErrInvalidStatus               = errors.New("invalid status")
 	ErrInvalidPassword             = errors.New("invalid password")
 	ErrInvalidCredentials          = errors.New("invalid credentials")
@@ -541,6 +543,131 @@ func (s *Service) ResendUserInvitation(req AdminInviteUserRequest, actor AdminSe
 	}, 200, nil
 }
 
+// GetPublicUserInvitation returns the invited email for a valid pending invitation token.
+func (s *Service) GetPublicUserInvitation(token string) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return Response{}, statusCode(ErrUserInvitationNotFound), ErrUserInvitationNotFound
+	}
+
+	tokenHash := invitationTokenHash(token)
+	invitation, err := s.repo.FindUserInvitationByTokenHash(tokenHash)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return Response{}, statusCode(ErrUserInvitationNotFound), ErrUserInvitationNotFound
+		}
+		return Response{}, statusCode(err), err
+	}
+
+	now := time.Now().UTC()
+	if invitation.Status != "pending" ||
+		!now.Before(invitation.ExpiresAt) ||
+		invitation.AcceptedAt != nil ||
+		invitation.AcceptedUserID > 0 {
+		return Response{}, statusCode(ErrUserInvitationNotFound), ErrUserInvitationNotFound
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_INVITATION_FOUND",
+		Message: "邀請有效",
+		Data: PublicUserInvitation{
+			Email: invitation.Email,
+		},
+	}, 200, nil
+}
+
+// AcceptUserInvitation completes registration for a valid invitation token.
+func (s *Service) AcceptUserInvitation(req AcceptUserInvitationRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+
+	token := strings.TrimSpace(req.Token)
+	if token == "" {
+		return Response{}, statusCode(ErrUserInvitationNotFound), ErrUserInvitationNotFound
+	}
+
+	account := strings.TrimSpace(req.Account)
+	if account == "" || len([]rune(account)) > 100 {
+		return Response{}, statusCode(ErrInvalidExternalUserID), ErrInvalidExternalUserID
+	}
+
+	nickname := strings.TrimSpace(req.Nickname)
+	if nickname == "" || len([]rune(nickname)) > 100 {
+		return Response{}, statusCode(ErrInvalidDisplayName), ErrInvalidDisplayName
+	}
+
+	password := strings.TrimSpace(req.Password)
+	if password != strings.TrimSpace(req.PasswordConfirmation) {
+		return Response{}, statusCode(ErrPasswordConfirmation), ErrPasswordConfirmation
+	}
+
+	passwordHash, err := hashPassword(password)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	tokenHash := invitationTokenHash(token)
+	invitation, err := s.repo.FindUserInvitationByTokenHash(tokenHash)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return Response{}, statusCode(ErrUserInvitationNotFound), ErrUserInvitationNotFound
+		}
+		return Response{}, statusCode(err), err
+	}
+	if invitation.Status != "pending" ||
+		!time.Now().UTC().Before(invitation.ExpiresAt) ||
+		invitation.AcceptedAt != nil ||
+		invitation.AcceptedUserID > 0 {
+		return Response{}, statusCode(ErrUserInvitationNotFound), ErrUserInvitationNotFound
+	}
+
+	if _, err := s.repo.FindUserByExternalID(account); err == nil {
+		return Response{}, statusCode(ErrUserAlreadyExists), ErrUserAlreadyExists
+	} else if !errors.Is(err, ErrUserNotFound) {
+		return Response{}, statusCode(err), err
+	}
+
+	if _, err := s.repo.FindUserByEmail(invitation.Email); err == nil {
+		return Response{}, statusCode(ErrEmailAlreadyExists), ErrEmailAlreadyExists
+	} else if !errors.Is(err, ErrUserNotFound) {
+		return Response{}, statusCode(err), err
+	}
+
+	user, err := s.repo.AcceptUserInvitation(AcceptUserInvitationParams{
+		TokenHash:      tokenHash,
+		SourceSystem:   "office",
+		ExternalUserID: account,
+		PasswordHash:   passwordHash,
+		DisplayName:    nickname,
+		Status:         "active",
+		AcceptedAt:     time.Now().UTC(),
+	})
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_INVITATION_ACCEPTED",
+		Message: "註冊完成",
+		Data: AdminUserSummary{
+			ID:             user.ID,
+			ExternalUserID: user.ExternalUserID,
+			DisplayName:    user.DisplayName,
+			Email:          user.Email,
+			Status:         user.Status,
+			SourceSystem:   user.SourceSystem,
+			CreatedAt:      user.CreatedAt,
+		},
+	}, 201, nil
+}
+
 // CreateSystemAdmin creates a backend admin account.
 func (s *Service) CreateSystemAdmin(req SystemAdminCreateRequest, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -937,8 +1064,12 @@ func newInvitationToken() (string, string, error) {
 	}
 
 	token := hex.EncodeToString(raw)
+	return token, invitationTokenHash(token), nil
+}
+
+func invitationTokenHash(token string) string {
 	sum := sha256.Sum256([]byte(token))
-	return token, hex.EncodeToString(sum[:]), nil
+	return hex.EncodeToString(sum[:])
 }
 
 func buildInvitationURL(baseURL, token string) string {
@@ -1237,6 +1368,7 @@ func statusCode(err error) int {
 		errors.Is(err, ErrInvalidEmail),
 		errors.Is(err, ErrInvalidStatus),
 		errors.Is(err, ErrInvalidPassword),
+		errors.Is(err, ErrPasswordConfirmation),
 		errors.Is(err, ErrInvalidUserID),
 		errors.Is(err, ErrDeviceIDRequired),
 		errors.Is(err, ErrInvalidIPWhitelistRule),
@@ -1253,7 +1385,8 @@ func statusCode(err error) int {
 		errors.Is(err, ErrNewDeviceApprovalRequired):
 		return 403
 	case errors.Is(err, ErrUserNotFound),
-		errors.Is(err, ErrDeviceNotFound):
+		errors.Is(err, ErrDeviceNotFound),
+		errors.Is(err, ErrUserInvitationNotFound):
 		return 404
 	case errors.Is(err, ErrUserAlreadyExists):
 		return 409

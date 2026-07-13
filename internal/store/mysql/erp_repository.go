@@ -49,6 +49,12 @@ func (r *IntegrationRepository) CreateUser(params erp.RegisterParams) (erp.User,
 		params.Status,
 	)
 	if err != nil {
+		if isDuplicateKey(err, "uk_users_email") {
+			return erp.User{}, erp.ErrEmailAlreadyExists
+		}
+		if isDuplicateKey(err, "uk_users_external_user_id") {
+			return erp.User{}, erp.ErrUserAlreadyExists
+		}
 		if isDuplicate(err) {
 			return erp.User{}, erp.ErrUserAlreadyExists
 		}
@@ -254,6 +260,54 @@ func (r *IntegrationRepository) FindUserInvitationByEmail(email string) (erp.Use
 	return invitation, nil
 }
 
+// FindUserInvitationByTokenHash loads an invitation by its hashed token.
+func (r *IntegrationRepository) FindUserInvitationByTokenHash(tokenHash string) (erp.UserInvitation, error) {
+	var invitation erp.UserInvitation
+	var invitedByAdminID sql.NullInt64
+	var acceptedUserID sql.NullInt64
+	var sentAt sql.NullTime
+	var acceptedAt sql.NullTime
+	row := r.db.QueryRow(
+		`SELECT id, email, token_hash, status, invited_by_admin_id, accepted_user_id,
+		        expires_at, sent_at, accepted_at, created_at, updated_at
+		   FROM user_invitations
+		  WHERE token_hash = ?
+		  LIMIT 1`,
+		strings.TrimSpace(tokenHash),
+	)
+	if err := row.Scan(
+		&invitation.ID,
+		&invitation.Email,
+		&invitation.TokenHash,
+		&invitation.Status,
+		&invitedByAdminID,
+		&acceptedUserID,
+		&invitation.ExpiresAt,
+		&sentAt,
+		&acceptedAt,
+		&invitation.CreatedAt,
+		&invitation.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.UserInvitation{}, erp.ErrUserNotFound
+		}
+		return erp.UserInvitation{}, fmt.Errorf("find user invitation by token hash: %w", err)
+	}
+	if invitedByAdminID.Valid {
+		invitation.InvitedByAdminID = invitedByAdminID.Int64
+	}
+	if acceptedUserID.Valid {
+		invitation.AcceptedUserID = acceptedUserID.Int64
+	}
+	if sentAt.Valid {
+		invitation.SentAt = &sentAt.Time
+	}
+	if acceptedAt.Valid {
+		invitation.AcceptedAt = &acceptedAt.Time
+	}
+	return invitation, nil
+}
+
 // CreateUserInvitation inserts a pending invitation.
 func (r *IntegrationRepository) CreateUserInvitation(params erp.UserInvitationCreateParams) (erp.UserInvitation, error) {
 	result, err := r.db.Exec(
@@ -333,6 +387,164 @@ func (r *IntegrationRepository) MarkUserInvitationSent(invitationID int64, sentA
 		return erp.ErrUserNotFound
 	}
 	return nil
+}
+
+// AcceptUserInvitation creates the invited user and marks the invitation accepted atomically.
+func (r *IntegrationRepository) AcceptUserInvitation(params erp.AcceptUserInvitationParams) (erp.User, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return erp.User{}, fmt.Errorf("begin accept user invitation: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var invitation erp.UserInvitation
+	var invitedByAdminID sql.NullInt64
+	var acceptedUserID sql.NullInt64
+	var sentAt sql.NullTime
+	var acceptedAt sql.NullTime
+	row := tx.QueryRow(
+		`SELECT id, email, token_hash, status, invited_by_admin_id, accepted_user_id,
+		        expires_at, sent_at, accepted_at, created_at, updated_at
+		   FROM user_invitations
+		  WHERE token_hash = ?
+		  LIMIT 1
+		    FOR UPDATE`,
+		strings.TrimSpace(params.TokenHash),
+	)
+	if err := row.Scan(
+		&invitation.ID,
+		&invitation.Email,
+		&invitation.TokenHash,
+		&invitation.Status,
+		&invitedByAdminID,
+		&acceptedUserID,
+		&invitation.ExpiresAt,
+		&sentAt,
+		&acceptedAt,
+		&invitation.CreatedAt,
+		&invitation.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.User{}, erp.ErrUserInvitationNotFound
+		}
+		return erp.User{}, fmt.Errorf("lock user invitation: %w", err)
+	}
+	if acceptedUserID.Valid {
+		invitation.AcceptedUserID = acceptedUserID.Int64
+	}
+	if acceptedAt.Valid {
+		invitation.AcceptedAt = &acceptedAt.Time
+	}
+	if invitation.Status != "pending" ||
+		!params.AcceptedAt.Before(invitation.ExpiresAt) ||
+		invitation.AcceptedAt != nil ||
+		invitation.AcceptedUserID > 0 {
+		return erp.User{}, erp.ErrUserInvitationNotFound
+	}
+
+	var existingEmailUserID int64
+	emailRow := tx.QueryRow(
+		`SELECT id
+		   FROM users
+		  WHERE LOWER(COALESCE(email, '')) = LOWER(?)
+		  LIMIT 1
+		    FOR UPDATE`,
+		strings.TrimSpace(invitation.Email),
+	)
+	if err := emailRow.Scan(&existingEmailUserID); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return erp.User{}, fmt.Errorf("lock user by email: %w", err)
+		}
+	} else {
+		return erp.User{}, erp.ErrEmailAlreadyExists
+	}
+
+	var existingAccountUserID int64
+	accountRow := tx.QueryRow(
+		`SELECT id
+		   FROM users
+		  WHERE external_user_id = ?
+		  LIMIT 1
+		    FOR UPDATE`,
+		strings.TrimSpace(params.ExternalUserID),
+	)
+	if err := accountRow.Scan(&existingAccountUserID); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return erp.User{}, fmt.Errorf("lock user by account: %w", err)
+		}
+	} else {
+		return erp.User{}, erp.ErrUserAlreadyExists
+	}
+
+	result, err := tx.Exec(
+		`INSERT INTO users (source_system, external_user_id, display_name, password_hash, email, language, status)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		params.SourceSystem,
+		params.ExternalUserID,
+		params.DisplayName,
+		params.PasswordHash,
+		nullableString(invitation.Email),
+		"zh-Hans",
+		params.Status,
+	)
+	if err != nil {
+		if isDuplicateKey(err, "uk_users_email") {
+			return erp.User{}, erp.ErrEmailAlreadyExists
+		}
+		if isDuplicateKey(err, "uk_users_external_user_id") {
+			return erp.User{}, erp.ErrUserAlreadyExists
+		}
+		if isDuplicate(err) {
+			return erp.User{}, erp.ErrUserAlreadyExists
+		}
+		return erp.User{}, fmt.Errorf("create invited user: %w", err)
+	}
+
+	userID, err := result.LastInsertId()
+	if err != nil {
+		return erp.User{}, fmt.Errorf("read invited user id: %w", err)
+	}
+
+	if _, err := tx.Exec(`INSERT INTO user_security_settings (user_id, allow_all_ips) VALUES (?, 1)`, userID); err != nil {
+		return erp.User{}, fmt.Errorf("create invited user security settings: %w", err)
+	}
+
+	updateResult, err := tx.Exec(
+		`UPDATE user_invitations
+		    SET status = 'accepted',
+		        accepted_user_id = ?,
+		        accepted_at = ?,
+		        updated_at = CURRENT_TIMESTAMP
+		  WHERE id = ?
+		    AND status = 'pending'
+		    AND accepted_user_id IS NULL
+		    AND accepted_at IS NULL`,
+		userID,
+		params.AcceptedAt,
+		invitation.ID,
+	)
+	if err != nil {
+		return erp.User{}, fmt.Errorf("mark user invitation accepted: %w", err)
+	}
+	affected, err := updateResult.RowsAffected()
+	if err != nil {
+		return erp.User{}, fmt.Errorf("mark user invitation accepted rows affected: %w", err)
+	}
+	if affected == 0 {
+		return erp.User{}, erp.ErrUserInvitationNotFound
+	}
+
+	user, err := findUserByIDTx(tx, userID)
+	if err != nil {
+		return erp.User{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return erp.User{}, fmt.Errorf("commit accept user invitation: %w", err)
+	}
+	return user, nil
 }
 
 // ListUserInvitations returns one page of registration invitations.
@@ -453,6 +665,39 @@ func userInvitationOrderBy(sorting string) string {
 	default:
 		return "ORDER BY ui.sent_at IS NULL, ui.sent_at DESC, ui.created_at DESC, ui.id DESC"
 	}
+}
+
+func findUserByIDTx(tx *sql.Tx, userID int64) (erp.User, error) {
+	var user erp.User
+	row := tx.QueryRow(
+		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
+		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
+		   FROM users
+		  WHERE id = ?
+		  LIMIT 1`,
+		userID,
+	)
+	if err := row.Scan(
+		&user.ID,
+		&user.SourceSystem,
+		&user.ExternalUserID,
+		&user.DisplayName,
+		&user.PasswordHash,
+		&user.Email,
+		&user.Language,
+		&user.WhatsAppAccount,
+		&user.TelegramAccount,
+		&user.Status,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.User{}, erp.ErrUserNotFound
+		}
+		return erp.User{}, fmt.Errorf("find user by id: %w", err)
+	}
+
+	return user, nil
 }
 
 func (r *IntegrationRepository) findUserInvitationByID(invitationID int64) (erp.UserInvitation, error) {
@@ -852,6 +1097,9 @@ func (r *IntegrationRepository) UpdateUser(userID int64, params erp.AdminUpdateU
 		)
 	}
 	if err != nil {
+		if isDuplicateKey(err, "uk_users_email") {
+			return erp.User{}, erp.ErrEmailAlreadyExists
+		}
 		if isDuplicate(err) {
 			return erp.User{}, erp.ErrUserAlreadyExists
 		}
@@ -1150,6 +1398,15 @@ func isDuplicate(err error) bool {
 	var mysqlErr *mysqlDriver.MySQLError
 	if errors.As(err, &mysqlErr) {
 		return mysqlErr.Number == 1062
+	}
+
+	return false
+}
+
+func isDuplicateKey(err error, keyName string) bool {
+	var mysqlErr *mysqlDriver.MySQLError
+	if errors.As(err, &mysqlErr) {
+		return mysqlErr.Number == 1062 && strings.Contains(mysqlErr.Message, keyName)
 	}
 
 	return false

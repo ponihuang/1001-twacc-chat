@@ -65,6 +65,11 @@ func loginHandler(w http.ResponseWriter, _ *http.Request, data pageData) {
 	renderTemplate(w, "login.html", data)
 }
 
+func inviteHandler(w http.ResponseWriter, _ *http.Request, data pageData) {
+	data.Title = "TWACC Chat Invite"
+	renderTemplate(w, "invite.html", data)
+}
+
 func desktopHandler(w http.ResponseWriter, _ *http.Request, data pageData) {
 	data.Title = "TWACC Chat Desktop"
 	renderTemplate(w, "desktop.html", data)

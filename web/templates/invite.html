@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/static/app.css?v=invite-register-20260713a">
+  <script defer src="/static/invite.js?v=invite-register-20260713a"></script>
+</head>
+<body class="login-page invite-page">
+  <main class="login-shell" data-invite-app>
+    <section class="login-panel panel-surface">
+      <div class="login-header">
+        <span class="eyebrow">1001 TWACC Chat</span>
+        <h1>完成註冊</h1>
+        <p>使用邀請信中的連結建立聊天帳號。</p>
+      </div>
+
+      <div class="auth-panel invite-email-panel" aria-live="polite">
+        <label class="field-label" for="invite-email">Email</label>
+        <input id="invite-email" class="text-input" name="email" autocomplete="email" disabled>
+      </div>
+
+      <form class="auth-panel login-form invite-form" data-invite-form>
+        <label class="field-label" for="invite-account">帳號</label>
+        <input id="invite-account" class="text-input" name="account" maxlength="100" autocomplete="username" required disabled>
+
+        <label class="field-label" for="invite-nickname">暱稱</label>
+        <input id="invite-nickname" class="text-input" name="nickname" maxlength="100" autocomplete="name" required disabled>
+
+        <label class="field-label" for="invite-password">密碼</label>
+        <input id="invite-password" class="text-input" name="password" type="password" minlength="4" maxlength="20" pattern="[A-Za-z0-9!-/:-@\[-`{-~]{4,20}" autocomplete="new-password" title="密碼需為 4 到 20 碼，只能包含英文、數字或特殊符號" required disabled>
+
+        <label class="field-label" for="invite-password-confirmation">確認密碼</label>
+        <input id="invite-password-confirmation" class="text-input" name="password_confirmation" type="password" minlength="4" maxlength="20" pattern="[A-Za-z0-9!-/:-@\[-`{-~]{4,20}" autocomplete="new-password" required disabled>
+
+        <div class="login-field-error" data-invite-field-error role="alert" hidden></div>
+
+        <div class="auth-actions">
+          <button type="submit" class="primary-button" data-invite-submit disabled>完成註冊</button>
+        </div>
+        <div class="auth-status" data-invite-status role="status">正在檢查邀請...</div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
