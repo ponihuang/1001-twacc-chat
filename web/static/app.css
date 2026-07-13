@@ -303,6 +303,17 @@ strong {
   font-size: 0.82rem;
 }
 
+.invite-field-error {
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.invite-field-error[hidden] {
+  display: none;
+}
+
 .invite-page .invite-email-input {
   padding: 0;
   border: 0;

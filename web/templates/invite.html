@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=invite-reference-20260713a">
-  <script defer src="/static/invite.js?v=invite-reference-20260713a"></script>
+  <link rel="stylesheet" href="/static/app.css?v=invite-accept-session-20260713a">
+  <script defer src="/static/invite.js?v=invite-accept-session-20260713a"></script>
 </head>
 <body class="login-page invite-page">
   <svg class="invite-icons" aria-hidden="true" focusable="false">
@@ -42,8 +42,9 @@
             <div class="invite-field-body">
               <label class="field-label" for="invite-email">Email <span>（來自邀請信）</span></label>
               <input id="invite-email" class="text-input invite-email-input" name="email" autocomplete="email" disabled>
+              <div class="invite-field-error" data-invite-error-for="email" role="alert" hidden></div>
             </div>
-            <span class="invite-verified">
+            <span class="invite-verified" data-invite-email-verified hidden>
               <svg class="invite-verified-icon" aria-hidden="true">
                 <use href="#invite-icon-lock"></use>
               </svg>
@@ -58,6 +59,7 @@
             <div class="invite-field-body">
               <label class="field-label" for="invite-account">帳號</label>
               <input id="invite-account" class="text-input" name="account" maxlength="100" autocomplete="username" placeholder="請輸入帳號（英數字 4-20 碼）" required disabled>
+              <div class="invite-field-error" data-invite-error-for="account" role="alert" hidden></div>
             </div>
           </div>
 
@@ -68,6 +70,7 @@
             <div class="invite-field-body">
               <label class="field-label" for="invite-nickname">暱稱</label>
               <input id="invite-nickname" class="text-input" name="nickname" maxlength="100" autocomplete="name" placeholder="請輸入暱稱（顯示於聊天室）" required disabled>
+              <div class="invite-field-error" data-invite-error-for="nickname" role="alert" hidden></div>
             </div>
           </div>
 
@@ -78,6 +81,7 @@
             <div class="invite-field-body">
               <label class="field-label" for="invite-password">密碼</label>
               <input id="invite-password" class="text-input" name="password" type="password" minlength="4" maxlength="20" pattern="[A-Za-z0-9!-/:-@\[-`{-~]{4,20}" autocomplete="new-password" placeholder="請輸入密碼（至少 4 碼）" title="密碼需為 4 到 20 碼，只能包含英文、數字或特殊符號" required disabled>
+              <div class="invite-field-error" data-invite-error-for="password" role="alert" hidden></div>
             </div>
           </div>
 
@@ -88,6 +92,7 @@
             <div class="invite-field-body">
               <label class="field-label" for="invite-password-confirmation">確認密碼</label>
               <input id="invite-password-confirmation" class="text-input" name="password_confirmation" type="password" minlength="4" maxlength="20" pattern="[A-Za-z0-9!-/:-@\[-`{-~]{4,20}" autocomplete="new-password" placeholder="請再次輸入密碼" required disabled>
+              <div class="invite-field-error" data-invite-error-for="password_confirmation" role="alert" hidden></div>
             </div>
           </div>
         </div>

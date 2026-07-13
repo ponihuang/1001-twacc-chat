@@ -582,8 +582,8 @@ func (s *Service) GetPublicUserInvitation(token string) (Response, int, error) {
 }
 
 // AcceptUserInvitation completes registration for a valid invitation token.
-func (s *Service) AcceptUserInvitation(req AcceptUserInvitationRequest) (Response, int, error) {
-	if s == nil || s.repo == nil {
+func (s *Service) AcceptUserInvitation(req AcceptUserInvitationRequest, clientIP, userAgent string) (Response, int, error) {
+	if s == nil || s.repo == nil || s.sessions == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
 
@@ -610,6 +610,11 @@ func (s *Service) AcceptUserInvitation(req AcceptUserInvitationRequest) (Respons
 	passwordHash, err := hashPassword(password)
 	if err != nil {
 		return Response{}, statusCode(err), err
+	}
+
+	deviceID := strings.TrimSpace(req.DeviceID)
+	if deviceID == "" {
+		return Response{}, statusCode(ErrDeviceIDRequired), ErrDeviceIDRequired
 	}
 
 	tokenHash := invitationTokenHash(token)
@@ -639,6 +644,7 @@ func (s *Service) AcceptUserInvitation(req AcceptUserInvitationRequest) (Respons
 		return Response{}, statusCode(err), err
 	}
 
+	now := time.Now().UTC()
 	user, err := s.repo.AcceptUserInvitation(AcceptUserInvitationParams{
 		TokenHash:      tokenHash,
 		SourceSystem:   "office",
@@ -646,17 +652,45 @@ func (s *Service) AcceptUserInvitation(req AcceptUserInvitationRequest) (Respons
 		PasswordHash:   passwordHash,
 		DisplayName:    nickname,
 		Status:         "active",
-		AcceptedAt:     time.Now().UTC(),
+		AcceptedAt:     now,
 	})
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
 
-	return Response{
+	if err := s.repo.UpsertDeviceLogin(user.ID, deviceID, userAgent, clientIP, true, now); err != nil {
+		return Response{}, 500, err
+	}
+
+	sessionToken, expiresAt, err := s.sessions.Issue(user.ID, deviceID)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	resp := Response{
 		Success: true,
 		Code:    "USER_INVITATION_ACCEPTED",
 		Message: "註冊完成",
-		Data: AdminUserSummary{
+		Token:   sessionToken,
+		Data: map[string]any{
+			"role":             "user",
+			"user_id":          user.ID,
+			"source_system":    user.SourceSystem,
+			"external_user_id": user.ExternalUserID,
+			"display_name":     user.DisplayName,
+			"email":            user.Email,
+			"status":           user.Status,
+			"created_at":       user.CreatedAt,
+		},
+		ExpiresAt: expiresAt.Format(time.RFC3339),
+	}
+	if data, err := s.profileResponseData(user); err == nil {
+		data["email"] = user.Email
+		data["status"] = user.Status
+		data["created_at"] = user.CreatedAt
+		resp.Data = data
+	} else {
+		resp.Data = AdminUserSummary{
 			ID:             user.ID,
 			ExternalUserID: user.ExternalUserID,
 			DisplayName:    user.DisplayName,
@@ -664,8 +698,10 @@ func (s *Service) AcceptUserInvitation(req AcceptUserInvitationRequest) (Respons
 			Status:         user.Status,
 			SourceSystem:   user.SourceSystem,
 			CreatedAt:      user.CreatedAt,
-		},
-	}, 201, nil
+		}
+	}
+
+	return resp, 201, nil
 }
 
 // CreateSystemAdmin creates a backend admin account.

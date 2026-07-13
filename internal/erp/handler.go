@@ -333,7 +333,7 @@ func (h *Handler) AcceptUserInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, status, err := h.service.AcceptUserInvitation(req)
+	resp, status, err := h.service.AcceptUserInvitation(req, clientIP(r), r.UserAgent())
 	if err != nil {
 		writeJSON(w, status, errorResponse(err))
 		return

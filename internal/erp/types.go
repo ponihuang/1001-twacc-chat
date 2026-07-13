@@ -251,6 +251,7 @@ type AcceptUserInvitationRequest struct {
 	Nickname             string `json:"nickname"`
 	Password             string `json:"password"`
 	PasswordConfirmation string `json:"password_confirmation"`
+	DeviceID             string `json:"device_id"`
 }
 
 // SystemAdminCreateRequest is the payload for creating an office system admin.
