@@ -233,6 +233,7 @@ func (m *mockRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error
 			DisplayName:    user.DisplayName,
 			Email:          user.Email,
 			Status:         user.Status,
+			IsChatMuted:    user.IsChatMuted,
 			SourceSystem:   user.SourceSystem,
 			CreatedAt:      user.CreatedAt,
 		})
@@ -404,6 +405,17 @@ func (m *mockRepository) UpdateUser(userID int64, params AdminUpdateUserParams) 
 	if params.PasswordHash != "" {
 		user.PasswordHash = params.PasswordHash
 	}
+	m.usersByID[userID] = user
+	m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
+	return user, nil
+}
+
+func (m *mockRepository) UpdateUserChatMute(userID int64, params AdminUpdateUserChatMuteParams) (User, error) {
+	user, ok := m.usersByID[userID]
+	if !ok {
+		return User{}, ErrUserNotFound
+	}
+	user.IsChatMuted = params.IsChatMuted
 	m.usersByID[userID] = user
 	m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
 	return user, nil

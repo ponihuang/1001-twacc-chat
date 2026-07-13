@@ -802,6 +802,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "附件格式不支持"}
 	case errors.Is(err, ErrSystemAdminCannotChat):
 		return Response{Success: false, Code: "SYSTEM_ADMIN_CANNOT_CHAT", Message: "system_admin 不可使用聊天功能"}
+	case errors.Is(err, ErrUserChatMuted):
+		return Response{Success: false, Code: "USER_CHAT_MUTED", Message: "此用戶已被禁止發言"}
 	case errors.Is(err, ErrInsufficientRole):
 		return Response{Success: false, Code: "INSUFFICIENT_ROLE", Message: "目前角色无权执行此操作"}
 	default:

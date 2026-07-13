@@ -809,6 +809,62 @@ button:disabled {
   white-space: nowrap;
 }
 
+.table-icon-action {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-right: 8px;
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  background: var(--admin-panel);
+  color: var(--admin-muted);
+  vertical-align: middle;
+}
+
+.table-icon-action svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.table-icon-action-danger {
+  border-color: #b23a27;
+  background: #fff6f2;
+  color: #b23a27;
+}
+
+.chat-mute-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.chat-mute-badge {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--admin-panel);
+  border-radius: 999px;
+  background: #b23a27;
+  color: var(--admin-panel);
+}
+
+.chat-mute-badge svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.4;
+}
+
 .table-action {
   width: 50px;
   height: 32px;

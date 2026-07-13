@@ -34,7 +34,7 @@
     { key: 'status', title: '狀態', width: 100 },
     { key: 'source', title: '來源', width: 100 },
     { key: 'lastOnline', title: '最近在線', minWidth: 180 },
-    { key: 'options', title: '選項', width: 120 }
+    { key: 'options', title: '選項', width: 150 }
   ];
 
   const VIEW_ROUTES = {
@@ -834,6 +834,15 @@
         break;
       case 'options': {
         cell.className = 'actions-cell';
+        const muteButton = document.createElement('button');
+        muteButton.type = 'button';
+        muteButton.className = user.is_chat_muted ? 'table-icon-action table-icon-action-danger' : 'table-icon-action';
+        muteButton.title = user.is_chat_muted ? '解除禁言' : '禁止發言';
+        muteButton.setAttribute('aria-label', muteButton.title);
+        muteButton.innerHTML = user.is_chat_muted ? chatBubbleLockedIcon() : chatBubbleIcon();
+        muteButton.addEventListener('click', () => toggleUserChatMute(user));
+        cell.appendChild(muteButton);
+
         const editButton = document.createElement('button');
         editButton.type = 'button';
         editButton.className = 'table-action';
@@ -848,6 +857,49 @@
     }
 
     return cell;
+  }
+
+  async function toggleUserChatMute(user) {
+    if (!user?.id) return;
+    const nextMuted = !Boolean(user.is_chat_muted);
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${user.id}/chat-mute`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_chat_muted: nextMuted })
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '更新禁言狀態失敗');
+      }
+
+      showSuccess(nextMuted ? '已禁止發言' : '已解除禁言');
+      await loadUsers();
+    } catch (err) {
+      showError(err.message || '更新禁言狀態失敗');
+    }
+  }
+
+  function chatBubbleIcon() {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.9 8.9 0 0 1-3.7-.8L3 21l1.8-5.2A8.3 8.3 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.5 8.5 0 0 1 21 11.5Z"></path>
+      </svg>`;
+  }
+
+  function chatBubbleLockedIcon() {
+    return `
+      <span class="chat-mute-icon">
+        ${chatBubbleIcon()}
+        <span class="chat-mute-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+            <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+          </svg>
+        </span>
+      </span>`;
   }
 
   function renderUsersPagination(total, totalPages) {

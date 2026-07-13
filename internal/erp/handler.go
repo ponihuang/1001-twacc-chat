@@ -506,6 +506,36 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// UpdateUserChatMute handles PATCH /api/system-admin/users/{user_id}/chat-mute.
+func (h *Handler) UpdateUserChatMute(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+	targetUserID, ok := parseUserIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminUpdateUserChatMuteRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.UpdateUserChatMute(targetUserID, req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
 // GetSystemAdmin handles GET /api/system-admin/admins/{user_id}.
 func (h *Handler) GetSystemAdmin(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {

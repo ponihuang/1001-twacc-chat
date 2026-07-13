@@ -32,6 +32,20 @@ func (r *ChatRepository) IsSystemAdmin(userID int64) (bool, error) {
 	return true, nil
 }
 
+// IsChatMuted checks whether the user is blocked from sending chat messages.
+func (r *ChatRepository) IsChatMuted(userID int64) (bool, error) {
+	var muted bool
+	row := r.db.QueryRow(`SELECT is_chat_muted FROM users WHERE id = ? LIMIT 1`, userID)
+	if err := row.Scan(&muted); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, chat.ErrTargetUserNotFound
+		}
+		return false, fmt.Errorf("check user chat mute: %w", err)
+	}
+
+	return muted, nil
+}
+
 // ListConversations returns conversations for the given user ordered by recent activity.
 func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSummary, error) {
 	rows, err := r.db.Query(`

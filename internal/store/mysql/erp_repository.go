@@ -78,7 +78,7 @@ func (r *IntegrationRepository) FindUserByID(userID int64) (erp.User, error) {
 	var user erp.User
 	row := r.db.QueryRow(
 		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
-		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
+		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, is_chat_muted, created_at, updated_at
 		   FROM users
 		  WHERE id = ?
 		  LIMIT 1`,
@@ -95,6 +95,7 @@ func (r *IntegrationRepository) FindUserByID(userID int64) (erp.User, error) {
 		&user.WhatsAppAccount,
 		&user.TelegramAccount,
 		&user.Status,
+		&user.IsChatMuted,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	); err != nil {
@@ -112,7 +113,7 @@ func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID 
 	var user erp.User
 	row := r.db.QueryRow(
 		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
-		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
+		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, is_chat_muted, created_at, updated_at
 		   FROM users
 		  WHERE source_system = ? AND external_user_id = ?
 		  LIMIT 1`,
@@ -130,6 +131,7 @@ func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID 
 		&user.WhatsAppAccount,
 		&user.TelegramAccount,
 		&user.Status,
+		&user.IsChatMuted,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	); err != nil {
@@ -147,7 +149,7 @@ func (r *IntegrationRepository) FindUserByExternalID(externalUserID string) (erp
 	var user erp.User
 	row := r.db.QueryRow(
 		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
-		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
+		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, is_chat_muted, created_at, updated_at
 		   FROM users
 		  WHERE external_user_id = ?
 		  ORDER BY id
@@ -165,6 +167,7 @@ func (r *IntegrationRepository) FindUserByExternalID(externalUserID string) (erp
 		&user.WhatsAppAccount,
 		&user.TelegramAccount,
 		&user.Status,
+		&user.IsChatMuted,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	); err != nil {
@@ -182,7 +185,7 @@ func (r *IntegrationRepository) FindUserByEmail(email string) (erp.User, error) 
 	var user erp.User
 	row := r.db.QueryRow(
 		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
-		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
+		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, is_chat_muted, created_at, updated_at
 		   FROM users
 		  WHERE LOWER(COALESCE(email, '')) = LOWER(?)
 		  LIMIT 1`,
@@ -199,6 +202,7 @@ func (r *IntegrationRepository) FindUserByEmail(email string) (erp.User, error) 
 		&user.WhatsAppAccount,
 		&user.TelegramAccount,
 		&user.Status,
+		&user.IsChatMuted,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	); err != nil {
@@ -748,7 +752,7 @@ func findUserByIDTx(tx *sql.Tx, userID int64) (erp.User, error) {
 	var user erp.User
 	row := tx.QueryRow(
 		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
-		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
+		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, is_chat_muted, created_at, updated_at
 		   FROM users
 		  WHERE id = ?
 		  LIMIT 1`,
@@ -765,6 +769,7 @@ func findUserByIDTx(tx *sql.Tx, userID int64) (erp.User, error) {
 		&user.WhatsAppAccount,
 		&user.TelegramAccount,
 		&user.Status,
+		&user.IsChatMuted,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	); err != nil {
@@ -873,14 +878,14 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) (erp.Admin
 
 	var query strings.Builder
 	query.WriteString(
-		`SELECT u.id, u.external_user_id, u.display_name, COALESCE(u.email, ''), u.status,
+		`SELECT u.id, u.external_user_id, u.display_name, COALESCE(u.email, ''), u.status, u.is_chat_muted,
 		        u.source_system, u.created_at, MAX(s.last_used_at) AS last_online_at
 		   FROM users u
 		   LEFT JOIN auth_sessions s ON s.user_id = u.id`,
 	)
 	query.WriteString(where.String())
 
-	query.WriteString(" GROUP BY u.id, u.external_user_id, u.display_name, u.email, u.status, u.source_system, u.created_at")
+	query.WriteString(" GROUP BY u.id, u.external_user_id, u.display_name, u.email, u.status, u.is_chat_muted, u.source_system, u.created_at")
 	switch strings.TrimSpace(filter.Sort) {
 	case "created_at_asc":
 		query.WriteString(" ORDER BY u.created_at ASC, u.id ASC")
@@ -908,6 +913,7 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) (erp.Admin
 			&user.DisplayName,
 			&user.Email,
 			&user.Status,
+			&user.IsChatMuted,
 			&user.SourceSystem,
 			&user.CreatedAt,
 			&lastOnline,
@@ -1181,6 +1187,30 @@ func (r *IntegrationRepository) UpdateUser(userID int64, params erp.AdminUpdateU
 			return erp.User{}, erp.ErrUserAlreadyExists
 		}
 		return erp.User{}, fmt.Errorf("update user: %w", err)
+	}
+
+	return r.FindUserByID(userID)
+}
+
+// UpdateUserChatMute updates whether a user can send chat messages.
+func (r *IntegrationRepository) UpdateUserChatMute(userID int64, params erp.AdminUpdateUserChatMuteParams) (erp.User, error) {
+	result, err := r.db.Exec(
+		`UPDATE users
+		    SET is_chat_muted = ?
+		  WHERE id = ?`,
+		params.IsChatMuted,
+		userID,
+	)
+	if err != nil {
+		return erp.User{}, fmt.Errorf("update user chat mute: %w", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return erp.User{}, fmt.Errorf("update user chat mute rows affected: %w", err)
+	}
+	if affected == 0 {
+		return erp.User{}, erp.ErrUserNotFound
 	}
 
 	return r.FindUserByID(userID)

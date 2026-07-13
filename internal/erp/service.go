@@ -1016,6 +1016,38 @@ func (s *Service) UpdateUser(targetUserID int64, req AdminUpdateUserRequest, act
 	}, 200, nil
 }
 
+// UpdateUserChatMute toggles whether a user can send chat messages.
+func (s *Service) UpdateUserChatMute(targetUserID int64, req AdminUpdateUserChatMuteRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if targetUserID <= 0 {
+		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	user, err := s.repo.UpdateUserChatMute(targetUserID, AdminUpdateUserChatMuteParams{IsChatMuted: req.IsChatMuted})
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	code := "USER_CHAT_UNMUTED"
+	message := "用户已解除禁言"
+	if user.IsChatMuted {
+		code = "USER_CHAT_MUTED"
+		message = "用户已禁止发言"
+	}
+
+	return Response{
+		Success: true,
+		Code:    code,
+		Message: message,
+		Data:    adminUserSummary(user),
+	}, 200, nil
+}
+
 // GetSystemAdmin returns one backend admin for editing. Only system_admin is allowed.
 func (s *Service) GetSystemAdmin(targetAdminID int64, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -1504,6 +1536,7 @@ func adminUserSummary(user User) AdminUserSummary {
 		DisplayName:    user.DisplayName,
 		Email:          user.Email,
 		Status:         user.Status,
+		IsChatMuted:    user.IsChatMuted,
 		SourceSystem:   user.SourceSystem,
 		CreatedAt:      user.CreatedAt,
 	}

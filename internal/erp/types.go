@@ -19,6 +19,7 @@ type User struct {
 	WhatsAppAccount string
 	TelegramAccount string
 	Status          string
+	IsChatMuted     bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -72,6 +73,7 @@ type AdminUserSummary struct {
 	DisplayName    string     `json:"display_name"`
 	Email          string     `json:"email"`
 	Status         string     `json:"status"`
+	IsChatMuted    bool       `json:"is_chat_muted"`
 	SourceSystem   string     `json:"source_system"`
 	CreatedAt      time.Time  `json:"created_at"`
 	LastOnlineAt   *time.Time `json:"last_online_at,omitempty"`
@@ -338,6 +340,11 @@ type AdminUpdateUserRequest struct {
 	Status      string `json:"status"`
 }
 
+// AdminUpdateUserChatMuteRequest is the system-admin payload for muting a user in chat.
+type AdminUpdateUserChatMuteRequest struct {
+	IsChatMuted bool `json:"is_chat_muted"`
+}
+
 // LoginRequest is the external-system login payload.
 type LoginRequest struct {
 	SourceSystem   string `json:"source_system"`
@@ -413,6 +420,11 @@ type AdminUpdateUserParams struct {
 	Status       string
 }
 
+// AdminUpdateUserChatMuteParams carries the admin chat mute flag into storage.
+type AdminUpdateUserChatMuteParams struct {
+	IsChatMuted bool
+}
+
 // UserInvitationCreateParams carries validated invitation fields into storage.
 type UserInvitationCreateParams struct {
 	Email            string
@@ -465,6 +477,7 @@ type Repository interface {
 	UpdateSystemAdmin(adminUserID int64, params SystemAdminUpdateParams) (SystemAdminSummary, error)
 	UpdateSystemAdminLastLogin(adminUserID int64, ip string, at time.Time) error
 	UpdateUser(userID int64, params AdminUpdateUserParams) (User, error)
+	UpdateUserChatMute(userID int64, params AdminUpdateUserChatMuteParams) (User, error)
 	UpdateUserProfile(userID int64, displayName string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)
 	GetUserSecuritySettings(userID int64) (UserSecuritySettings, error)

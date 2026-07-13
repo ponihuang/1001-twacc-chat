@@ -54,6 +54,7 @@ type mockRepository struct {
 	removeMemberErr      error
 	listMembersID        int64
 	listMembersErr       error
+	mutedUsers           map[int64]bool
 }
 
 type readMarker struct {
@@ -64,6 +65,10 @@ type readMarker struct {
 
 func (m *mockRepository) IsSystemAdmin(userID int64) (bool, error) {
 	return m.admins[userID], nil
+}
+
+func (m *mockRepository) IsChatMuted(userID int64) (bool, error) {
+	return m.mutedUsers[userID], nil
 }
 
 func (m *mockRepository) ListConversations(userID int64) ([]ConversationSummary, error) {
@@ -845,6 +850,27 @@ func TestSendMessage(t *testing.T) {
 	}
 	if broker.event.EventType != "message.created" || broker.event.ConversationID != 9 {
 		t.Fatalf("unexpected realtime event: %+v", broker.event)
+	}
+}
+
+func TestSendMessageRejectsMutedUser(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 9): {ID: 9, Type: "direct", Title: "王小明"},
+		},
+		mutedUsers: map[int64]bool{7: true},
+	}
+	service := NewService(repo, nil)
+
+	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "text", Content: "hello"})
+	if !errors.Is(err, ErrUserChatMuted) {
+		t.Fatalf("expected ErrUserChatMuted, got %v", err)
+	}
+	if status != 403 {
+		t.Fatalf("status = %d, want 403", status)
+	}
+	if len(repo.createdMessages) != 0 {
+		t.Fatalf("message should not be created when user is muted")
 	}
 }
 
