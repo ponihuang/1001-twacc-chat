@@ -186,6 +186,218 @@ strong {
   gap: 12px;
 }
 
+.invite-page .login-shell {
+  width: min(560px, 100%);
+}
+
+.invite-page .login-panel {
+  width: min(548px, 100%);
+  padding: 36px 40px;
+  gap: 22px;
+  font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+
+.invite-page .invite-header {
+  justify-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.invite-page .invite-header .eyebrow {
+  margin-bottom: 0;
+  color: #8a4a2b;
+  font-size: 1.08rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.invite-page .login-header h1 {
+  font-size: clamp(1.55rem, 3.5vw, 1.8rem);
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.invite-page .login-header p {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  display: grid;
+  gap: 2px;
+}
+
+.invite-page .auth-panel {
+  gap: 16px;
+}
+
+.invite-page .login-form {
+  gap: 16px;
+}
+
+.invite-icons {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.invite-fieldset {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.invite-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 14px 16px;
+}
+
+.invite-email-row {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+  background: rgba(244, 238, 229, 0.72);
+}
+
+.invite-row-icon {
+  width: 18px;
+  height: 18px;
+  align-self: center;
+  color: #8a4a2b;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.invite-field-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.invite-page .field-label {
+  color: #5f5c57;
+  font-size: 0.86rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.invite-page .field-label span {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.invite-page .text-input {
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 0.94rem;
+}
+
+.invite-page .text-input::placeholder {
+  color: rgba(107, 98, 88, 0.48);
+  font-size: 0.82rem;
+}
+
+.invite-page .invite-email-input {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  -webkit-text-fill-color: var(--text);
+}
+
+.invite-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.invite-verified-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.invite-page .primary-button {
+  min-height: 46px;
+  padding: 0 18px;
+}
+
+.invite-page .auth-actions {
+  margin-top: 2px;
+  padding: 0 8px;
+}
+
+.invite-page .invite-submit {
+  width: 100%;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #a96b3f, #a04228);
+  box-shadow: 0 16px 28px rgba(127, 38, 23, 0.18);
+}
+
+.invite-help {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.invite-help strong {
+  color: var(--text);
+}
+
+.invite-page .auth-status {
+  min-height: 20px;
+  padding-top: 0;
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  .invite-page {
+    padding: 18px;
+  }
+
+  .invite-page .login-panel {
+    padding: 30px 24px;
+  }
+
+  .invite-page .login-header h1 {
+    font-size: 1.55rem;
+  }
+
+  .invite-page .login-header p {
+    font-size: 0.9rem;
+  }
+
+  .invite-row {
+    padding: 13px 14px;
+  }
+
+  .invite-email-row {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .invite-verified {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 .login-session-summary {
   display: grid;
   gap: 4px;
