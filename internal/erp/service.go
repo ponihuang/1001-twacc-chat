@@ -19,6 +19,8 @@ var sourceSystemPattern = regexp.MustCompile(`^[a-z0-9_-]{2,50}$`)
 var passwordPattern = regexp.MustCompile(`^[A-Za-z0-9[:punct:]]{4,20}$`)
 
 const passwordHashIterations = 120000
+const bulkInvitationTXTMaxBytes = 2 << 20
+const bulkInvitationTXTMaxEntries = 1000
 
 var (
 	ErrInvalidSourceSystem         = errors.New("invalid source system")
@@ -26,6 +28,7 @@ var (
 	ErrInvalidDisplayName          = errors.New("invalid display name")
 	ErrInvalidEmail                = errors.New("invalid email")
 	ErrEmailAlreadyExists          = errors.New("email already exists")
+	ErrBulkInvitationTooMany       = errors.New("bulk invitation too many")
 	ErrUserInvitationPending       = errors.New("user invitation pending")
 	ErrUserInvitationCompleted     = errors.New("user invitation completed")
 	ErrUserInvitationNotFound      = errors.New("user invitation not found")
@@ -309,6 +312,164 @@ func (s *Service) ListUserInvitations(filter AdminUserInvitationFilter, actor Ad
 		Message: "註冊邀請列表讀取成功",
 		Data:    invitations,
 	}, 200, nil
+}
+
+// PrecheckUserInvitationTXT classifies an uploaded TXT before creating any invitation.
+func (s *Service) PrecheckUserInvitationTXT(content []byte, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	result, err := s.classifyUserInvitationTXT(content)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_INVITATION_BULK_PRECHECK_OK",
+		Message: "註冊邀請 TXT 預檢完成",
+		Data:    result,
+	}, 200, nil
+}
+
+// SendBulkUserInvitations creates and sends invitations for currently sendable TXT emails.
+func (s *Service) SendBulkUserInvitations(content []byte, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	precheck, err := s.classifyUserInvitationTXT(content)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	result := BulkUserInvitationSendResult{
+		Succeeded: []BulkUserInvitationPrecheckItem{},
+		Failed:    []BulkUserInvitationSendFailure{},
+		Ignored: BulkUserInvitationIgnoredResult{
+			DuplicateInFile:   precheck.DuplicateInFile,
+			AlreadyRegistered: precheck.AlreadyRegistered,
+			ActiveInvitation:  precheck.ActiveInvitation,
+			InvalidEmail:      precheck.InvalidEmail,
+		},
+		Precheck: precheck,
+	}
+
+	for _, item := range precheck.Sendable {
+		_, _, err := s.InviteUser(AdminInviteUserRequest{Email: item.Email}, actor)
+		if err != nil {
+			if errors.Is(err, ErrEmailAlreadyExists) {
+				result.Ignored.AlreadyRegistered = append(result.Ignored.AlreadyRegistered, item)
+				continue
+			}
+			if errors.Is(err, ErrUserInvitationPending) {
+				result.Ignored.ActiveInvitation = append(result.Ignored.ActiveInvitation, item)
+				continue
+			}
+			errResp := errorResponse(err)
+			result.Failed = append(result.Failed, BulkUserInvitationSendFailure{
+				Line:    item.Line,
+				Email:   item.Email,
+				Code:    errResp.Code,
+				Message: errResp.Message,
+			})
+			continue
+		}
+		result.Succeeded = append(result.Succeeded, item)
+	}
+	result.SuccessCount = len(result.Succeeded)
+	result.FailureCount = len(result.Failed)
+	result.IgnoredCount = len(result.Ignored.DuplicateInFile) +
+		len(result.Ignored.AlreadyRegistered) +
+		len(result.Ignored.ActiveInvitation) +
+		len(result.Ignored.InvalidEmail)
+
+	return Response{
+		Success: true,
+		Code:    "USER_INVITATION_BULK_SEND_DONE",
+		Message: "批量註冊邀請發送完成",
+		Data:    result,
+	}, 200, nil
+}
+
+func (s *Service) classifyUserInvitationTXT(content []byte) (BulkUserInvitationPrecheckResult, error) {
+	result := BulkUserInvitationPrecheckResult{
+		Sendable:          []BulkUserInvitationPrecheckItem{},
+		DuplicateInFile:   []BulkUserInvitationPrecheckItem{},
+		AlreadyRegistered: []BulkUserInvitationPrecheckItem{},
+		ActiveInvitation:  []BulkUserInvitationPrecheckItem{},
+		InvalidEmail:      []BulkUserInvitationInvalidItem{},
+	}
+	seen := map[string]bool{}
+	bomRemoved := false
+	unique := make([]BulkUserInvitationPrecheckItem, 0)
+	for i, raw := range strings.Split(string(content), "\n") {
+		line := i + 1
+		value := strings.TrimSpace(raw)
+		if !bomRemoved && value != "" {
+			value = strings.TrimPrefix(value, "\uFEFF")
+			value = strings.TrimSpace(value)
+			bomRemoved = true
+		}
+		value = strings.TrimSuffix(value, "\r")
+		if value == "" {
+			result.IgnoredBlankLines++
+			continue
+		}
+		result.TotalLines++
+		email := normalizeEmail(value)
+		if !isValidEmail(email) {
+			result.InvalidEmail = append(result.InvalidEmail, BulkUserInvitationInvalidItem{Line: line, Value: value})
+			continue
+		}
+		item := BulkUserInvitationPrecheckItem{Line: line, Email: email}
+		if seen[email] {
+			result.DuplicateInFile = append(result.DuplicateInFile, item)
+			continue
+		}
+		seen[email] = true
+		unique = append(unique, item)
+		if len(unique) > bulkInvitationTXTMaxEntries {
+			return BulkUserInvitationPrecheckResult{}, ErrBulkInvitationTooMany
+		}
+	}
+	result.UniqueEmails = len(unique)
+
+	emails := make([]string, 0, len(unique))
+	for _, item := range unique {
+		emails = append(emails, item.Email)
+	}
+	precheck, err := s.repo.PrecheckUserInvitationEmails(emails, time.Now().UTC())
+	if err != nil {
+		return BulkUserInvitationPrecheckResult{}, err
+	}
+
+	for _, item := range unique {
+		switch {
+		case precheck.Registered[item.Email]:
+			result.AlreadyRegistered = append(result.AlreadyRegistered, item)
+		case precheck.ActiveInvitations[item.Email]:
+			result.ActiveInvitation = append(result.ActiveInvitation, item)
+		default:
+			result.Sendable = append(result.Sendable, item)
+		}
+	}
+	result.Counts = BulkUserInvitationPrecheckCounts{
+		Sendable:          len(result.Sendable),
+		DuplicateInFile:   len(result.DuplicateInFile),
+		AlreadyRegistered: len(result.AlreadyRegistered),
+		ActiveInvitation:  len(result.ActiveInvitation),
+		InvalidEmail:      len(result.InvalidEmail),
+	}
+
+	return result, nil
 }
 
 // ListSystemAdmins returns system-admin accounts for the admin console.
@@ -1406,6 +1567,7 @@ func statusCode(err error) int {
 		errors.Is(err, ErrInvalidPassword),
 		errors.Is(err, ErrPasswordConfirmation),
 		errors.Is(err, ErrInvalidUserID),
+		errors.Is(err, ErrBulkInvitationTooMany),
 		errors.Is(err, ErrDeviceIDRequired),
 		errors.Is(err, ErrInvalidIPWhitelistRule),
 		errors.Is(err, ErrWhitelistRulesRequired):

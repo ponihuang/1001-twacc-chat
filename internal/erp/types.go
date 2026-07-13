@@ -140,6 +140,73 @@ type AdminUserInvitationPage struct {
 	TotalPages int                          `json:"total_pages"`
 }
 
+// BulkUserInvitationPrecheckItem describes one classified email from an uploaded TXT.
+type BulkUserInvitationPrecheckItem struct {
+	Line  int    `json:"line"`
+	Email string `json:"email"`
+}
+
+// BulkUserInvitationInvalidItem describes one invalid TXT line.
+type BulkUserInvitationInvalidItem struct {
+	Line  int    `json:"line"`
+	Value string `json:"value"`
+}
+
+// BulkUserInvitationPrecheckCounts contains category totals for the uploaded TXT.
+type BulkUserInvitationPrecheckCounts struct {
+	Sendable          int `json:"sendable"`
+	DuplicateInFile   int `json:"duplicate_in_file"`
+	AlreadyRegistered int `json:"already_registered"`
+	ActiveInvitation  int `json:"active_invitation"`
+	InvalidEmail      int `json:"invalid_email"`
+}
+
+// BulkUserInvitationPrecheckResult is the API-facing result for invitation TXT precheck.
+type BulkUserInvitationPrecheckResult struct {
+	TotalLines        int                              `json:"total_lines"`
+	IgnoredBlankLines int                              `json:"ignored_blank_lines"`
+	UniqueEmails      int                              `json:"unique_emails"`
+	Counts            BulkUserInvitationPrecheckCounts `json:"counts"`
+	Sendable          []BulkUserInvitationPrecheckItem `json:"sendable"`
+	DuplicateInFile   []BulkUserInvitationPrecheckItem `json:"duplicate_in_file"`
+	AlreadyRegistered []BulkUserInvitationPrecheckItem `json:"already_registered"`
+	ActiveInvitation  []BulkUserInvitationPrecheckItem `json:"active_invitation"`
+	InvalidEmail      []BulkUserInvitationInvalidItem  `json:"invalid_email"`
+}
+
+// BulkUserInvitationSendResult is the API-facing result for invitation TXT bulk send.
+type BulkUserInvitationSendResult struct {
+	SuccessCount int                              `json:"success_count"`
+	FailureCount int                              `json:"failure_count"`
+	IgnoredCount int                              `json:"ignored_count"`
+	Succeeded    []BulkUserInvitationPrecheckItem `json:"succeeded"`
+	Failed       []BulkUserInvitationSendFailure  `json:"failed"`
+	Ignored      BulkUserInvitationIgnoredResult  `json:"ignored"`
+	Precheck     BulkUserInvitationPrecheckResult `json:"precheck"`
+}
+
+// BulkUserInvitationSendFailure describes one email that failed during send.
+type BulkUserInvitationSendFailure struct {
+	Line    int    `json:"line"`
+	Email   string `json:"email"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// BulkUserInvitationIgnoredResult groups emails skipped by bulk send.
+type BulkUserInvitationIgnoredResult struct {
+	DuplicateInFile   []BulkUserInvitationPrecheckItem `json:"duplicate_in_file"`
+	AlreadyRegistered []BulkUserInvitationPrecheckItem `json:"already_registered"`
+	ActiveInvitation  []BulkUserInvitationPrecheckItem `json:"active_invitation"`
+	InvalidEmail      []BulkUserInvitationInvalidItem  `json:"invalid_email"`
+}
+
+// UserInvitationEmailPrecheck contains repository lookup results for a batch of emails.
+type UserInvitationEmailPrecheck struct {
+	Registered        map[string]bool
+	ActiveInvitations map[string]bool
+}
+
 // SystemAdminFilter contains supported filters for the system-admin list.
 type SystemAdminFilter struct {
 	ExternalUserID string
@@ -384,6 +451,7 @@ type Repository interface {
 	FindUserByEmail(email string) (User, error)
 	ListUsers(filter AdminUserFilter) (AdminUserPage, error)
 	ListUserInvitations(filter AdminUserInvitationFilter) (AdminUserInvitationPage, error)
+	PrecheckUserInvitationEmails(emails []string, now time.Time) (UserInvitationEmailPrecheck, error)
 	FindUserInvitationByEmail(email string) (UserInvitation, error)
 	FindUserInvitationByTokenHash(tokenHash string) (UserInvitation, error)
 	CreateUserInvitation(params UserInvitationCreateParams) (UserInvitation, error)

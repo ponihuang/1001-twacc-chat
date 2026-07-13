@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -194,6 +195,88 @@ func (h *Handler) ListUserInvitations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, status, resp)
+}
+
+// PrecheckUserInvitationTXT handles POST /api/system-admin/user-invitations/bulk-precheck.
+func (h *Handler) PrecheckUserInvitationTXT(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	content, ok := readUserInvitationTXTUpload(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, err := h.service.PrecheckUserInvitationTXT(content, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// SendBulkUserInvitations handles POST /api/system-admin/user-invitations/bulk-send.
+func (h *Handler) SendBulkUserInvitations(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	content, ok := readUserInvitationTXTUpload(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, err := h.service.SendBulkUserInvitations(content, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+func readUserInvitationTXTUpload(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, bulkInvitationTXTMaxBytes)
+	if err := r.ParseMultipartForm(bulkInvitationTXTMaxBytes); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "檔案上傳格式錯誤"})
+		return nil, false
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "請上傳 TXT 檔案"})
+		return nil, false
+	}
+	defer file.Close()
+
+	if strings.ToLower(filepath.Ext(header.Filename)) != ".txt" {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "僅支援 .txt 檔案"})
+		return nil, false
+	}
+	content, err := io.ReadAll(io.LimitReader(file, bulkInvitationTXTMaxBytes+1))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "TXT 檔案讀取失敗"})
+		return nil, false
+	}
+	if len(content) > bulkInvitationTXTMaxBytes {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "TXT 檔案不可超過 2MB"})
+		return nil, false
+	}
+
+	return content, true
 }
 
 // ListSystemAdmins handles GET /api/system-admin/admins.
@@ -867,6 +950,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "USER_ALREADY_EXISTS", Message: "该外部用户已存在"}
 	case errors.Is(err, ErrEmailAlreadyExists):
 		return Response{Success: false, Code: "EMAIL_ALREADY_EXISTS", Message: "Email 已存在"}
+	case errors.Is(err, ErrBulkInvitationTooMany):
+		return Response{Success: false, Code: "INVALID_REQUEST", Message: "TXT 最多支援 1000 筆有效且唯一的 Email"}
 	case errors.Is(err, ErrUserInvitationPending):
 		return Response{Success: false, Code: "USER_INVITATION_PENDING", Message: "該 Email 已有待註冊邀請"}
 	case errors.Is(err, ErrUserInvitationCompleted):

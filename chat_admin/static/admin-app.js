@@ -18,6 +18,7 @@
   let usersPerPage = 10;
   let userInvitationsPage = 1;
   let userInvitationsPerPage = 10;
+  let bulkInvitePrecheck = null;
   let adminsPage = 1;
   let adminsPerPage = 10;
   let modalConfirmHandler = null;
@@ -143,11 +144,21 @@
       userInvitationsPerPage: document.getElementById('user-invitations-per-page'),
       refreshUserInvitationsBtn: document.getElementById('refresh-user-invitations-btn'),
       openUserInviteModal: document.getElementById('open-user-invite-modal'),
+      openBulkUserInviteModal: document.getElementById('open-bulk-user-invite-modal'),
       userInviteModal: document.getElementById('user-invite-modal'),
       closeUserInviteModal: document.getElementById('close-user-invite-modal'),
       userInviteForm: document.getElementById('user-invite-form'),
       inviteUserEmail: document.getElementById('invite-user-email'),
       submitInviteUser: document.getElementById('submit-invite-user'),
+      bulkUserInviteModal: document.getElementById('bulk-user-invite-modal'),
+      closeBulkUserInviteModal: document.getElementById('close-bulk-user-invite-modal'),
+      bulkUserInviteForm: document.getElementById('bulk-user-invite-form'),
+      bulkInviteFile: document.getElementById('bulk-invite-file'),
+      bulkInviteSummary: document.getElementById('bulk-invite-summary'),
+      bulkInviteResults: document.getElementById('bulk-invite-results'),
+      bulkInviteStatus: document.getElementById('bulk-invite-status'),
+      submitBulkInvite: document.getElementById('submit-bulk-invite'),
+      resetBulkInvite: document.getElementById('reset-bulk-invite'),
       userEditForm: document.getElementById('user-edit-form'),
       editUserAccount: document.getElementById('edit-user-account'),
       editUserPassword: document.getElementById('edit-user-password'),
@@ -308,16 +319,36 @@
     if (elements.openUserInviteModal) {
       elements.openUserInviteModal.addEventListener('click', openUserInviteModal);
     }
+    if (elements.openBulkUserInviteModal) {
+      elements.openBulkUserInviteModal.addEventListener('click', openBulkUserInviteModal);
+    }
     if (elements.closeUserInviteModal) {
       elements.closeUserInviteModal.addEventListener('click', closeUserInviteModal);
+    }
+    if (elements.closeBulkUserInviteModal) {
+      elements.closeBulkUserInviteModal.addEventListener('click', closeBulkUserInviteModal);
     }
     if (elements.userInviteModal) {
       elements.userInviteModal.addEventListener('click', (e) => {
         if (e.target === elements.userInviteModal) closeUserInviteModal();
       });
     }
+    if (elements.bulkUserInviteModal) {
+      elements.bulkUserInviteModal.addEventListener('click', (e) => {
+        if (e.target === elements.bulkUserInviteModal) closeBulkUserInviteModal();
+      });
+    }
     if (elements.userInviteForm) {
       elements.userInviteForm.addEventListener('submit', inviteUser);
+    }
+    if (elements.bulkInviteFile) {
+      elements.bulkInviteFile.addEventListener('change', precheckBulkUserInvitations);
+    }
+    if (elements.bulkUserInviteForm) {
+      elements.bulkUserInviteForm.addEventListener('submit', sendBulkUserInvitations);
+    }
+    if (elements.resetBulkInvite) {
+      elements.resetBulkInvite.addEventListener('click', resetBulkInviteModal);
     }
     if (elements.userEditForm) {
       elements.userEditForm.addEventListener('submit', updateUser);
@@ -433,6 +464,28 @@
     if (!elements.userInviteModal) return;
     elements.userInviteModal.hidden = true;
     elements.userInviteForm?.reset();
+  }
+
+  function openBulkUserInviteModal() {
+    if (!elements.bulkUserInviteModal) return;
+    resetBulkInviteModal();
+    elements.bulkUserInviteModal.hidden = false;
+    requestAnimationFrame(() => elements.bulkInviteFile?.focus());
+  }
+
+  function closeBulkUserInviteModal() {
+    if (!elements.bulkUserInviteModal) return;
+    elements.bulkUserInviteModal.hidden = true;
+    resetBulkInviteModal();
+  }
+
+  function resetBulkInviteModal() {
+    bulkInvitePrecheck = null;
+    elements.bulkUserInviteForm?.reset();
+    setBulkInviteStatus('', false);
+    renderBulkInviteSummary(null);
+    renderBulkInviteSendResult(null);
+    updateBulkInviteSubmit(0, false);
   }
 
   /**
@@ -1394,6 +1447,226 @@
     } finally {
       if (elements.submitInviteUser) elements.submitInviteUser.disabled = false;
     }
+  }
+
+  async function precheckBulkUserInvitations() {
+    const file = elements.bulkInviteFile?.files?.[0];
+    bulkInvitePrecheck = null;
+    renderBulkInviteSummary(null);
+    renderBulkInviteSendResult(null);
+    updateBulkInviteSubmit(0, true);
+
+    if (!file) {
+      setBulkInviteStatus('', false);
+      updateBulkInviteSubmit(0, false);
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith('.txt')) {
+      setBulkInviteStatus('僅支援 .txt 檔案', true);
+      updateBulkInviteSubmit(0, false);
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setBulkInviteStatus('TXT 檔案不可超過 2MB', true);
+      updateBulkInviteSubmit(0, false);
+      return;
+    }
+
+    setBulkInviteStatus('正在預檢 TXT...', false);
+    try {
+      const response = await postBulkInviteFile('/api/system-admin/user-invitations/bulk-precheck', file);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '批量預檢失敗');
+      }
+
+      bulkInvitePrecheck = data.data || {};
+      const sendableCount = Number(bulkInvitePrecheck.counts?.sendable) || 0;
+      renderBulkInviteSummary(bulkInvitePrecheck);
+      setBulkInviteStatus(sendableCount > 0 ? '預檢完成' : '沒有可發送的 Email', false);
+      updateBulkInviteSubmit(sendableCount, false);
+    } catch (err) {
+      bulkInvitePrecheck = null;
+      setBulkInviteStatus(err.message || '批量預檢失敗', true);
+      updateBulkInviteSubmit(0, false);
+    }
+  }
+
+  async function sendBulkUserInvitations(event) {
+    event.preventDefault();
+    const file = elements.bulkInviteFile?.files?.[0];
+    const sendableCount = Number(bulkInvitePrecheck?.counts?.sendable) || 0;
+    if (!file || sendableCount <= 0) return;
+
+    const preSendPrecheck = bulkInvitePrecheck;
+    updateBulkInviteSubmit(sendableCount, true);
+    setBulkInviteStatus('正在發送邀請...', false);
+    renderBulkInviteSendResult(null);
+    try {
+      const response = await postBulkInviteFile('/api/system-admin/user-invitations/bulk-send', file);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '批量發送失敗');
+      }
+
+      const result = data.data || {};
+      bulkInvitePrecheck = preSendPrecheck;
+      renderBulkInviteSummary(preSendPrecheck);
+      renderBulkInviteSendResult(result, preSendPrecheck);
+      setBulkInviteStatus('批量發送完成', false);
+      markBulkInviteCompleted();
+      userInvitationsPage = 1;
+      await loadUserInvitations();
+      showSuccess(`批量發送完成：成功 ${Number(result.success_count) || 0}，失敗 ${Number(result.failure_count) || 0}`);
+    } catch (err) {
+      setBulkInviteStatus(err.message || '批量發送失敗', true);
+      updateBulkInviteSubmit(sendableCount, false);
+    }
+  }
+
+  async function postBulkInviteFile(url, file) {
+    const token = getSessionToken();
+    if (!token) {
+      logout();
+      return null;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: formData
+    });
+    if (response.status === 401) {
+      logout();
+      return null;
+    }
+    return response;
+  }
+
+  function updateBulkInviteSubmit(count, loading) {
+    if (!elements.submitBulkInvite) return;
+    elements.submitBulkInvite.disabled = loading || count <= 0;
+    elements.submitBulkInvite.textContent = loading ? '處理中...' : `發送 ${count} 封邀請`;
+  }
+
+  function markBulkInviteCompleted() {
+    if (!elements.submitBulkInvite) return;
+    elements.submitBulkInvite.disabled = true;
+    elements.submitBulkInvite.textContent = '已完成';
+  }
+
+  function setBulkInviteStatus(message, isError) {
+    if (!elements.bulkInviteStatus) return;
+    elements.bulkInviteStatus.textContent = message || '';
+    elements.bulkInviteStatus.classList.toggle('is-error', Boolean(isError));
+  }
+
+  function renderBulkInviteSummary(precheck) {
+    if (!elements.bulkInviteSummary) return;
+    elements.bulkInviteSummary.replaceChildren();
+    if (!precheck) {
+      elements.bulkInviteSummary.hidden = true;
+      return;
+    }
+
+    const counts = precheck.counts || {};
+    const cards = [
+      ['可發送', counts.sendable, 'sendable'],
+      ['檔案內重複', counts.duplicate_in_file, 'duplicate_in_file'],
+      ['已註冊', counts.already_registered, 'already_registered'],
+      ['已有有效邀請', counts.active_invitation, 'active_invitation'],
+      ['格式錯誤', counts.invalid_email, 'invalid_email']
+    ];
+    const grid = document.createElement('div');
+    grid.className = 'bulk-invite-count-grid';
+    cards.forEach(([label, value, key]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'bulk-invite-count-card';
+      button.textContent = `${label} ${Number(value) || 0}`;
+      button.addEventListener('click', () => renderBulkInviteList(label, precheck[key] || []));
+      grid.appendChild(button);
+    });
+    elements.bulkInviteSummary.appendChild(grid);
+    renderBulkInviteList('可發送', precheck.sendable || []);
+    elements.bulkInviteSummary.hidden = false;
+  }
+
+  function renderBulkInviteList(title, items) {
+    if (!elements.bulkInviteResults) return;
+    elements.bulkInviteResults.replaceChildren();
+    const heading = document.createElement('strong');
+    heading.textContent = title;
+    elements.bulkInviteResults.appendChild(heading);
+
+    const list = document.createElement('div');
+    list.className = 'bulk-invite-list';
+    const visibleItems = Array.isArray(items) ? items.slice(0, 80) : [];
+    if (visibleItems.length === 0) {
+      const empty = document.createElement('span');
+      empty.className = 'bulk-invite-empty';
+      empty.textContent = '沒有資料';
+      list.appendChild(empty);
+    } else {
+      visibleItems.forEach(item => {
+        const row = document.createElement('span');
+        row.textContent = `第 ${item.line || '--'} 行 ${item.email || item.value || ''}`;
+        list.appendChild(row);
+      });
+      if (items.length > visibleItems.length) {
+        const more = document.createElement('span');
+        more.className = 'bulk-invite-empty';
+        more.textContent = `另有 ${items.length - visibleItems.length} 筆未顯示`;
+        list.appendChild(more);
+      }
+    }
+    elements.bulkInviteResults.appendChild(list);
+    elements.bulkInviteResults.hidden = false;
+  }
+
+  function renderBulkInviteSendResult(result, preSendPrecheck) {
+    if (!elements.bulkInviteResults || !result) return;
+    elements.bulkInviteResults.replaceChildren();
+    const initialIgnoredCount = preSendPrecheck ? bulkInviteIgnoredCount(preSendPrecheck) : 0;
+    const raceIgnoredCount = Number(result.ignored_count) > initialIgnoredCount
+      ? Number(result.ignored_count) - initialIgnoredCount
+      : 0;
+    const displayIgnoredCount = initialIgnoredCount + raceIgnoredCount;
+    const summary = document.createElement('strong');
+    summary.textContent = `本次結果：成功 ${Number(result.success_count) || 0}，失敗 ${Number(result.failure_count) || 0}，忽略 ${displayIgnoredCount}`;
+    elements.bulkInviteResults.appendChild(summary);
+    if (raceIgnoredCount > 0) {
+      const note = document.createElement('span');
+      note.className = 'bulk-invite-empty';
+      note.textContent = `其中 ${raceIgnoredCount} 筆在發送前已變成不可發送。`;
+      elements.bulkInviteResults.appendChild(note);
+    }
+    if (Array.isArray(result.failed) && result.failed.length > 0) {
+      const list = document.createElement('div');
+      list.className = 'bulk-invite-list';
+      result.failed.slice(0, 80).forEach(item => {
+        const row = document.createElement('span');
+        row.textContent = `第 ${item.line || '--'} 行 ${item.email || ''}：${item.message || item.code || '發送失敗'}`;
+        list.appendChild(row);
+      });
+      elements.bulkInviteResults.appendChild(list);
+    }
+    elements.bulkInviteResults.hidden = false;
+  }
+
+  function bulkInviteIgnoredCount(precheck) {
+    const counts = precheck?.counts || {};
+    return (Number(counts.duplicate_in_file) || 0) +
+      (Number(counts.already_registered) || 0) +
+      (Number(counts.active_invitation) || 0) +
+      (Number(counts.invalid_email) || 0);
   }
 
   function confirmResendUserInvitation(invitation, button) {

@@ -271,6 +271,27 @@ func (m *mockRepository) ListUserInvitations(filter AdminUserInvitationFilter) (
 	}, nil
 }
 
+func (m *mockRepository) PrecheckUserInvitationEmails(emails []string, now time.Time) (UserInvitationEmailPrecheck, error) {
+	result := UserInvitationEmailPrecheck{
+		Registered:        map[string]bool{},
+		ActiveInvitations: map[string]bool{},
+	}
+	for _, email := range emails {
+		normalized := strings.ToLower(strings.TrimSpace(email))
+		if _, err := m.FindUserByEmail(normalized); err == nil {
+			result.Registered[normalized] = true
+		}
+		if invitation, err := m.FindUserInvitationByEmail(normalized); err == nil &&
+			invitation.Status == "pending" &&
+			now.Before(invitation.ExpiresAt) &&
+			invitation.AcceptedAt == nil &&
+			invitation.AcceptedUserID == 0 {
+			result.ActiveInvitations[normalized] = true
+		}
+	}
+	return result, nil
+}
+
 func (m *mockRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
 	admins := make([]SystemAdminSummary, 0)
 	for _, admin := range m.adminsByID {

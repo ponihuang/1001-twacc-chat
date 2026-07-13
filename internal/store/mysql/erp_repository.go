@@ -647,6 +647,76 @@ func (r *IntegrationRepository) ListUserInvitations(filter erp.AdminUserInvitati
 	}, nil
 }
 
+// PrecheckUserInvitationEmails checks existing users and active invitations for a batch of emails.
+func (r *IntegrationRepository) PrecheckUserInvitationEmails(emails []string, now time.Time) (erp.UserInvitationEmailPrecheck, error) {
+	result := erp.UserInvitationEmailPrecheck{
+		Registered:        map[string]bool{},
+		ActiveInvitations: map[string]bool{},
+	}
+	if len(emails) == 0 {
+		return result, nil
+	}
+
+	placeholders := queryPlaceholders(len(emails))
+	userArgs := make([]any, 0, len(emails))
+	for _, email := range emails {
+		userArgs = append(userArgs, strings.ToLower(strings.TrimSpace(email)))
+	}
+	userRows, err := r.db.Query(
+		`SELECT DISTINCT LOWER(email)
+		   FROM users
+		  WHERE email IS NOT NULL
+		    AND LOWER(email) IN (`+placeholders+`)`,
+		userArgs...,
+	)
+	if err != nil {
+		return erp.UserInvitationEmailPrecheck{}, fmt.Errorf("precheck invitation registered emails: %w", err)
+	}
+	defer userRows.Close()
+	for userRows.Next() {
+		var email string
+		if err := userRows.Scan(&email); err != nil {
+			return erp.UserInvitationEmailPrecheck{}, fmt.Errorf("scan precheck registered email: %w", err)
+		}
+		result.Registered[email] = true
+	}
+	if err := userRows.Err(); err != nil {
+		return erp.UserInvitationEmailPrecheck{}, fmt.Errorf("iterate precheck registered emails: %w", err)
+	}
+
+	invitationArgs := make([]any, 0, len(emails)+1)
+	invitationArgs = append(invitationArgs, now)
+	for _, email := range emails {
+		invitationArgs = append(invitationArgs, strings.ToLower(strings.TrimSpace(email)))
+	}
+	invitationRows, err := r.db.Query(
+		`SELECT DISTINCT LOWER(email)
+		   FROM user_invitations
+		  WHERE status = 'pending'
+		    AND accepted_user_id IS NULL
+		    AND accepted_at IS NULL
+		    AND expires_at > ?
+		    AND LOWER(email) IN (`+placeholders+`)`,
+		invitationArgs...,
+	)
+	if err != nil {
+		return erp.UserInvitationEmailPrecheck{}, fmt.Errorf("precheck active invitations: %w", err)
+	}
+	defer invitationRows.Close()
+	for invitationRows.Next() {
+		var email string
+		if err := invitationRows.Scan(&email); err != nil {
+			return erp.UserInvitationEmailPrecheck{}, fmt.Errorf("scan precheck active invitation: %w", err)
+		}
+		result.ActiveInvitations[email] = true
+	}
+	if err := invitationRows.Err(); err != nil {
+		return erp.UserInvitationEmailPrecheck{}, fmt.Errorf("iterate precheck active invitations: %w", err)
+	}
+
+	return result, nil
+}
+
 func validUserInvitationStatus(status string) bool {
 	switch status {
 	case "pending", "accepted", "expired":
@@ -654,6 +724,13 @@ func validUserInvitationStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+func queryPlaceholders(count int) string {
+	if count <= 0 {
+		return ""
+	}
+	return strings.TrimRight(strings.Repeat("?,", count), ",")
 }
 
 func userInvitationOrderBy(sorting string) string {

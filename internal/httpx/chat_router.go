@@ -35,6 +35,8 @@ func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, cha
 		mux.HandleFunc("POST /api/system-admin/users", integrationHandler.CreateUser)
 		mux.HandleFunc("GET /api/system-admin/user-invitations", integrationHandler.ListUserInvitations)
 		mux.HandleFunc("POST /api/system-admin/user-invitations", integrationHandler.InviteUser)
+		mux.HandleFunc("POST /api/system-admin/user-invitations/bulk-precheck", integrationHandler.PrecheckUserInvitationTXT)
+		mux.HandleFunc("POST /api/system-admin/user-invitations/bulk-send", integrationHandler.SendBulkUserInvitations)
 		mux.HandleFunc("/api/system-admin/user-invitations/resend", methodHandler("POST", integrationHandler.ResendUserInvitation))
 		mux.HandleFunc("GET /api/system-admin/users/{user_id}", integrationHandler.GetUser)
 		mux.HandleFunc("PATCH /api/system-admin/users/{user_id}", integrationHandler.UpdateUser)

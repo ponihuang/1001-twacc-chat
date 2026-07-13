@@ -82,6 +82,10 @@ func (s *stubIntegrationRepository) ListUserInvitations(filter AdminUserInvitati
 	return AdminUserInvitationPage{Items: []AdminUserInvitationSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
 
+func (s *stubIntegrationRepository) PrecheckUserInvitationEmails(emails []string, now time.Time) (UserInvitationEmailPrecheck, error) {
+	return UserInvitationEmailPrecheck{Registered: map[string]bool{}, ActiveInvitations: map[string]bool{}}, nil
+}
+
 func (s *stubIntegrationRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
 	return SystemAdminPage{Items: []SystemAdminSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }

@@ -722,6 +722,105 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + RAW_BODY
 
 ## 6. 管理與安全功能
 
+### `GET /api/system-admin/user-invitations`
+
+用途：
+
+- 查詢後台註冊邀請列表
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 必須是 `system_admin`
+- 支援 `email`、`status`、`sort`、`page`、`per_page` query parameters
+
+### `POST /api/system-admin/user-invitations`
+
+用途：
+
+- 單筆建立並寄送註冊邀請
+
+請求：
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+目前實作補充：
+
+- 需帶 `Authorization: Bearer <session-token>`
+- actor 必須是 `system_admin`
+- 後端會檢查 `users.email` 與 pending 且未過期的 invitation，避免重複邀請
+- 會沿用既有邀請寄信流程
+
+### `POST /api/system-admin/user-invitations/resend`
+
+用途：
+
+- 重送尚未完成的註冊邀請
+
+請求：
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+### `POST /api/system-admin/user-invitations/bulk-precheck`
+
+用途：
+
+- 批量註冊邀請 TXT 預檢，只回傳分類結果
+
+請求：
+
+```http
+POST /api/system-admin/user-invitations/bulk-precheck
+Authorization: Bearer <session-token>
+Content-Type: multipart/form-data
+
+file=<emails.txt>
+```
+
+規則：
+
+- 只接受 multipart/form-data 的 `file` 欄位
+- 副檔名限 `.txt`
+- 整個 request body 上限 `2MB`
+- TXT 每行一個 Email
+- 解析時會移除第一筆資料開頭的 UTF-8 BOM、trim 前後空白、忽略空白行、轉小寫、驗證 Email 格式並去除檔案內重複
+- 有效且唯一 Email 最多 `1000` 筆
+- active invitation 定義為 `pending` 且未過期
+- 此 API 不建立 invitation，也不寄信
+
+分類回應會包含：
+
+- `sendable`
+- `duplicate_in_file`
+- `already_registered`
+- `active_invitation`
+- `invalid_email`
+
+### `POST /api/system-admin/user-invitations/bulk-send`
+
+用途：
+
+- 批量建立並寄送註冊邀請
+
+請求格式同 `bulk-precheck`。
+
+目前實作補充：
+
+- 正式發送前會重新套用 TXT 解析、驗證、去重與分類邏輯
+- 只處理 `sendable` Email
+- 逐筆沿用單筆邀請流程建立 invitation 並寄信
+- 已註冊、已有有效邀請、檔案內重複與格式錯誤會列入 ignored
+- 單筆寄送失敗不會中斷整批
+- 回應包含 `success_count`、`failure_count`、`ignored_count`、`succeeded`、`failed`、`ignored` 與 `precheck`
+
 ### `GET /api/system-admin/users/{user_id}/devices`
 
 用途：
