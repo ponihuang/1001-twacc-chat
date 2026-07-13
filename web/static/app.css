@@ -357,8 +357,19 @@ strong {
   font-size: 0.9rem;
 }
 
-.invite-help strong {
+.invite-help summary {
   color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.invite-help summary::-webkit-details-marker {
+  display: none;
+}
+
+.invite-help span {
+  color: var(--muted);
 }
 
 .invite-page .auth-status {
