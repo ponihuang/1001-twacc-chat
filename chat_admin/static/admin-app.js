@@ -1521,7 +1521,7 @@
       markBulkInviteCompleted();
       userInvitationsPage = 1;
       await loadUserInvitations();
-      showSuccess(`批量發送完成：成功 ${Number(result.success_count) || 0}，失敗 ${Number(result.failure_count) || 0}`);
+      showSuccess(bulkInviteSendResultMessage(result, preSendPrecheck));
     } catch (err) {
       setBulkInviteStatus(err.message || '批量發送失敗', true);
       updateBulkInviteSubmit(sendableCount, false);
@@ -1634,18 +1634,14 @@
   function renderBulkInviteSendResult(result, preSendPrecheck) {
     if (!elements.bulkInviteResults || !result) return;
     elements.bulkInviteResults.replaceChildren();
-    const initialIgnoredCount = preSendPrecheck ? bulkInviteIgnoredCount(preSendPrecheck) : 0;
-    const raceIgnoredCount = Number(result.ignored_count) > initialIgnoredCount
-      ? Number(result.ignored_count) - initialIgnoredCount
-      : 0;
-    const displayIgnoredCount = initialIgnoredCount + raceIgnoredCount;
+    const changedBeforeSendCount = bulkInviteChangedBeforeSendCount(result, preSendPrecheck);
     const summary = document.createElement('strong');
-    summary.textContent = `本次結果：成功 ${Number(result.success_count) || 0}，失敗 ${Number(result.failure_count) || 0}，忽略 ${displayIgnoredCount}`;
+    summary.textContent = `本次實際寄出：成功 ${Number(result.success_count) || 0}，失敗 ${Number(result.failure_count) || 0}`;
     elements.bulkInviteResults.appendChild(summary);
-    if (raceIgnoredCount > 0) {
+    if (changedBeforeSendCount > 0) {
       const note = document.createElement('span');
       note.className = 'bulk-invite-empty';
-      note.textContent = `其中 ${raceIgnoredCount} 筆在發送前已變成不可發送。`;
+      note.textContent = `另外 ${changedBeforeSendCount} 筆在送出時已變成不可發送，未寄出邀請。`;
       elements.bulkInviteResults.appendChild(note);
     }
     if (Array.isArray(result.failed) && result.failed.length > 0) {
@@ -1659,6 +1655,18 @@
       elements.bulkInviteResults.appendChild(list);
     }
     elements.bulkInviteResults.hidden = false;
+  }
+
+  function bulkInviteSendResultMessage(result, preSendPrecheck) {
+    const changedBeforeSendCount = bulkInviteChangedBeforeSendCount(result, preSendPrecheck);
+    const suffix = changedBeforeSendCount > 0 ? `，未寄出 ${changedBeforeSendCount}` : '';
+    return `批量發送完成：成功 ${Number(result.success_count) || 0}，失敗 ${Number(result.failure_count) || 0}${suffix}`;
+  }
+
+  function bulkInviteChangedBeforeSendCount(result, preSendPrecheck) {
+    const initialIgnoredCount = preSendPrecheck ? bulkInviteIgnoredCount(preSendPrecheck) : 0;
+    const ignoredCount = Number(result?.ignored_count) || 0;
+    return ignoredCount > initialIgnoredCount ? ignoredCount - initialIgnoredCount : 0;
   }
 
   function bulkInviteIgnoredCount(precheck) {
