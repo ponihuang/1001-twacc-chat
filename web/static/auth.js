@@ -199,7 +199,7 @@
     };
   }
 
-  async function loginUser(payload, integrationToken) {
+  async function requestLogin(payload, integrationToken) {
     const response = await fetch("/api/erp/login", {
       method: "POST",
       headers: requestHeaders(integrationToken),
@@ -207,7 +207,30 @@
     });
 
     const result = await parseJSON(response);
-    return { response, result };
+    return { response, result, payload };
+  }
+
+  async function loginUser(payload, integrationToken) {
+    const primarySource = payload.source_system || "office";
+    const sources = primarySource === "office" || primarySource === "erp"
+      ? ["office", "erp"]
+      : [primarySource];
+    let lastResponseData = null;
+
+    for (const sourceSystem of sources) {
+      const nextPayload = { ...payload, source_system: sourceSystem };
+      const responseData = await requestLogin(nextPayload, integrationToken);
+      if (responseData.response.ok && responseData.result.success && responseData.result.token) {
+        return responseData;
+      }
+
+      lastResponseData = responseData;
+      if (!responseData.result || responseData.result.code !== "USER_NOT_FOUND") {
+        break;
+      }
+    }
+
+    return lastResponseData;
   }
 
   async function submitLogin(event) {
@@ -234,12 +257,13 @@
         throw new Error("帳號或密碼錯誤");
       }
 
+      const loggedInPayload = responseData.payload || payload;
       localStorage.setItem(storageKeys.token, responseData.result.token);
       localStorage.setItem(storageKeys.expiresAt, responseData.result.expires_at || "");
       localStorage.setItem(storageKeys.role, responseData.result.data && responseData.result.data.role ? responseData.result.data.role : "");
-      localStorage.setItem(storageKeys.displayName, responseData.result.data && responseData.result.data.display_name ? responseData.result.data.display_name : payload.external_user_id);
-      localStorage.setItem(storageKeys.sourceSystem, payload.source_system);
-      localStorage.setItem(storageKeys.externalUserID, payload.external_user_id);
+      localStorage.setItem(storageKeys.displayName, responseData.result.data && responseData.result.data.display_name ? responseData.result.data.display_name : loggedInPayload.external_user_id);
+      localStorage.setItem(storageKeys.sourceSystem, loggedInPayload.source_system);
+      localStorage.setItem(storageKeys.externalUserID, loggedInPayload.external_user_id);
 
       renderSessionState();
       if (app.dataset.loginRedirect) {

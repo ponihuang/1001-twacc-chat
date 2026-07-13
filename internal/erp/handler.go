@@ -304,6 +304,44 @@ func (h *Handler) ResendUserInvitation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// GetPublicUserInvitation handles GET /api/user-invitations/{token}.
+func (h *Handler) GetPublicUserInvitation(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	resp, status, err := h.service.GetPublicUserInvitation(r.PathValue("token"))
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
+// AcceptUserInvitation handles POST /api/user-invitations/accept.
+func (h *Handler) AcceptUserInvitation(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	var req AcceptUserInvitationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.AcceptUserInvitation(req)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // CreateSystemAdmin handles POST /api/system-admin/admins.
 func (h *Handler) CreateSystemAdmin(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -809,6 +847,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "INVALID_STATUS", Message: "状态仅支持 active 或 inactive"}
 	case errors.Is(err, ErrInvalidPassword):
 		return Response{Success: false, Code: "INVALID_PASSWORD", Message: "密码需为 4 到 20 码，且只能包含英文、数字或特殊符号"}
+	case errors.Is(err, ErrPasswordConfirmation):
+		return Response{Success: false, Code: "PASSWORD_CONFIRMATION_MISMATCH", Message: "密碼確認不一致"}
 	case errors.Is(err, ErrInvalidCredentials):
 		return Response{Success: false, Code: "INVALID_CREDENTIALS", Message: "帐号或密码错误"}
 	case errors.Is(err, ErrInvalidUserID):
@@ -831,6 +871,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "USER_INVITATION_PENDING", Message: "該 Email 已有待註冊邀請"}
 	case errors.Is(err, ErrUserInvitationCompleted):
 		return Response{Success: false, Code: "USER_INVITATION_COMPLETED", Message: "該註冊邀請已完成"}
+	case errors.Is(err, ErrUserInvitationNotFound):
+		return Response{Success: false, Code: "USER_INVITATION_NOT_FOUND", Message: "查無有效邀請"}
 	case errors.Is(err, ErrInvitationMailerUnavailable):
 		return Response{Success: false, Code: "MAILER_UNAVAILABLE", Message: "寄信服務尚未設定"}
 	case errors.Is(err, ErrSystemAdminCannotChat):

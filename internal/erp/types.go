@@ -110,6 +110,11 @@ type UserInvitation struct {
 	UpdatedAt        time.Time
 }
 
+// PublicUserInvitation is the API-facing shape for public invitation lookup.
+type PublicUserInvitation struct {
+	Email string `json:"email"`
+}
+
 // AdminUserInvitationSummary is the API-facing invitation shape for the admin console.
 type AdminUserInvitationSummary struct {
 	ID                    int64      `json:"id"`
@@ -239,6 +244,15 @@ type AdminInviteUserRequest struct {
 	Email string `json:"email"`
 }
 
+// AcceptUserInvitationRequest is the public payload for completing invited registration.
+type AcceptUserInvitationRequest struct {
+	Token                string `json:"token"`
+	Account              string `json:"account"`
+	Nickname             string `json:"nickname"`
+	Password             string `json:"password"`
+	PasswordConfirmation string `json:"password_confirmation"`
+}
+
 // SystemAdminCreateRequest is the payload for creating an office system admin.
 type SystemAdminCreateRequest struct {
 	ExternalUserID string `json:"external_user_id"`
@@ -349,18 +363,32 @@ type UserInvitationRefreshParams struct {
 	ExpiresAt        time.Time
 }
 
+// AcceptUserInvitationParams carries validated invited registration fields into storage.
+type AcceptUserInvitationParams struct {
+	TokenHash      string
+	SourceSystem   string
+	ExternalUserID string
+	PasswordHash   string
+	DisplayName    string
+	Status         string
+	AcceptedAt     time.Time
+}
+
 // Repository defines persistence required by external identity, login, and admin flows.
 type Repository interface {
 	CreateUser(params RegisterParams) (User, error)
 	FindUserByID(userID int64) (User, error)
 	FindUserByExternal(sourceSystem, externalUserID string) (User, error)
+	FindUserByExternalID(externalUserID string) (User, error)
 	FindUserByEmail(email string) (User, error)
 	ListUsers(filter AdminUserFilter) (AdminUserPage, error)
 	ListUserInvitations(filter AdminUserInvitationFilter) (AdminUserInvitationPage, error)
 	FindUserInvitationByEmail(email string) (UserInvitation, error)
+	FindUserInvitationByTokenHash(tokenHash string) (UserInvitation, error)
 	CreateUserInvitation(params UserInvitationCreateParams) (UserInvitation, error)
 	RefreshUserInvitation(params UserInvitationRefreshParams) (UserInvitation, error)
 	MarkUserInvitationSent(invitationID int64, sentAt time.Time) error
+	AcceptUserInvitation(params AcceptUserInvitationParams) (User, error)
 	ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)
 	FindSystemAdminByAccount(account string) (SystemAdminSummary, error)

@@ -27,11 +27,19 @@ func (s *stubIntegrationRepository) FindUserByExternal(sourceSystem, externalUse
 	return User{}, ErrUserNotFound
 }
 
+func (s *stubIntegrationRepository) FindUserByExternalID(externalUserID string) (User, error) {
+	return User{}, ErrUserNotFound
+}
+
 func (s *stubIntegrationRepository) FindUserByEmail(email string) (User, error) {
 	return User{}, ErrUserNotFound
 }
 
 func (s *stubIntegrationRepository) FindUserInvitationByEmail(email string) (UserInvitation, error) {
+	return UserInvitation{}, ErrUserNotFound
+}
+
+func (s *stubIntegrationRepository) FindUserInvitationByTokenHash(tokenHash string) (UserInvitation, error) {
 	return UserInvitation{}, ErrUserNotFound
 }
 
@@ -60,6 +68,10 @@ func (s *stubIntegrationRepository) RefreshUserInvitation(params UserInvitationR
 
 func (s *stubIntegrationRepository) MarkUserInvitationSent(invitationID int64, sentAt time.Time) error {
 	return nil
+}
+
+func (s *stubIntegrationRepository) AcceptUserInvitation(params AcceptUserInvitationParams) (User, error) {
+	return User{ID: 1, SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, Status: params.Status}, nil
 }
 
 func (s *stubIntegrationRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error) {

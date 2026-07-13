@@ -56,8 +56,10 @@ func (m *mockInvitationMailer) SendUserInvitation(email, inviteURL string, expir
 
 func (m *mockRepository) CreateUser(params RegisterParams) (User, error) {
 	key := params.SourceSystem + ":" + params.ExternalUserID
-	if _, ok := m.usersByExternal[key]; ok {
+	if _, err := m.FindUserByExternalID(params.ExternalUserID); err == nil {
 		return User{}, ErrUserAlreadyExists
+	} else if !errors.Is(err, ErrUserNotFound) {
+		return User{}, err
 	}
 	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, PasswordHash: params.PasswordHash, Email: params.Email, Language: params.Language, Status: params.Status}
 	if m.usersByID == nil {
@@ -87,6 +89,15 @@ func (m *mockRepository) FindUserByExternal(sourceSystem, externalUserID string)
 	return user, nil
 }
 
+func (m *mockRepository) FindUserByExternalID(externalUserID string) (User, error) {
+	for _, user := range m.usersByExternal {
+		if user.ExternalUserID == externalUserID {
+			return user, nil
+		}
+	}
+	return User{}, ErrUserNotFound
+}
+
 func (m *mockRepository) FindUserByEmail(email string) (User, error) {
 	for _, user := range m.usersByID {
 		if strings.EqualFold(user.Email, strings.TrimSpace(email)) {
@@ -105,6 +116,18 @@ func (m *mockRepository) FindUserInvitationByEmail(email string) (UserInvitation
 		return UserInvitation{}, ErrUserNotFound
 	}
 	return invitation, nil
+}
+
+func (m *mockRepository) FindUserInvitationByTokenHash(tokenHash string) (UserInvitation, error) {
+	if m.invitationsByEmail == nil {
+		return UserInvitation{}, ErrUserNotFound
+	}
+	for _, invitation := range m.invitationsByEmail {
+		if invitation.TokenHash == strings.TrimSpace(tokenHash) {
+			return invitation, nil
+		}
+	}
+	return UserInvitation{}, ErrUserNotFound
 }
 
 func (m *mockRepository) CreateUserInvitation(params UserInvitationCreateParams) (UserInvitation, error) {
@@ -162,6 +185,43 @@ func (m *mockRepository) MarkUserInvitationSent(invitationID int64, sentAt time.
 		}
 	}
 	return ErrUserNotFound
+}
+
+func (m *mockRepository) AcceptUserInvitation(params AcceptUserInvitationParams) (User, error) {
+	for key, invitation := range m.invitationsByEmail {
+		if invitation.TokenHash != params.TokenHash {
+			continue
+		}
+		if invitation.Status != "pending" || !params.AcceptedAt.Before(invitation.ExpiresAt) || invitation.AcceptedAt != nil || invitation.AcceptedUserID > 0 {
+			return User{}, ErrUserInvitationNotFound
+		}
+		user := User{
+			ID:             int64(len(m.usersByID) + 1),
+			SourceSystem:   params.SourceSystem,
+			ExternalUserID: params.ExternalUserID,
+			DisplayName:    params.DisplayName,
+			PasswordHash:   params.PasswordHash,
+			Email:          invitation.Email,
+			Language:       "zh-Hans",
+			Status:         params.Status,
+			CreatedAt:      params.AcceptedAt,
+			UpdatedAt:      params.AcceptedAt,
+		}
+		if m.usersByID == nil {
+			m.usersByID = map[int64]User{}
+		}
+		if m.usersByExternal == nil {
+			m.usersByExternal = map[string]User{}
+		}
+		m.usersByID[user.ID] = user
+		m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
+		invitation.Status = "accepted"
+		invitation.AcceptedUserID = user.ID
+		invitation.AcceptedAt = &params.AcceptedAt
+		m.invitationsByEmail[key] = invitation
+		return user, nil
+	}
+	return User{}, ErrUserInvitationNotFound
 }
 
 func (m *mockRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error) {

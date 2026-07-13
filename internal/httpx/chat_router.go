@@ -16,12 +16,15 @@ func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, cha
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) { rootHandler(w, r, pages) })
 	mux.HandleFunc("GET /home", func(w http.ResponseWriter, r *http.Request) { indexHandler(w, r, pages) })
 	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) { loginHandler(w, r, pages) })
+	mux.HandleFunc("GET /invite", func(w http.ResponseWriter, r *http.Request) { inviteHandler(w, r, pages) })
 	mux.HandleFunc("GET /chat", func(w http.ResponseWriter, r *http.Request) { desktopHandler(w, r, pages) })
 	mux.HandleFunc("GET /m/chat", func(w http.ResponseWriter, r *http.Request) { mobileHandler(w, r, pages) })
 	mux.HandleFunc("GET /embed/chat", func(w http.ResponseWriter, r *http.Request) { embedHandler(w, r, pages) })
 	mux.HandleFunc("GET /healthz", healthHandler)
 
 	if integrationHandler != nil {
+		mux.HandleFunc("GET /api/user-invitations/{token}", integrationHandler.GetPublicUserInvitation)
+		mux.HandleFunc("POST /api/user-invitations/accept", integrationHandler.AcceptUserInvitation)
 		mux.HandleFunc("POST /api/erp/register", integrationHandler.Register)
 		mux.HandleFunc("POST /api/erp/login", integrationHandler.Login)
 		mux.HandleFunc("GET /api/system-admin/admins", integrationHandler.ListSystemAdmins)
