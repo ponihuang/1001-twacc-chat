@@ -56,8 +56,10 @@ func (m *mockInvitationMailer) SendUserInvitation(email, inviteURL string, expir
 
 func (m *mockRepository) CreateUser(params RegisterParams) (User, error) {
 	key := params.SourceSystem + ":" + params.ExternalUserID
-	if _, ok := m.usersByExternal[key]; ok {
+	if _, err := m.FindUserByExternalID(params.ExternalUserID); err == nil {
 		return User{}, ErrUserAlreadyExists
+	} else if !errors.Is(err, ErrUserNotFound) {
+		return User{}, err
 	}
 	user := User{ID: int64(len(m.usersByID) + 1), SourceSystem: params.SourceSystem, ExternalUserID: params.ExternalUserID, DisplayName: params.DisplayName, PasswordHash: params.PasswordHash, Email: params.Email, Language: params.Language, Status: params.Status}
 	if m.usersByID == nil {
@@ -85,6 +87,15 @@ func (m *mockRepository) FindUserByExternal(sourceSystem, externalUserID string)
 		return User{}, ErrUserNotFound
 	}
 	return user, nil
+}
+
+func (m *mockRepository) FindUserByExternalID(externalUserID string) (User, error) {
+	for _, user := range m.usersByExternal {
+		if user.ExternalUserID == externalUserID {
+			return user, nil
+		}
+	}
+	return User{}, ErrUserNotFound
 }
 
 func (m *mockRepository) FindUserByEmail(email string) (User, error) {

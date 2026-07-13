@@ -955,7 +955,7 @@ func (s *Service) createUser(params RegisterParams, password string) (User, erro
 	}
 	params.PasswordHash = passwordHash
 
-	_, err = s.repo.FindUserByExternal(params.SourceSystem, params.ExternalUserID)
+	_, err = s.repo.FindUserByExternalID(params.ExternalUserID)
 	if err == nil {
 		return User{}, ErrUserAlreadyExists
 	}

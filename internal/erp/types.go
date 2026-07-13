@@ -354,6 +354,7 @@ type Repository interface {
 	CreateUser(params RegisterParams) (User, error)
 	FindUserByID(userID int64) (User, error)
 	FindUserByExternal(sourceSystem, externalUserID string) (User, error)
+	FindUserByExternalID(externalUserID string) (User, error)
 	FindUserByEmail(email string) (User, error)
 	ListUsers(filter AdminUserFilter) (AdminUserPage, error)
 	ListUserInvitations(filter AdminUserInvitationFilter) (AdminUserInvitationPage, error)

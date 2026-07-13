@@ -29,6 +29,12 @@ func NewERPRepository(db *sql.DB) *IntegrationRepository {
 
 // CreateUser inserts a new externally-sourced user and default security settings.
 func (r *IntegrationRepository) CreateUser(params erp.RegisterParams) (erp.User, error) {
+	if _, err := r.FindUserByExternalID(params.ExternalUserID); err == nil {
+		return erp.User{}, erp.ErrUserAlreadyExists
+	} else if !errors.Is(err, erp.ErrUserNotFound) {
+		return erp.User{}, err
+	}
+
 	result, err := r.db.Exec(
 		`INSERT INTO users (source_system, external_user_id, display_name, password_hash, email, language, whatsapp_account, telegram_account, status)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -125,6 +131,41 @@ func (r *IntegrationRepository) FindUserByExternal(sourceSystem, externalUserID 
 			return erp.User{}, erp.ErrUserNotFound
 		}
 		return erp.User{}, fmt.Errorf("find user: %w", err)
+	}
+
+	return user, nil
+}
+
+// FindUserByExternalID loads a user by account across all source systems.
+func (r *IntegrationRepository) FindUserByExternalID(externalUserID string) (erp.User, error) {
+	var user erp.User
+	row := r.db.QueryRow(
+		`SELECT id, source_system, external_user_id, display_name, password_hash, COALESCE(email, ''), language,
+		        COALESCE(whatsapp_account, ''), COALESCE(telegram_account, ''), status, created_at, updated_at
+		   FROM users
+		  WHERE external_user_id = ?
+		  ORDER BY id
+		  LIMIT 1`,
+		externalUserID,
+	)
+	if err := row.Scan(
+		&user.ID,
+		&user.SourceSystem,
+		&user.ExternalUserID,
+		&user.DisplayName,
+		&user.PasswordHash,
+		&user.Email,
+		&user.Language,
+		&user.WhatsAppAccount,
+		&user.TelegramAccount,
+		&user.Status,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.User{}, erp.ErrUserNotFound
+		}
+		return erp.User{}, fmt.Errorf("find user by account: %w", err)
 	}
 
 	return user, nil

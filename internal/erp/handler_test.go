@@ -27,6 +27,10 @@ func (s *stubIntegrationRepository) FindUserByExternal(sourceSystem, externalUse
 	return User{}, ErrUserNotFound
 }
 
+func (s *stubIntegrationRepository) FindUserByExternalID(externalUserID string) (User, error) {
+	return User{}, ErrUserNotFound
+}
+
 func (s *stubIntegrationRepository) FindUserByEmail(email string) (User, error) {
 	return User{}, ErrUserNotFound
 }
