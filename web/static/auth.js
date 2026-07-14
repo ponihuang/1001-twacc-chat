@@ -5,6 +5,7 @@
   }
 
   const loginForm = app.querySelector("[data-login-form]");
+  const passwordChangeForm = app.querySelector("[data-password-change-form]");
   const logoutButtons = Array.from(app.querySelectorAll("[data-logout-button]"));
   const statusNode = app.querySelector("[data-auth-status]");
   const loginStateNode = app.querySelector("[data-login-state]");
@@ -13,6 +14,10 @@
   const externalUserIDInput = app.querySelector("#external-user-id");
   const passwordInput = app.querySelector("#login-password");
   const loginFieldError = app.querySelector("[data-login-field-error]");
+  const currentPasswordInput = app.querySelector("#current-password");
+  const newPasswordInput = app.querySelector("#new-password");
+  const newPasswordConfirmationInput = app.querySelector("#new-password-confirmation");
+  const passwordChangeError = app.querySelector("[data-password-change-error]");
   const deviceIDInput = app.querySelector("#device-id");
   const integrationTokenInput = app.querySelector("#integration-token");
   const forgotPasswordToggle = app.querySelector("[data-forgot-password-toggle]");
@@ -25,6 +30,7 @@
     sourceSystem: "twacc_chat_source_system",
     externalUserID: "twacc_chat_external_user_id",
     displayName: "twacc_chat_display_name",
+    mustChangePassword: "twacc_chat_must_change_password",
     deviceID: "twacc_chat_device_id",
     integrationToken: "twacc_chat_integration_token"
   };
@@ -77,6 +83,7 @@
         sourceSystem: "",
         externalUserID: "",
         displayName: "",
+        mustChangePassword: false,
         deviceID: localStorage.getItem(storageKeys.deviceID) || "",
         integrationToken: localStorage.getItem(storageKeys.integrationToken) || ""
       };
@@ -89,6 +96,7 @@
       sourceSystem: localStorage.getItem(storageKeys.sourceSystem) || "",
       externalUserID: localStorage.getItem(storageKeys.externalUserID) || "",
       displayName: localStorage.getItem(storageKeys.displayName) || "",
+      mustChangePassword: localStorage.getItem(storageKeys.mustChangePassword) === "true",
       deviceID: localStorage.getItem(storageKeys.deviceID) || "",
       integrationToken: localStorage.getItem(storageKeys.integrationToken) || ""
     };
@@ -109,6 +117,7 @@
     localStorage.removeItem(storageKeys.sourceSystem);
     localStorage.removeItem(storageKeys.externalUserID);
     localStorage.removeItem(storageKeys.displayName);
+    localStorage.removeItem(storageKeys.mustChangePassword);
   }
 
   function sessionEventDetail(session) {
@@ -136,6 +145,26 @@
     passwordInput.setAttribute("aria-invalid", hasError ? "true" : "false");
   }
 
+  function setPasswordChangeError(message) {
+    if (!passwordChangeError) {
+      return;
+    }
+    const hasError = Boolean(message);
+    passwordChangeError.textContent = message || "";
+    passwordChangeError.hidden = !hasError;
+    [currentPasswordInput, newPasswordInput, newPasswordConfirmationInput].forEach(function (input) {
+      if (!input) return;
+      input.classList.toggle("is-error", hasError);
+      input.setAttribute("aria-invalid", hasError ? "true" : "false");
+    });
+  }
+
+  function showPasswordChangeForm(show) {
+    if (loginForm) loginForm.hidden = Boolean(show);
+    if (passwordChangeForm) passwordChangeForm.hidden = !show;
+    if (forgotPasswordToggle?.parentElement) forgotPasswordToggle.parentElement.hidden = Boolean(show);
+  }
+
   function renderSessionState() {
     const session = readSession();
     deviceIDInput.value = session.deviceID || generateDeviceID();
@@ -150,6 +179,14 @@
       const accountLabel = session.sourceSystem && session.externalUserID ? [session.sourceSystem, session.externalUserID].join(" / ") : "未知帳號";
       loginStateNode.textContent = "已登入：" + (session.displayName || session.externalUserID || "使用者");
       tokenStateNode.textContent = accountLabel + "，登入憑證有效";
+      if (session.mustChangePassword) {
+        showPasswordChangeForm(true);
+        statusNode.textContent = "請先更新密碼後再進入聊天室";
+        statusNode.classList.remove("is-error");
+        statusNode.classList.add("is-success");
+        return;
+      }
+      showPasswordChangeForm(false);
       statusNode.textContent = session.expiresAt
         ? "已保存 session token，過期時間：" + formatDateTime(session.expiresAt)
         : "已保存 session token";
@@ -168,6 +205,7 @@
     }
 
     loginStateNode.textContent = "未登入";
+    showPasswordChangeForm(false);
     tokenStateNode.textContent = "尚未保存 session token";
     statusNode.textContent = "尚未登入";
     statusNode.classList.remove("is-error", "is-success");
@@ -262,8 +300,19 @@
       localStorage.setItem(storageKeys.expiresAt, responseData.result.expires_at || "");
       localStorage.setItem(storageKeys.role, responseData.result.data && responseData.result.data.role ? responseData.result.data.role : "");
       localStorage.setItem(storageKeys.displayName, responseData.result.data && responseData.result.data.display_name ? responseData.result.data.display_name : loggedInPayload.external_user_id);
+      localStorage.setItem(storageKeys.mustChangePassword, responseData.result.data && responseData.result.data.must_change_password ? "true" : "false");
       localStorage.setItem(storageKeys.sourceSystem, loggedInPayload.source_system);
       localStorage.setItem(storageKeys.externalUserID, loggedInPayload.external_user_id);
+
+      if (responseData.result.data && responseData.result.data.must_change_password) {
+        statusNode.textContent = "請先更新密碼後再進入聊天室";
+        statusNode.classList.remove("is-error");
+        statusNode.classList.add("is-success");
+        showPasswordChangeForm(true);
+        if (currentPasswordInput) currentPasswordInput.value = payload.password;
+        if (newPasswordInput) newPasswordInput.focus();
+        return;
+      }
 
       renderSessionState();
       if (app.dataset.loginRedirect) {
@@ -274,6 +323,60 @@
       statusNode.classList.remove("is-success");
       statusNode.classList.add("is-error");
       setLoginFieldError(error.message || "帳號或密碼錯誤");
+    }
+  }
+
+  async function submitPasswordChange(event) {
+    event.preventDefault();
+    setPasswordChangeError("");
+    const currentPassword = currentPasswordInput?.value.trim() || "";
+    const password = newPasswordInput?.value.trim() || "";
+    const passwordConfirmation = newPasswordConfirmationInput?.value.trim() || "";
+    if (password !== passwordConfirmation) {
+      setPasswordChangeError("密碼確認不一致");
+      return;
+    }
+    const token = localStorage.getItem(storageKeys.token) || "";
+    if (!token) {
+      setPasswordChangeError("登入狀態已失效，請重新登入");
+      return;
+    }
+
+    statusNode.textContent = "更新密碼中...";
+    statusNode.classList.remove("is-error", "is-success");
+    try {
+      const response = await fetch("/api/users/me/password", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token
+        },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          password: password,
+          password_confirmation: passwordConfirmation
+        })
+      });
+      const result = await parseJSON(response);
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "更新密碼失敗");
+      }
+
+      localStorage.setItem(storageKeys.mustChangePassword, "false");
+      if (result.data && result.data.display_name) {
+        localStorage.setItem(storageKeys.displayName, result.data.display_name);
+      }
+      statusNode.textContent = "密碼已更新";
+      statusNode.classList.add("is-success");
+      renderSessionState();
+      if (app.dataset.loginRedirect) {
+        window.location.assign(app.dataset.loginRedirect);
+      }
+    } catch (error) {
+      statusNode.textContent = error.message || "更新密碼失敗";
+      statusNode.classList.remove("is-success");
+      statusNode.classList.add("is-error");
+      setPasswordChangeError(error.message || "更新密碼失敗");
     }
   }
 
@@ -298,6 +401,9 @@
   }
 
   loginForm.addEventListener("submit", submitLogin);
+  if (passwordChangeForm) {
+    passwordChangeForm.addEventListener("submit", submitPasswordChange);
+  }
   [externalUserIDInput, passwordInput].forEach(function (input) {
     input.addEventListener("input", function () {
       setLoginFieldError("");

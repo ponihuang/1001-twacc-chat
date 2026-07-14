@@ -79,9 +79,18 @@ Authorization: Bearer <session-token>
 - 開始與結束日期
 - 建立時間或最近在線排序
 
+註冊邀請管理：
+
+```text
+http://127.0.0.1:8080/office/user/invitations
+```
+
+可單筆新增邀請、重送待註冊邀請，或點「批量新增」上傳 `.txt`。TXT 每行一個 Email，選檔後會先預檢並分類為可發送、檔案內重複、已註冊、已有有效邀請與格式錯誤；確認後才會批量發送。批量上傳限制為 request body 最大 `2MB`，有效且唯一 Email 最多 `1000` 筆。
+
 ## 5. 目前限制
 
 - 使用者列表的「編輯」可進入 `/office/user/{user_id}/edit` 查看不可修改的帳號，並修改密碼、暱稱、Email 與狀態；密碼留空時保留原密碼。
+- 註冊邀請批量發送會逐筆寄信，若 SMTP 回應較慢，大量發送時畫面會等待後端完成整批結果。
 - `/office/conversations` 目前是占位頁；`/office/admins` 已提供管理員列表、新增與編輯。
 - 設備與 IP 白名單 API 已存在，但新版後台尚未提供對應頁面。
 - 使用者列表預設每頁顯示 10 筆，並可切換為 20、50 或 100 筆。
@@ -110,7 +119,7 @@ Authorization: Bearer <session-token>
 ## 7. 驗證
 
 ```bash
-go test ./...
+go test ./internal/erp ./internal/store/mysql ./internal/httpx
 node --check chat_admin/static/admin-app.js
 git diff --check
 ```

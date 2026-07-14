@@ -58,6 +58,7 @@
 - 使用者列表支援總筆數、分頁及每頁 10、20、50、100 筆切換
 - `/office/user/create` 新增使用者頁面與 `POST /api/system-admin/users`
 - `/office/user/invite` 邀請使用者頁面與 `POST /api/system-admin/user-invitations`
+- `/office/user/invitations` 註冊邀請管理頁支援單筆邀請、重送與批量 TXT 預檢 / 發送
 - `/office/user/{user_id}/edit` 編輯使用者頁面與使用者查詢、更新 API；編輯時密碼留空會保留原密碼
 - trusted device 核准 API
 - 使用者、session、裝置、IP 白名單、聊天核心資料表 migration
@@ -228,6 +229,11 @@ REQUIRE_TRUSTED_DEVICE=false
 - `POST /api/erp/login`
 - `PATCH /api/users/me/profile`
 - `GET /api/system-admin/users`
+- `GET /api/system-admin/user-invitations`
+- `POST /api/system-admin/user-invitations`
+- `POST /api/system-admin/user-invitations/resend`
+- `POST /api/system-admin/user-invitations/bulk-precheck`
+- `POST /api/system-admin/user-invitations/bulk-send`
 - `GET /api/system-admin/users/{user_id}/devices`
 - `PUT /api/system-admin/users/{user_id}/ip-whitelist`
 - `POST /api/users/{user_id}/devices/{device_id}/approve`
@@ -237,6 +243,7 @@ REQUIRE_TRUSTED_DEVICE=false
 - 登入入口：`/admin/login`
 - 後台首頁：`/office`
 - 使用者管理：`/office/user`
+- 註冊邀請管理：`/office/user/invitations`
 - 對話管理：`/office/conversations`（目前為占位畫面）
 - 管理員帳號：`/office/admins`
 - 舊路由 `/admin/dashboard` 會重新導向 `/office`

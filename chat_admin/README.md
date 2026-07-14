@@ -12,6 +12,7 @@
 - `/office/user` 使用者管理頁
 - `/office/user/create` 新增使用者頁
 - `/office/user/invitations` 註冊邀請管理頁
+- 註冊邀請支援單筆寄送、重送與批量 TXT 預檢 / 發送
 - `/office/user/{user_id}/edit` 編輯使用者頁
 - 從 `users` 資料表載入使用者列表
 - 以 `auth_sessions.last_used_at` 顯示最近在線
@@ -99,6 +100,24 @@ Content-Type: application/json
 
 邀請頁只填 Email；後端會檢查 `users.email` 與既有邀請，避免重複。若已設定 SMTP 環境變數，會寄出註冊邀請信。
 
+批量邀請 TXT 預檢：
+
+```http
+POST /api/system-admin/user-invitations/bulk-precheck
+Authorization: Bearer <session-token>
+Content-Type: multipart/form-data
+```
+
+批量邀請正式發送：
+
+```http
+POST /api/system-admin/user-invitations/bulk-send
+Authorization: Bearer <session-token>
+Content-Type: multipart/form-data
+```
+
+兩個批量 API 都只接受 `file` 欄位，副檔名限 `.txt`，整個 request body 上限 `2MB`。TXT 每行一個 Email；解析時會移除第一筆資料開頭的 UTF-8 BOM、trim 前後空白、忽略空白行、轉小寫、驗證格式並去除檔案內重複。有效且唯一 Email 最多 `1000` 筆。`bulk-precheck` 只回傳分類結果，不建立邀請也不寄信；`bulk-send` 會重新預檢，只對可發送 Email 沿用單筆邀請流程建立 invitation 並寄信。
+
 取得與更新單一使用者：
 
 ```http
@@ -122,7 +141,7 @@ POST /api/users/{user_id}/devices/{device_id}/approve
 ## 前端結構
 
 - `admin-auth.js`：session token、登入保護與登出
-- `admin-app.js`：路由切換、使用者查詢與表格渲染
+- `admin-app.js`：路由切換、使用者查詢、註冊邀請管理與表格渲染
 - `admin.css`：登入頁與後台共用樣式
 - `USER_COLUMNS`：使用者表格的欄位名稱、順序與寬度設定
 

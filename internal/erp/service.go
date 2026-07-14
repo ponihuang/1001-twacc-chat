@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"regexp"
 	"strconv"
@@ -19,6 +20,8 @@ var sourceSystemPattern = regexp.MustCompile(`^[a-z0-9_-]{2,50}$`)
 var passwordPattern = regexp.MustCompile(`^[A-Za-z0-9[:punct:]]{4,20}$`)
 
 const passwordHashIterations = 120000
+const bulkInvitationTXTMaxBytes = 2 << 20
+const bulkInvitationTXTMaxEntries = 1000
 
 var (
 	ErrInvalidSourceSystem         = errors.New("invalid source system")
@@ -26,10 +29,12 @@ var (
 	ErrInvalidDisplayName          = errors.New("invalid display name")
 	ErrInvalidEmail                = errors.New("invalid email")
 	ErrEmailAlreadyExists          = errors.New("email already exists")
+	ErrBulkInvitationTooMany       = errors.New("bulk invitation too many")
 	ErrUserInvitationPending       = errors.New("user invitation pending")
 	ErrUserInvitationCompleted     = errors.New("user invitation completed")
 	ErrUserInvitationNotFound      = errors.New("user invitation not found")
 	ErrInvitationMailerUnavailable = errors.New("invitation mailer unavailable")
+	ErrTemporaryPasswordMailFailed = errors.New("temporary password mail failed")
 	ErrPasswordConfirmation        = errors.New("password confirmation mismatch")
 	ErrInvalidStatus               = errors.New("invalid status")
 	ErrInvalidPassword             = errors.New("invalid password")
@@ -46,6 +51,7 @@ var (
 	ErrDeviceNotTrusted            = errors.New("device not trusted")
 	ErrIPNotAllowed                = errors.New("ip not allowed")
 	ErrNewDeviceApprovalRequired   = errors.New("new device approval required")
+	ErrTemporaryPasswordExpired    = errors.New("temporary password expired")
 )
 
 // Service implements external-system identity and login rules for chat access.
@@ -138,6 +144,9 @@ func (s *Service) Login(req LoginRequest, clientIP, userAgent string) (Response,
 	}
 	if !passwordMatches(password, user.PasswordHash) {
 		return Response{}, statusCode(ErrInvalidCredentials), ErrInvalidCredentials
+	}
+	if user.TemporaryPasswordExpiresAt != nil && user.MustChangePassword && time.Now().UTC().After(*user.TemporaryPasswordExpiresAt) {
+		return Response{}, statusCode(ErrTemporaryPasswordExpired), ErrTemporaryPasswordExpired
 	}
 
 	settings, err := s.repo.GetUserSecuritySettings(user.ID)
@@ -267,6 +276,42 @@ func (s *Service) UpdateProfile(actor SessionPrincipal, req ProfileUpdateRequest
 	return Response{Success: true, Code: "PROFILE_UPDATED", Message: "个人资料更新成功", Data: data}, 200, nil
 }
 
+// UpdatePassword changes the authenticated user's password and clears temporary password flags.
+func (s *Service) UpdatePassword(actor SessionPrincipal, req PasswordUpdateRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if actor.UserID <= 0 {
+		return Response{}, statusCode(ErrInsufficientRole), ErrInsufficientRole
+	}
+
+	user, err := s.repo.FindUserByID(actor.UserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if !passwordMatches(req.CurrentPassword, user.PasswordHash) {
+		return Response{}, statusCode(ErrInvalidCredentials), ErrInvalidCredentials
+	}
+	if strings.TrimSpace(req.Password) != strings.TrimSpace(req.PasswordConfirmation) {
+		return Response{}, statusCode(ErrPasswordConfirmation), ErrPasswordConfirmation
+	}
+	passwordHash, err := hashPassword(req.Password)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	updated, err := s.repo.UpdateUserPassword(actor.UserID, passwordHash)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	data, err := s.profileResponseData(updated)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{Success: true, Code: "PASSWORD_UPDATED", Message: "密碼已更新", Data: data}, 200, nil
+}
+
 // ListUsers returns users for the admin console. Only system_admin is allowed.
 func (s *Service) ListUsers(filter AdminUserFilter, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -309,6 +354,164 @@ func (s *Service) ListUserInvitations(filter AdminUserInvitationFilter, actor Ad
 		Message: "註冊邀請列表讀取成功",
 		Data:    invitations,
 	}, 200, nil
+}
+
+// PrecheckUserInvitationTXT classifies an uploaded TXT before creating any invitation.
+func (s *Service) PrecheckUserInvitationTXT(content []byte, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	result, err := s.classifyUserInvitationTXT(content)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "USER_INVITATION_BULK_PRECHECK_OK",
+		Message: "註冊邀請 TXT 預檢完成",
+		Data:    result,
+	}, 200, nil
+}
+
+// SendBulkUserInvitations creates and sends invitations for currently sendable TXT emails.
+func (s *Service) SendBulkUserInvitations(content []byte, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	precheck, err := s.classifyUserInvitationTXT(content)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	result := BulkUserInvitationSendResult{
+		Succeeded: []BulkUserInvitationPrecheckItem{},
+		Failed:    []BulkUserInvitationSendFailure{},
+		Ignored: BulkUserInvitationIgnoredResult{
+			DuplicateInFile:   precheck.DuplicateInFile,
+			AlreadyRegistered: precheck.AlreadyRegistered,
+			ActiveInvitation:  precheck.ActiveInvitation,
+			InvalidEmail:      precheck.InvalidEmail,
+		},
+		Precheck: precheck,
+	}
+
+	for _, item := range precheck.Sendable {
+		_, _, err := s.InviteUser(AdminInviteUserRequest{Email: item.Email}, actor)
+		if err != nil {
+			if errors.Is(err, ErrEmailAlreadyExists) {
+				result.Ignored.AlreadyRegistered = append(result.Ignored.AlreadyRegistered, item)
+				continue
+			}
+			if errors.Is(err, ErrUserInvitationPending) {
+				result.Ignored.ActiveInvitation = append(result.Ignored.ActiveInvitation, item)
+				continue
+			}
+			errResp := errorResponse(err)
+			result.Failed = append(result.Failed, BulkUserInvitationSendFailure{
+				Line:    item.Line,
+				Email:   item.Email,
+				Code:    errResp.Code,
+				Message: errResp.Message,
+			})
+			continue
+		}
+		result.Succeeded = append(result.Succeeded, item)
+	}
+	result.SuccessCount = len(result.Succeeded)
+	result.FailureCount = len(result.Failed)
+	result.IgnoredCount = len(result.Ignored.DuplicateInFile) +
+		len(result.Ignored.AlreadyRegistered) +
+		len(result.Ignored.ActiveInvitation) +
+		len(result.Ignored.InvalidEmail)
+
+	return Response{
+		Success: true,
+		Code:    "USER_INVITATION_BULK_SEND_DONE",
+		Message: "批量註冊邀請發送完成",
+		Data:    result,
+	}, 200, nil
+}
+
+func (s *Service) classifyUserInvitationTXT(content []byte) (BulkUserInvitationPrecheckResult, error) {
+	result := BulkUserInvitationPrecheckResult{
+		Sendable:          []BulkUserInvitationPrecheckItem{},
+		DuplicateInFile:   []BulkUserInvitationPrecheckItem{},
+		AlreadyRegistered: []BulkUserInvitationPrecheckItem{},
+		ActiveInvitation:  []BulkUserInvitationPrecheckItem{},
+		InvalidEmail:      []BulkUserInvitationInvalidItem{},
+	}
+	seen := map[string]bool{}
+	bomRemoved := false
+	unique := make([]BulkUserInvitationPrecheckItem, 0)
+	for i, raw := range strings.Split(string(content), "\n") {
+		line := i + 1
+		value := strings.TrimSpace(raw)
+		if !bomRemoved && value != "" {
+			value = strings.TrimPrefix(value, "\uFEFF")
+			value = strings.TrimSpace(value)
+			bomRemoved = true
+		}
+		value = strings.TrimSuffix(value, "\r")
+		if value == "" {
+			result.IgnoredBlankLines++
+			continue
+		}
+		result.TotalLines++
+		email := normalizeEmail(value)
+		if !isValidEmail(email) {
+			result.InvalidEmail = append(result.InvalidEmail, BulkUserInvitationInvalidItem{Line: line, Value: value})
+			continue
+		}
+		item := BulkUserInvitationPrecheckItem{Line: line, Email: email}
+		if seen[email] {
+			result.DuplicateInFile = append(result.DuplicateInFile, item)
+			continue
+		}
+		seen[email] = true
+		unique = append(unique, item)
+		if len(unique) > bulkInvitationTXTMaxEntries {
+			return BulkUserInvitationPrecheckResult{}, ErrBulkInvitationTooMany
+		}
+	}
+	result.UniqueEmails = len(unique)
+
+	emails := make([]string, 0, len(unique))
+	for _, item := range unique {
+		emails = append(emails, item.Email)
+	}
+	precheck, err := s.repo.PrecheckUserInvitationEmails(emails, time.Now().UTC())
+	if err != nil {
+		return BulkUserInvitationPrecheckResult{}, err
+	}
+
+	for _, item := range unique {
+		switch {
+		case precheck.Registered[item.Email]:
+			result.AlreadyRegistered = append(result.AlreadyRegistered, item)
+		case precheck.ActiveInvitations[item.Email]:
+			result.ActiveInvitation = append(result.ActiveInvitation, item)
+		default:
+			result.Sendable = append(result.Sendable, item)
+		}
+	}
+	result.Counts = BulkUserInvitationPrecheckCounts{
+		Sendable:          len(result.Sendable),
+		DuplicateInFile:   len(result.DuplicateInFile),
+		AlreadyRegistered: len(result.AlreadyRegistered),
+		ActiveInvitation:  len(result.ActiveInvitation),
+		InvalidEmail:      len(result.InvalidEmail),
+	}
+
+	return result, nil
 }
 
 // ListSystemAdmins returns system-admin accounts for the admin console.
@@ -855,6 +1058,91 @@ func (s *Service) UpdateUser(targetUserID int64, req AdminUpdateUserRequest, act
 	}, 200, nil
 }
 
+// UpdateUserChatMute toggles whether a user can send chat messages.
+func (s *Service) UpdateUserChatMute(targetUserID int64, req AdminUpdateUserChatMuteRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if targetUserID <= 0 {
+		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	user, err := s.repo.UpdateUserChatMute(targetUserID, AdminUpdateUserChatMuteParams{IsChatMuted: req.IsChatMuted})
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	code := "USER_CHAT_UNMUTED"
+	message := "用户已解除禁言"
+	if user.IsChatMuted {
+		code = "USER_CHAT_MUTED"
+		message = "用户已禁止发言"
+	}
+
+	return Response{
+		Success: true,
+		Code:    code,
+		Message: message,
+		Data:    adminUserSummary(user),
+	}, 200, nil
+}
+
+// SendTemporaryPassword sends a generated temporary password to a user's email.
+func (s *Service) SendTemporaryPassword(targetUserID int64, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if targetUserID <= 0 {
+		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if s.invitationMailer == nil {
+		return Response{}, statusCode(ErrInvitationMailerUnavailable), ErrInvitationMailerUnavailable
+	}
+
+	user, err := s.repo.FindUserByID(targetUserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	email := strings.TrimSpace(user.Email)
+	if email == "" || !strings.Contains(email, "@") {
+		return Response{}, statusCode(ErrInvalidEmail), ErrInvalidEmail
+	}
+
+	temporaryPassword, err := newTemporaryPassword()
+	if err != nil {
+		return Response{}, 500, err
+	}
+	passwordHash, err := hashPassword(temporaryPassword)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	expiresAt := time.Now().UTC().Add(30 * time.Minute)
+
+	if err := s.invitationMailer.SendTemporaryPassword(email, temporaryPassword, expiresAt); err != nil {
+		return Response{}, statusCode(ErrTemporaryPasswordMailFailed), ErrTemporaryPasswordMailFailed
+	}
+	updated, err := s.repo.UpdateUserTemporaryPassword(targetUserID, TemporaryPasswordParams{
+		PasswordHash: passwordHash,
+		ExpiresAt:    expiresAt,
+	})
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "TEMPORARY_PASSWORD_SENT",
+		Message: "臨時密碼已寄出",
+		Data:    adminUserSummary(updated),
+	}, 200, nil
+}
+
 // GetSystemAdmin returns one backend admin for editing. Only system_admin is allowed.
 func (s *Service) GetSystemAdmin(targetAdminID int64, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -1227,6 +1515,15 @@ func validatePassword(password string) error {
 	return nil
 }
 
+func newTemporaryPassword() (string, error) {
+	max := big.NewInt(1000000)
+	n, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
 func hashPassword(password string) (string, error) {
 	password = strings.TrimSpace(password)
 	if err := validatePassword(password); err != nil {
@@ -1328,23 +1625,28 @@ func (s *Service) profileResponseData(user User) (map[string]any, error) {
 	}
 
 	return map[string]any{
-		"role":             role,
-		"user_id":          user.ID,
-		"source_system":    user.SourceSystem,
-		"external_user_id": user.ExternalUserID,
-		"display_name":     user.DisplayName,
+		"role":                          role,
+		"user_id":                       user.ID,
+		"source_system":                 user.SourceSystem,
+		"external_user_id":              user.ExternalUserID,
+		"display_name":                  user.DisplayName,
+		"must_change_password":          user.MustChangePassword,
+		"temporary_password_expires_at": user.TemporaryPasswordExpiresAt,
 	}, nil
 }
 
 func adminUserSummary(user User) AdminUserSummary {
 	return AdminUserSummary{
-		ID:             user.ID,
-		ExternalUserID: user.ExternalUserID,
-		DisplayName:    user.DisplayName,
-		Email:          user.Email,
-		Status:         user.Status,
-		SourceSystem:   user.SourceSystem,
-		CreatedAt:      user.CreatedAt,
+		ID:                         user.ID,
+		ExternalUserID:             user.ExternalUserID,
+		DisplayName:                user.DisplayName,
+		Email:                      user.Email,
+		Status:                     user.Status,
+		IsChatMuted:                user.IsChatMuted,
+		MustChangePassword:         user.MustChangePassword,
+		TemporaryPasswordExpiresAt: user.TemporaryPasswordExpiresAt,
+		SourceSystem:               user.SourceSystem,
+		CreatedAt:                  user.CreatedAt,
 	}
 }
 
@@ -1406,14 +1708,19 @@ func statusCode(err error) int {
 		errors.Is(err, ErrInvalidPassword),
 		errors.Is(err, ErrPasswordConfirmation),
 		errors.Is(err, ErrInvalidUserID),
+		errors.Is(err, ErrBulkInvitationTooMany),
 		errors.Is(err, ErrDeviceIDRequired),
 		errors.Is(err, ErrInvalidIPWhitelistRule),
 		errors.Is(err, ErrWhitelistRulesRequired):
 		return 400
 	case errors.Is(err, ErrInvalidCredentials):
 		return 401
+	case errors.Is(err, ErrTemporaryPasswordExpired):
+		return 403
 	case errors.Is(err, ErrInvitationMailerUnavailable):
 		return 503
+	case errors.Is(err, ErrTemporaryPasswordMailFailed):
+		return 502
 	case errors.Is(err, ErrSystemAdminCannotChat),
 		errors.Is(err, ErrInsufficientRole),
 		errors.Is(err, ErrDeviceNotTrusted),

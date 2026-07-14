@@ -35,12 +35,17 @@ func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, cha
 		mux.HandleFunc("POST /api/system-admin/users", integrationHandler.CreateUser)
 		mux.HandleFunc("GET /api/system-admin/user-invitations", integrationHandler.ListUserInvitations)
 		mux.HandleFunc("POST /api/system-admin/user-invitations", integrationHandler.InviteUser)
+		mux.HandleFunc("POST /api/system-admin/user-invitations/bulk-precheck", integrationHandler.PrecheckUserInvitationTXT)
+		mux.HandleFunc("POST /api/system-admin/user-invitations/bulk-send", integrationHandler.SendBulkUserInvitations)
 		mux.HandleFunc("/api/system-admin/user-invitations/resend", methodHandler("POST", integrationHandler.ResendUserInvitation))
 		mux.HandleFunc("GET /api/system-admin/users/{user_id}", integrationHandler.GetUser)
 		mux.HandleFunc("PATCH /api/system-admin/users/{user_id}", integrationHandler.UpdateUser)
+		mux.HandleFunc("PATCH /api/system-admin/users/{user_id}/chat-mute", integrationHandler.UpdateUserChatMute)
+		mux.HandleFunc("POST /api/system-admin/users/{user_id}/temporary-password", integrationHandler.SendTemporaryPassword)
 		mux.HandleFunc("GET /api/system-admin/users/{user_id}/devices", integrationHandler.ListDevices)
 		mux.HandleFunc("PUT /api/system-admin/users/{user_id}/ip-whitelist", integrationHandler.UpdateIPWhitelist)
 		mux.HandleFunc("PATCH /api/users/me/profile", integrationHandler.UpdateProfile)
+		mux.HandleFunc("PATCH /api/users/me/password", integrationHandler.UpdatePassword)
 		mux.HandleFunc("POST /api/users/{user_id}/devices/{device_id}/approve", integrationHandler.ApproveDevice)
 	}
 

@@ -793,6 +793,11 @@ button:disabled {
   text-decoration: underline;
 }
 
+.text-danger {
+  color: #b23a27;
+  font-weight: 800;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -809,6 +814,62 @@ button:disabled {
   white-space: nowrap;
 }
 
+.table-icon-action {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-right: 8px;
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  background: var(--admin-panel);
+  color: var(--admin-muted);
+  vertical-align: middle;
+}
+
+.table-icon-action svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.table-icon-action-danger {
+  border-color: #b23a27;
+  background: #fff6f2;
+  color: #b23a27;
+}
+
+.chat-mute-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.chat-mute-badge {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--admin-panel);
+  border-radius: 999px;
+  background: #b23a27;
+  color: var(--admin-panel);
+}
+
+.chat-mute-badge svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.4;
+}
+
 .table-action {
   width: 50px;
   height: 32px;
@@ -818,6 +879,17 @@ button:disabled {
   background: var(--admin-panel);
   color: var(--admin-muted);
   font-weight: 800;
+}
+
+.table-action-wide {
+  width: auto;
+  min-width: 76px;
+  padding: 0 10px;
+}
+
+.table-action:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .table-action-green {
@@ -1005,6 +1077,87 @@ button:disabled {
   min-height: 96px;
 }
 
+.bulk-invite-modal-content {
+  width: min(760px, calc(100vw - 40px));
+}
+
+.bulk-invite-form .modal-body {
+  min-height: 320px;
+}
+
+.bulk-invite-upload {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.bulk-invite-upload input {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.bulk-invite-hint {
+  margin: 10px 0 16px;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+.bulk-invite-count-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.bulk-invite-count-card {
+  min-height: 48px;
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  background: #fbf8f4;
+  color: var(--admin-text);
+  font-weight: 700;
+}
+
+.bulk-invite-count-card:hover {
+  background: var(--admin-sidebar-hover);
+}
+
+.bulk-invite-results {
+  border: 1px solid var(--admin-line-soft);
+  border-radius: 4px;
+  padding: 12px;
+  background: #fff;
+}
+
+.bulk-invite-list {
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  margin-top: 10px;
+  overflow: auto;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+.bulk-invite-empty {
+  color: var(--admin-muted);
+}
+
+.bulk-invite-status {
+  min-height: 20px;
+  margin-top: 12px;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+.bulk-invite-status.is-error {
+  color: #a83a2a;
+  font-weight: 700;
+}
+
 .modal-close {
   width: 34px;
   height: 34px;
@@ -1041,5 +1194,9 @@ button:disabled {
 
   .user-create-actions {
     margin-left: 0;
+  }
+
+  .bulk-invite-count-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

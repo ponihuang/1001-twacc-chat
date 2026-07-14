@@ -82,6 +82,10 @@ func (s *stubIntegrationRepository) ListUserInvitations(filter AdminUserInvitati
 	return AdminUserInvitationPage{Items: []AdminUserInvitationSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
 
+func (s *stubIntegrationRepository) PrecheckUserInvitationEmails(emails []string, now time.Time) (UserInvitationEmailPrecheck, error) {
+	return UserInvitationEmailPrecheck{Registered: map[string]bool{}, ActiveInvitations: map[string]bool{}}, nil
+}
+
 func (s *stubIntegrationRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error) {
 	return SystemAdminPage{Items: []SystemAdminSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
@@ -108,6 +112,18 @@ func (s *stubIntegrationRepository) UpdateSystemAdminLastLogin(adminUserID int64
 
 func (s *stubIntegrationRepository) UpdateUser(userID int64, params AdminUpdateUserParams) (User, error) {
 	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: params.DisplayName, Email: params.Email, Status: params.Status}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateUserChatMute(userID int64, params AdminUpdateUserChatMuteParams) (User, error) {
+	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: "User A", Status: "active", IsChatMuted: params.IsChatMuted}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateUserTemporaryPassword(userID int64, params TemporaryPasswordParams) (User, error) {
+	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: "User A", Status: "active", MustChangePassword: true, TemporaryPasswordExpiresAt: &params.ExpiresAt}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateUserPassword(userID int64, passwordHash string) (User, error) {
+	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: "User A", Status: "active", PasswordHash: passwordHash}, nil
 }
 
 func (s *stubIntegrationRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {

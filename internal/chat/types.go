@@ -309,6 +309,8 @@ type Broker interface {
 // Repository defines persistence required by chat list and message list endpoints.
 type Repository interface {
 	IsSystemAdmin(userID int64) (bool, error)
+	IsChatMuted(userID int64) (bool, error)
+	MustChangePassword(userID int64) (bool, error)
 	ListConversations(userID int64) ([]ConversationSummary, error)
 	SearchUsers(actorUserID int64, sourceSystem, query string, limit int) ([]UserSearchResult, error)
 	AddContact(actorUserID int64, sourceSystem, externalUserID, aliasName string) (ContactData, error)

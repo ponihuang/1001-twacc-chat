@@ -9,18 +9,21 @@ import (
 
 // User stores the minimal fields required by external-system registration and login.
 type User struct {
-	ID              int64
-	SourceSystem    string
-	ExternalUserID  string
-	DisplayName     string
-	PasswordHash    string
-	Email           string
-	Language        string
-	WhatsAppAccount string
-	TelegramAccount string
-	Status          string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                         int64
+	SourceSystem               string
+	ExternalUserID             string
+	DisplayName                string
+	PasswordHash               string
+	Email                      string
+	Language                   string
+	WhatsAppAccount            string
+	TelegramAccount            string
+	Status                     string
+	IsChatMuted                bool
+	MustChangePassword         bool
+	TemporaryPasswordExpiresAt *time.Time
+	CreatedAt                  time.Time
+	UpdatedAt                  time.Time
 }
 
 // UserSecuritySettings stores per-user login restriction flags.
@@ -67,14 +70,17 @@ type AdminUserFilter struct {
 
 // AdminUserSummary is the API-facing user shape for the admin console.
 type AdminUserSummary struct {
-	ID             int64      `json:"id"`
-	ExternalUserID string     `json:"external_user_id"`
-	DisplayName    string     `json:"display_name"`
-	Email          string     `json:"email"`
-	Status         string     `json:"status"`
-	SourceSystem   string     `json:"source_system"`
-	CreatedAt      time.Time  `json:"created_at"`
-	LastOnlineAt   *time.Time `json:"last_online_at,omitempty"`
+	ID                         int64      `json:"id"`
+	ExternalUserID             string     `json:"external_user_id"`
+	DisplayName                string     `json:"display_name"`
+	Email                      string     `json:"email"`
+	Status                     string     `json:"status"`
+	IsChatMuted                bool       `json:"is_chat_muted"`
+	MustChangePassword         bool       `json:"must_change_password"`
+	TemporaryPasswordExpiresAt *time.Time `json:"temporary_password_expires_at,omitempty"`
+	SourceSystem               string     `json:"source_system"`
+	CreatedAt                  time.Time  `json:"created_at"`
+	LastOnlineAt               *time.Time `json:"last_online_at,omitempty"`
 }
 
 // AdminUserPage is the paginated response for the admin user list.
@@ -138,6 +144,73 @@ type AdminUserInvitationPage struct {
 	Page       int                          `json:"page"`
 	PerPage    int                          `json:"per_page"`
 	TotalPages int                          `json:"total_pages"`
+}
+
+// BulkUserInvitationPrecheckItem describes one classified email from an uploaded TXT.
+type BulkUserInvitationPrecheckItem struct {
+	Line  int    `json:"line"`
+	Email string `json:"email"`
+}
+
+// BulkUserInvitationInvalidItem describes one invalid TXT line.
+type BulkUserInvitationInvalidItem struct {
+	Line  int    `json:"line"`
+	Value string `json:"value"`
+}
+
+// BulkUserInvitationPrecheckCounts contains category totals for the uploaded TXT.
+type BulkUserInvitationPrecheckCounts struct {
+	Sendable          int `json:"sendable"`
+	DuplicateInFile   int `json:"duplicate_in_file"`
+	AlreadyRegistered int `json:"already_registered"`
+	ActiveInvitation  int `json:"active_invitation"`
+	InvalidEmail      int `json:"invalid_email"`
+}
+
+// BulkUserInvitationPrecheckResult is the API-facing result for invitation TXT precheck.
+type BulkUserInvitationPrecheckResult struct {
+	TotalLines        int                              `json:"total_lines"`
+	IgnoredBlankLines int                              `json:"ignored_blank_lines"`
+	UniqueEmails      int                              `json:"unique_emails"`
+	Counts            BulkUserInvitationPrecheckCounts `json:"counts"`
+	Sendable          []BulkUserInvitationPrecheckItem `json:"sendable"`
+	DuplicateInFile   []BulkUserInvitationPrecheckItem `json:"duplicate_in_file"`
+	AlreadyRegistered []BulkUserInvitationPrecheckItem `json:"already_registered"`
+	ActiveInvitation  []BulkUserInvitationPrecheckItem `json:"active_invitation"`
+	InvalidEmail      []BulkUserInvitationInvalidItem  `json:"invalid_email"`
+}
+
+// BulkUserInvitationSendResult is the API-facing result for invitation TXT bulk send.
+type BulkUserInvitationSendResult struct {
+	SuccessCount int                              `json:"success_count"`
+	FailureCount int                              `json:"failure_count"`
+	IgnoredCount int                              `json:"ignored_count"`
+	Succeeded    []BulkUserInvitationPrecheckItem `json:"succeeded"`
+	Failed       []BulkUserInvitationSendFailure  `json:"failed"`
+	Ignored      BulkUserInvitationIgnoredResult  `json:"ignored"`
+	Precheck     BulkUserInvitationPrecheckResult `json:"precheck"`
+}
+
+// BulkUserInvitationSendFailure describes one email that failed during send.
+type BulkUserInvitationSendFailure struct {
+	Line    int    `json:"line"`
+	Email   string `json:"email"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// BulkUserInvitationIgnoredResult groups emails skipped by bulk send.
+type BulkUserInvitationIgnoredResult struct {
+	DuplicateInFile   []BulkUserInvitationPrecheckItem `json:"duplicate_in_file"`
+	AlreadyRegistered []BulkUserInvitationPrecheckItem `json:"already_registered"`
+	ActiveInvitation  []BulkUserInvitationPrecheckItem `json:"active_invitation"`
+	InvalidEmail      []BulkUserInvitationInvalidItem  `json:"invalid_email"`
+}
+
+// UserInvitationEmailPrecheck contains repository lookup results for a batch of emails.
+type UserInvitationEmailPrecheck struct {
+	Registered        map[string]bool
+	ActiveInvitations map[string]bool
 }
 
 // SystemAdminFilter contains supported filters for the system-admin list.
@@ -204,6 +277,7 @@ type AdminSessionIssuer interface {
 // InvitationMailer sends user registration invitations.
 type InvitationMailer interface {
 	SendUserInvitation(email, inviteURL string, expiresAt time.Time) error
+	SendTemporaryPassword(email, temporaryPassword string, expiresAt time.Time) error
 }
 
 // SessionAuthenticator validates a Bearer session token.
@@ -269,6 +343,18 @@ type AdminUpdateUserRequest struct {
 	DisplayName string `json:"display_name"`
 	Email       string `json:"email"`
 	Status      string `json:"status"`
+}
+
+// AdminUpdateUserChatMuteRequest is the system-admin payload for muting a user in chat.
+type AdminUpdateUserChatMuteRequest struct {
+	IsChatMuted bool `json:"is_chat_muted"`
+}
+
+// PasswordUpdateRequest is the authenticated user payload for changing password.
+type PasswordUpdateRequest struct {
+	CurrentPassword      string `json:"current_password"`
+	Password             string `json:"password"`
+	PasswordConfirmation string `json:"password_confirmation"`
 }
 
 // LoginRequest is the external-system login payload.
@@ -346,6 +432,17 @@ type AdminUpdateUserParams struct {
 	Status       string
 }
 
+// AdminUpdateUserChatMuteParams carries the admin chat mute flag into storage.
+type AdminUpdateUserChatMuteParams struct {
+	IsChatMuted bool
+}
+
+// TemporaryPasswordParams carries a generated temporary password into storage.
+type TemporaryPasswordParams struct {
+	PasswordHash string
+	ExpiresAt    time.Time
+}
+
 // UserInvitationCreateParams carries validated invitation fields into storage.
 type UserInvitationCreateParams struct {
 	Email            string
@@ -384,6 +481,7 @@ type Repository interface {
 	FindUserByEmail(email string) (User, error)
 	ListUsers(filter AdminUserFilter) (AdminUserPage, error)
 	ListUserInvitations(filter AdminUserInvitationFilter) (AdminUserInvitationPage, error)
+	PrecheckUserInvitationEmails(emails []string, now time.Time) (UserInvitationEmailPrecheck, error)
 	FindUserInvitationByEmail(email string) (UserInvitation, error)
 	FindUserInvitationByTokenHash(tokenHash string) (UserInvitation, error)
 	CreateUserInvitation(params UserInvitationCreateParams) (UserInvitation, error)
@@ -397,6 +495,9 @@ type Repository interface {
 	UpdateSystemAdmin(adminUserID int64, params SystemAdminUpdateParams) (SystemAdminSummary, error)
 	UpdateSystemAdminLastLogin(adminUserID int64, ip string, at time.Time) error
 	UpdateUser(userID int64, params AdminUpdateUserParams) (User, error)
+	UpdateUserChatMute(userID int64, params AdminUpdateUserChatMuteParams) (User, error)
+	UpdateUserTemporaryPassword(userID int64, params TemporaryPasswordParams) (User, error)
+	UpdateUserPassword(userID int64, passwordHash string) (User, error)
 	UpdateUserProfile(userID int64, displayName string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)
 	GetUserSecuritySettings(userID int64) (UserSecuritySettings, error)

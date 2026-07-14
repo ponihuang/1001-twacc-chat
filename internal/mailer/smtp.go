@@ -72,3 +72,41 @@ func (m *SMTPMailer) SendUserInvitation(email, inviteURL string, expiresAt time.
 	}
 	return nil
 }
+
+// SendTemporaryPassword sends a generated temporary password email.
+func (m *SMTPMailer) SendTemporaryPassword(email, temporaryPassword string, expiresAt time.Time) error {
+	if m == nil {
+		return fmt.Errorf("smtp mailer unavailable")
+	}
+	to := strings.TrimSpace(email)
+	if _, err := mail.ParseAddress(to); err != nil {
+		return fmt.Errorf("invalid temporary password email address: %w", err)
+	}
+	from := strings.TrimSpace(m.fromAddress)
+	if from == "" {
+		from = strings.TrimSpace(m.username)
+	}
+	fromAddress := mail.Address{Name: strings.TrimSpace(m.fromName), Address: from}
+	subject := "TWACC 聊天系統臨時密碼"
+	body := fmt.Sprintf("您好，\n\n您的 TWACC Chat 臨時密碼如下：\n%s\n\n此臨時密碼將於 %s 到期。登入後請立即修改密碼，原密碼將失效。\n\n若您沒有申請重設密碼，請立即聯繫管理員。\n",
+		strings.TrimSpace(temporaryPassword),
+		expiresAt.In(time.Local).Format("2006-01-02 15:04:05"),
+	)
+
+	var msg bytes.Buffer
+	msg.WriteString("From: " + fromAddress.String() + "\r\n")
+	msg.WriteString("To: " + to + "\r\n")
+	msg.WriteString("Subject: " + mime.QEncoding.Encode("UTF-8", subject) + "\r\n")
+	msg.WriteString("MIME-Version: 1.0\r\n")
+	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	msg.WriteString("Content-Transfer-Encoding: 8bit\r\n")
+	msg.WriteString("\r\n")
+	msg.WriteString(body)
+
+	addr := net.JoinHostPort(m.host, fmt.Sprintf("%d", m.port))
+	auth := smtp.PlainAuth("", m.username, m.password, m.host)
+	if err := smtp.SendMail(addr, auth, from, []string{to}, msg.Bytes()); err != nil {
+		return fmt.Errorf("send temporary password email: %w", err)
+	}
+	return nil
+}
