@@ -27,14 +27,16 @@ type ConversationSummary struct {
 	LastMessageAt      time.Time
 	UnreadCount        int
 	HasUnreadMention   bool
+	NotificationMuted  bool
 }
 
 // Conversation stores the minimal metadata needed by the message list response.
 type Conversation struct {
-	ID          int64
-	Type        string
-	Title       string
-	Description string
+	ID                int64
+	Type              string
+	Title             string
+	Description       string
+	NotificationMuted bool
 }
 
 // Message stores the chat message payload returned from persistence.
@@ -97,6 +99,7 @@ type ConversationItem struct {
 	LastMessageAt      string `json:"last_message_at,omitempty"`
 	UnreadCount        int    `json:"unread_count"`
 	HasUnreadMention   bool   `json:"has_unread_mention"`
+	NotificationMuted  bool   `json:"notification_muted"`
 }
 
 // DirectConversationData is the API-facing payload for a direct conversation create/load request.
@@ -166,6 +169,7 @@ type MessageListData struct {
 	ConversationID       int64         `json:"conversation_id"`
 	Type                 string        `json:"type"`
 	Title                string        `json:"title"`
+	NotificationMuted    bool          `json:"notification_muted"`
 	FirstUnreadMessageID int64         `json:"first_unread_message_id,omitempty"`
 	Messages             []MessageItem `json:"messages"`
 }
@@ -217,6 +221,17 @@ type CreateGroupConversationRequest struct {
 type UpdateConversationRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+}
+
+// UpdateConversationNotificationMuteRequest is the HTTP payload for per-conversation email notification mute.
+type UpdateConversationNotificationMuteRequest struct {
+	NotificationMuted bool `json:"notification_muted"`
+}
+
+// ConversationNotificationMuteData is the API-facing payload for the current user's conversation mute state.
+type ConversationNotificationMuteData struct {
+	ConversationID    int64 `json:"conversation_id"`
+	NotificationMuted bool  `json:"notification_muted"`
 }
 
 // AddConversationMembersRequest is the HTTP payload for adding members to a group.
@@ -323,6 +338,7 @@ type Repository interface {
 	ListConversationMemberIDs(conversationID int64) ([]int64, error)
 	ListConversationMembers(conversationID int64) ([]ConversationMember, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
+	UpdateConversationNotificationMute(userID, conversationID int64, muted bool) (Conversation, error)
 	ListMessages(conversationID int64, limit int) ([]Message, error)
 	FirstUnreadMessageID(userID, conversationID int64) (int64, error)
 	SearchMessages(userID int64, query string, limit int) ([]Message, error)

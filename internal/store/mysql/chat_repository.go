@@ -66,6 +66,7 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 		SELECT
 			c.id,
 			c.type,
+			cm.is_notification_muted,
 			CASE
 				WHEN c.type = 'direct' THEN COALESCE(
 					(
@@ -187,6 +188,7 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 		if err := rows.Scan(
 			&item.ConversationID,
 			&item.Type,
+			&item.NotificationMuted,
 			&item.Title,
 			&item.DirectSourceSystem,
 			&item.DirectExternalID,
@@ -658,6 +660,7 @@ func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (c
 		SELECT
 			c.id,
 			c.type,
+			cm.is_notification_muted,
 			CASE
 				WHEN c.type = 'direct' THEN COALESCE(
 					(
@@ -679,7 +682,7 @@ func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (c
 		 WHERE cm.user_id = ?
 		   AND c.id = ?
 		 LIMIT 1`, userID, userID, conversationID)
-	if err := row.Scan(&conversation.ID, &conversation.Type, &conversation.Title, &conversation.Description); err != nil {
+	if err := row.Scan(&conversation.ID, &conversation.Type, &conversation.NotificationMuted, &conversation.Title, &conversation.Description); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return chat.Conversation{}, chat.ErrConversationNotFound
 		}
@@ -687,6 +690,19 @@ func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (c
 	}
 
 	return conversation, nil
+}
+
+// UpdateConversationNotificationMute stores the current user's email notification mute state for a conversation.
+func (r *ChatRepository) UpdateConversationNotificationMute(userID, conversationID int64, muted bool) (chat.Conversation, error) {
+	if _, err := r.db.Exec(`
+		UPDATE conversation_members
+		   SET is_notification_muted = ?
+		 WHERE conversation_id = ?
+		   AND user_id = ?`, muted, conversationID, userID); err != nil {
+		return chat.Conversation{}, fmt.Errorf("update conversation notification mute: %w", err)
+	}
+
+	return r.GetConversationForUser(userID, conversationID)
 }
 
 // ListMessages returns recent messages for a conversation ordered from old to new.

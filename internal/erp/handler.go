@@ -143,6 +143,27 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// GetProfile handles GET /api/users/me/profile.
+func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, err := h.service.GetProfile(principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // UpdatePassword handles PATCH /api/users/me/password.
 func (h *Handler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.sessions == nil {

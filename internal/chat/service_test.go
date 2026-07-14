@@ -55,6 +55,7 @@ type mockRepository struct {
 	listMembersID        int64
 	listMembersErr       error
 	mutedUsers           map[int64]bool
+	notificationMutes    map[string]bool
 }
 
 type readMarker struct {
@@ -115,6 +116,21 @@ func (m *mockRepository) GetConversationForUser(userID, conversationID int64) (C
 	if !ok {
 		return Conversation{}, ErrConversationNotFound
 	}
+	return conversation, nil
+}
+
+func (m *mockRepository) UpdateConversationNotificationMute(userID, conversationID int64, muted bool) (Conversation, error) {
+	key := conversationKey(userID, conversationID)
+	conversation, ok := m.headers[key]
+	if !ok {
+		return Conversation{}, ErrConversationNotFound
+	}
+	if m.notificationMutes == nil {
+		m.notificationMutes = make(map[string]bool)
+	}
+	m.notificationMutes[key] = muted
+	conversation.NotificationMuted = muted
+	m.headers[key] = conversation
 	return conversation, nil
 }
 

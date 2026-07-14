@@ -2502,6 +2502,25 @@ strong {
   color: var(--accent-strong);
 }
 
+.conversation-muted-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.conversation-muted-badge svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .conversation-card.is-placeholder {
   opacity: 0.88;
 }
@@ -2556,6 +2575,72 @@ strong {
 
 .login-field-error[hidden] {
   display: none;
+}
+
+.password-change-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(24, 20, 17, 0.46);
+}
+
+.password-change-modal-backdrop[hidden] {
+  display: none;
+}
+
+.password-change-modal {
+  display: grid;
+  gap: 20px;
+  width: min(460px, 100%);
+  padding: 30px;
+  border: 1px solid rgba(92, 75, 57, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 251, 246, 0.98);
+  color: var(--text);
+  box-shadow: 0 30px 90px rgba(28, 22, 18, 0.28);
+}
+
+.password-change-modal-header {
+  display: grid;
+  gap: 8px;
+}
+
+.password-change-modal-header h2,
+.password-change-modal-header p {
+  margin: 0;
+}
+
+.password-change-modal-header h2 {
+  font-size: 1.7rem;
+  line-height: 1.2;
+}
+
+.password-change-modal-header p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.password-change-form {
+  gap: 10px;
+}
+
+.password-change-success {
+  min-height: 18px;
+  color: #2d6d3a;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.password-change-success[hidden] {
+  display: none;
+}
+
+body.is-password-change-required {
+  overflow: hidden;
 }
 
 .auth-actions {
@@ -2807,6 +2892,28 @@ strong {
   width: 24px;
   height: 24px;
   fill: currentColor;
+}
+
+.chat-notification-mute-toggle svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chat-notification-mute-toggle .chat-notification-mute-bell-off,
+.chat-notification-mute-toggle.is-muted .chat-notification-mute-bell {
+  display: none;
+}
+
+.chat-notification-mute-toggle.is-muted .chat-notification-mute-bell-off {
+  display: block;
+}
+
+.chat-notification-mute-toggle.is-muted {
+  color: var(--accent-strong);
+  background: rgba(165, 63, 43, 0.1);
 }
 
 .chat-contact-menu {
@@ -3752,9 +3859,15 @@ strong {
   cursor: pointer;
 }
 
+.conversation-context-action:hover,
 .conversation-context-action.is-active,
 .conversation-context-folder:hover {
   background: rgba(51, 144, 236, 0.08);
+}
+
+.conversation-context-action + .conversation-context-action {
+  margin-top: 4px;
+  border-top: 1px solid rgba(31, 27, 24, 0.08);
 }
 
 .conversation-context-action svg,
@@ -3915,6 +4028,13 @@ strong {
   padding: 0 8px 0 0;
 }
 
+.composer.is-chat-muted .composer-fields,
+.composer-fields.is-chat-muted {
+  background: rgba(230, 226, 220, 0.76);
+  color: rgba(107, 98, 88, 0.62);
+  cursor: not-allowed;
+}
+
 .composer-fields:has(.composer-reply-preview:not([hidden])) {
   align-items: flex-end;
   padding-bottom: 6px;
@@ -4021,6 +4141,16 @@ strong {
   -ms-overflow-style: none;
 }
 
+.composer-input:disabled {
+  background: transparent;
+  color: rgba(107, 98, 88, 0.62);
+  cursor: not-allowed;
+}
+
+.composer-input:disabled::placeholder {
+  color: rgba(107, 98, 88, 0.62);
+}
+
 .composer-input::-webkit-scrollbar {
   width: 0;
   height: 0;
@@ -4052,6 +4182,18 @@ strong {
 .composer-icon-button[aria-expanded="true"] {
   background: rgba(92, 75, 57, 0.08);
   color: var(--text);
+}
+
+.composer-icon-button:disabled,
+.composer-actions .primary-button:disabled,
+.attachment-send-button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.composer-icon-button:disabled:hover {
+  background: transparent;
+  color: var(--muted);
 }
 
 .composer-icon-button svg {

@@ -7,6 +7,8 @@
   const storageKeys = {
     token: "twacc_chat_session_token",
     sourceSystem: "twacc_chat_source_system",
+    isChatMuted: "twacc_chat_is_chat_muted",
+    mustChangePassword: "twacc_chat_must_change_password",
     activeConversationID: "twacc_chat_active_conversation_id",
     activeFolderID: "twacc_chat_active_folder_tab_id",
     folderCategories: "twacc_chat_folder_categories",
@@ -68,6 +70,7 @@
   const groupEditNameInput = app.querySelector("[data-group-edit-name]");
   const groupEditDescriptionInput = app.querySelector("[data-group-edit-description]");
   const groupEditSubmitButton = app.querySelector("[data-group-edit-submit]");
+  const notificationMuteToggle = app.querySelector("[data-notification-mute-toggle]");
   const contactMenuToggle = app.querySelector("[data-contact-menu-toggle]");
   const contactMenu = app.querySelector("[data-contact-menu]");
   const contactPanel = app.querySelector("[data-contact-panel]");
@@ -82,6 +85,8 @@
   const realtimeStateNode = app.querySelector("[data-realtime-state]");
   const composerInput = messageForm.querySelector(".composer-input");
   const composerFileInput = messageForm.querySelector(".composer-file-input");
+  const composerSubmitButton = messageForm.querySelector("button[type='submit']");
+  const composerFields = messageForm.querySelector(".composer-fields");
   const fileStateNode = messageForm.querySelector("[data-file-state]");
   const attachmentToggle = messageForm.querySelector("[data-attachment-toggle]");
   const attachmentMenu = messageForm.querySelector("[data-attachment-menu]");
@@ -176,6 +181,8 @@
   let contactItems = [];
   let contactsLoaded = false;
   let contactsIndexLoading = false;
+  let isChatMuted = localStorage.getItem(storageKeys.isChatMuted) === "true";
+  let conversationNotificationMuteStates = new Map();
   let mentionMembersCache = new Map();
   let mentionMenuItems = [];
   let mentionMenuActiveIndex = 0;
@@ -245,6 +252,46 @@
 
   function readExternalUserID() {
     return localStorage.getItem("twacc_chat_external_user_id") || "";
+  }
+
+  function mustChangePasswordRequired() {
+    return localStorage.getItem(storageKeys.mustChangePassword) === "true";
+  }
+
+  function canInitializeChat() {
+    return Boolean(readSessionToken()) && !mustChangePasswordRequired();
+  }
+
+  function holdChatUntilPasswordChange() {
+    closeRealtimeSocket();
+    activeConversationID = 0;
+    pendingDirectTarget = null;
+    messageLoadToken += 1;
+    setConversationUIActive(false);
+    setConversationTitle("目前對話");
+    if (conversationList) {
+      conversationList.innerHTML = "";
+    }
+    if (folderTabs) {
+      folderTabs.hidden = true;
+    }
+    if (conversationSummary) {
+      conversationSummary.textContent = "請先修改登入密碼。";
+    }
+    if (messageBoard) {
+      messageBoard.innerHTML = "";
+    }
+    setMessageStatus("請先修改登入密碼後再使用聊天室。", true);
+  }
+
+  function initializeChatAfterPasswordReady() {
+    if (!canInitializeChat()) {
+      holdChatUntilPasswordChange();
+      return;
+    }
+    connectRealtime();
+    ensureContactsLoaded();
+    loadConversations();
   }
 
   function accountStorageKey(base) {
@@ -334,11 +381,169 @@
     messageStatus.classList.toggle("is-error", Boolean(isError));
   }
 
+  function applyComposerMuteState() {
+    const muted = Boolean(isChatMuted);
+    const placeholder = muted ? "此帳號已被禁止發言" : "輸入文字訊息";
+    const tooltip = muted ? "禁止發言" : "";
+    if (messageForm) {
+      messageForm.classList.toggle("is-chat-muted", muted);
+      messageForm.title = tooltip;
+    }
+    if (composerFields) {
+      composerFields.classList.toggle("is-chat-muted", muted);
+      composerFields.title = tooltip;
+    }
+    if (composerInput) {
+      composerInput.disabled = muted;
+      composerInput.placeholder = placeholder;
+      composerInput.title = tooltip;
+      if (muted) {
+        composerInput.value = "";
+        syncComposerInputHeight();
+        clearMentionMenu();
+      }
+    }
+    if (composerSubmitButton) {
+      composerSubmitButton.disabled = muted;
+      composerSubmitButton.title = tooltip;
+    }
+    if (attachmentToggle) {
+      attachmentToggle.disabled = muted;
+      attachmentToggle.title = tooltip;
+    }
+    if (composerFileInput) {
+      composerFileInput.disabled = muted;
+    }
+    if (attachmentSend) {
+      attachmentSend.disabled = muted;
+      attachmentSend.title = tooltip;
+    }
+    if (muted) {
+      setAttachmentMenuOpen(false);
+      closeAttachmentDialog(true);
+    }
+  }
+
+  function setChatMuted(muted) {
+    isChatMuted = Boolean(muted);
+    localStorage.setItem(storageKeys.isChatMuted, isChatMuted ? "true" : "false");
+    applyComposerMuteState();
+  }
+
+  async function refreshCurrentUserState() {
+    const headers = authHeaders();
+    if (!headers || mustChangePasswordRequired()) {
+      setChatMuted(false);
+      return;
+    }
+    try {
+      const response = await fetch("/api/users/me/profile", {
+        headers: { Authorization: headers.Authorization }
+      });
+      const result = await parseJSON(response);
+      if (!response.ok || !result.success || !result.data) {
+        return;
+      }
+      setChatMuted(Boolean(result.data.is_chat_muted));
+    } catch (_) {
+    }
+  }
+
+  function applyChatErrorState(result) {
+    if (result && result.code === "USER_CHAT_MUTED") {
+      setChatMuted(true);
+      setMessageStatus("此帳號已被禁止發言", true);
+      return true;
+    }
+    return false;
+  }
+
   function setConversationTitle(text) {
     if (!conversationTitle) {
       return;
     }
     conversationTitle.textContent = text || "目前對話";
+  }
+
+  function notificationMuteHint(muted) {
+    return muted
+      ? "解除靜音。靜音後，一般未讀訊息不會寄送 Email 通知；當有人標註你或使用 @ALL 時，仍會寄送通知。"
+      : "靜音通知。靜音後，一般未讀訊息不會寄送 Email 通知；當有人標註你或使用 @ALL 時，仍會寄送通知。";
+  }
+
+  function setActiveConversationNotificationMuted(muted) {
+    setConversationNotificationMuted(activeConversationID, muted);
+  }
+
+  function setConversationNotificationMuted(conversationIDValue, muted) {
+    const conversationID = Number(conversationIDValue || 0);
+    if (!conversationID) {
+      return;
+    }
+    conversationNotificationMuteStates.set(conversationID, Boolean(muted));
+    conversations = conversations.map(function (item) {
+      if (Number(item.conversation_id || 0) !== conversationID) {
+        return item;
+      }
+      return Object.assign({}, item, { notification_muted: Boolean(muted) });
+    });
+    updateNotificationMuteControl();
+    renderConversationList(conversations);
+  }
+
+  function updateNotificationMuteControl() {
+    if (!notificationMuteToggle) {
+      return;
+    }
+    const active = activeConversation();
+    const hasConversation = Boolean(active && active.conversation_id);
+    const muted = hasConversation ? isConversationNotificationMuted(active.conversation_id) : false;
+    notificationMuteToggle.hidden = !hasConversation;
+    notificationMuteToggle.disabled = !hasConversation;
+    notificationMuteToggle.classList.toggle("is-muted", muted);
+    notificationMuteToggle.setAttribute("aria-pressed", muted ? "true" : "false");
+    notificationMuteToggle.setAttribute("aria-label", muted ? "解除靜音" : "靜音通知");
+    notificationMuteToggle.title = notificationMuteHint(muted);
+  }
+
+  async function updateConversationNotificationMute(conversationIDValue, nextMuted) {
+    const headers = authHeaders();
+    const conversationID = Number(conversationIDValue || 0);
+    if (!conversationID || !headers) {
+      return null;
+    }
+    const response = await fetch("/api/conversations/" + conversationID + "/notification-mute", {
+      method: "PATCH",
+      headers: Object.assign({ "Content-Type": "application/json" }, headers),
+      body: JSON.stringify({ notification_muted: Boolean(nextMuted) })
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || "通知靜音設定更新失敗。");
+    }
+    const data = result.data || {};
+    const muted = Boolean(data.notification_muted);
+    setConversationNotificationMuted(conversationID, muted);
+    return data;
+  }
+
+  async function toggleNotificationMute() {
+    const active = activeConversation();
+    if (!active || !active.conversation_id || !notificationMuteToggle) {
+      return;
+    }
+    notificationMuteToggle.disabled = true;
+    try {
+      const data = await updateConversationNotificationMute(active.conversation_id, !Boolean(active.notification_muted));
+      if (!data) {
+        return;
+      }
+      setMessageStatus(Boolean(data.notification_muted) ? "已靜音 Email 通知。" : "已解除 Email 通知靜音。", false);
+    } catch (err) {
+      setMessageStatus(err.message || "通知靜音設定更新失敗。", true);
+    } finally {
+      updateNotificationMuteControl();
+    }
   }
 
   function totalUnreadCount(items) {
@@ -495,6 +700,7 @@
     }
     updateContactActions();
     updateGroupInfoAction();
+    updateNotificationMuteControl();
   }
 
   function setContactMenuOpen(isOpen) {
@@ -611,6 +817,7 @@
     if (!group) {
       setGroupInfoPanelOpen(false);
     }
+    updateNotificationMuteControl();
   }
 
   function updateContactActions() {
@@ -1270,6 +1477,7 @@
     renderConversationList(conversations);
     updateContactActions();
     updateGroupInfoAction();
+    updateNotificationMuteControl();
     setGroupInfoPanelOpen(false);
     loadMessages(activeConversationID);
   }
@@ -1350,6 +1558,11 @@
   function renderConversationContextMenu(conversationID) {
     const folders = customFolderCategories();
     const id = String(conversationID || "");
+    const targetConversation = conversations.find(function (item) {
+      return String(item.conversation_id || "") === id;
+    }) || null;
+    const notificationMuted = Boolean(targetConversation && targetConversation.notification_muted);
+    const notificationActionText = notificationMuted ? "關閉靜音" : "開啟靜音";
     const folderItems = folders.length ? folders.map(function (folder) {
       const ids = Array.isArray(folder.conversation_ids) ? folder.conversation_ids.map(String) : [];
       const checked = ids.indexOf(id) >= 0;
@@ -1371,6 +1584,14 @@
       "</svg>",
       "<span>加入分類</span>",
       '<svg class="conversation-context-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>',
+      "</button>",
+      '<button type="button" class="conversation-context-action" data-context-action="notification-mute">',
+      '<svg viewBox="0 0 24 24" aria-hidden="true">',
+      notificationMuted
+        ? '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path>'
+        : '<path d="M13.73 21a2 2 0 0 1-3.46 0"></path><path d="M18.63 13A17.9 17.9 0 0 1 18 8"></path><path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 7-3 9h14"></path><path d="m2 2 20 20"></path>',
+      "</svg>",
+      "<span>" + notificationActionText + "</span>",
       "</button>",
       "</div>",
       '<div class="conversation-context-folders" hidden>',
@@ -1427,6 +1648,32 @@
     saveFolderCategories(folders);
     renderConversationList(conversations);
     closeConversationContextMenu();
+  }
+
+  async function toggleConversationContextNotificationMute() {
+    if (!conversationContextTarget || !conversationContextTarget.conversationID) {
+      return;
+    }
+    const conversationID = String(conversationContextTarget.conversationID);
+    const targetConversation = conversations.find(function (item) {
+      return String(item.conversation_id || "") === conversationID;
+    });
+    if (!targetConversation) {
+      closeConversationContextMenu();
+      return;
+    }
+    try {
+      const data = await updateConversationNotificationMute(targetConversation.conversation_id, !Boolean(targetConversation.notification_muted));
+      if (Number(targetConversation.conversation_id || 0) === Number(activeConversationID || 0)) {
+        setMessageStatus(Boolean(data && data.notification_muted) ? "已靜音 Email 通知。" : "已解除 Email 通知靜音。", false);
+      }
+    } catch (err) {
+      if (Number(targetConversation.conversation_id || 0) === Number(activeConversationID || 0)) {
+        setMessageStatus(err.message || "通知靜音設定更新失敗。", true);
+      }
+    } finally {
+      closeConversationContextMenu();
+    }
   }
 
   function filteredConversations(items) {
@@ -1515,6 +1762,12 @@
 
   function renderConversationList(items) {
     conversations = items;
+    (items || []).forEach(function (item) {
+      const conversationID = Number(item && item.conversation_id ? item.conversation_id : 0);
+      if (conversationID) {
+        conversationNotificationMuteStates.set(conversationID, Boolean(item.notification_muted));
+      }
+    });
     syncConversationCatalog(items);
     updateDocumentUnreadTitle(items);
 
@@ -1545,9 +1798,12 @@
       const unread = item.unread_count > 0
         ? ('<span class="conversation-unread-badge" aria-label="未讀訊息 ' + item.unread_count + ' 則">' + item.unread_count + "</span>")
         : "";
+      const muted = item.notification_muted
+        ? '<span class="conversation-muted-badge" title="已靜音通知" aria-label="已靜音通知"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><path d="M18.63 13A17.9 17.9 0 0 1 18 8"></path><path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 7-3 9h14"></path><path d="m2 2 20 20"></path></svg></span>'
+        : "";
       return [
         '<button type="button" class="conversation-card conversation-button' + active + '" data-conversation-id="' + item.conversation_id + '">',
-        '<span class="conversation-card-header"><strong>' + escapeHTML(item.title) + '</strong><span class="conversation-badges">' + mention + unread + "</span></span>",
+        '<span class="conversation-card-header"><strong>' + escapeHTML(item.title) + '</strong><span class="conversation-badges">' + muted + mention + unread + "</span></span>",
         "<span>" + escapeHTML(preview) + "</span>",
         "<small>" + escapeHTML(meta) + "</small>",
         "</button>"
@@ -2260,6 +2516,20 @@
       && conversationID === Number(activeConversationID || 0);
   }
 
+  function isConversationNotificationMuted(conversationIDValue) {
+    const conversationID = Number(conversationIDValue || 0);
+    if (!conversationID) {
+      return false;
+    }
+    if (conversationNotificationMuteStates.has(conversationID)) {
+      return Boolean(conversationNotificationMuteStates.get(conversationID));
+    }
+    const item = conversations.find(function (conversation) {
+      return Number(conversation.conversation_id || 0) === conversationID;
+    });
+    return Boolean(item && item.notification_muted);
+  }
+
   function notificationAudioAPI() {
     return window.AudioContext || window.webkitAudioContext || null;
   }
@@ -2518,6 +2788,9 @@
       return false;
     }
     if (isOutgoingMessage(event.message || {})) {
+      return false;
+    }
+    if (isConversationNotificationMuted(realtimeEventConversationID(event))) {
       return false;
     }
     return !isCurrentVisibleConversationEvent(event);
@@ -3059,6 +3332,10 @@
   }
 
   function chooseAttachment(kind) {
+    if (isChatMuted) {
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     if (!composerFileInput) {
       return;
     }
@@ -3241,6 +3518,10 @@
   }
 
   function openAttachmentDialog(files, kind) {
+    if (isChatMuted) {
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     if (!attachmentDialog || !attachmentPreview || !attachmentTitle) {
       return;
     }
@@ -3292,6 +3573,10 @@
   }
 
   function sendAttachmentFromDialog() {
+    if (isChatMuted) {
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     if (attachmentCaption) {
       composerInput.value = attachmentCaption.value.trim();
     }
@@ -4185,6 +4470,9 @@
   }
 
   function handleChatDragEnter(event) {
+    if (isChatMuted) {
+      return;
+    }
     if (!dragEventHasFiles(event) || attachmentDialog && !attachmentDialog.hidden) {
       return;
     }
@@ -4194,6 +4482,9 @@
   }
 
   function handleChatDragOver(event) {
+    if (isChatMuted) {
+      return;
+    }
     if (!dragEventHasFiles(event)) {
       return;
     }
@@ -4225,6 +4516,13 @@
   }
 
   function handleDropZoneDrop(event) {
+    if (isChatMuted) {
+      event.preventDefault();
+      dragDepth = 0;
+      setDropOverlayVisible(false);
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     if (!dragEventHasFiles(event)) {
       return;
     }
@@ -4235,6 +4533,10 @@
   }
 
   function handleAttachmentCaptionKeydown(event) {
+    if (isChatMuted) {
+      event.preventDefault();
+      return;
+    }
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
       return;
     }
@@ -4361,6 +4663,9 @@
     }
 
     const data = result.data || {};
+    if (typeof data.notification_muted === "boolean") {
+      setActiveConversationNotificationMuted(data.notification_muted);
+    }
     setConversationTitle(data.title || activeConversationTitle() || "目前對話");
     renderMessages(data, {
       forceBottom: Boolean(options.forceBottom),
@@ -4571,6 +4876,10 @@
 
   async function sendMessage(event) {
     event.preventDefault();
+    if (isChatMuted) {
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     const headers = authHeaders();
     let content = composerInput.value.trim();
     const files = selectedAttachmentFiles.length
@@ -4611,6 +4920,9 @@
       });
       const result = await parseJSON(response);
       if (!response.ok || !result.success) {
+        if (applyChatErrorState(result)) {
+          return;
+        }
         setMessageStatus(result.message || "檔案送出失敗，請確認格式或大小後重試。", true);
         return;
       }
@@ -4622,6 +4934,9 @@
       });
       const result = await parseJSON(response);
       if (!response.ok || !result.success) {
+        if (applyChatErrorState(result)) {
+          return;
+        }
         setMessageStatus(result.message || "送出失敗。", true);
         return;
       }
@@ -4643,6 +4958,10 @@
   }
 
   function handleComposerKeydown(event) {
+    if (isChatMuted) {
+      event.preventDefault();
+      return;
+    }
     if (!composerMentionMenu.hidden) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -4690,14 +5009,20 @@
     composerInput.style.overflowY = composerInput.scrollHeight > maxHeight ? "auto" : "hidden";
   }
 
-  document.addEventListener("twacc:session-changed", function () {
+  document.addEventListener("twacc:session-changed", function (event) {
+    const detail = event.detail || {};
+    if (detail.mustChangePassword) {
+      holdChatUntilPasswordChange();
+      return;
+    }
+    isChatMuted = Boolean(detail.isChatMuted);
+    applyComposerMuteState();
+    refreshCurrentUserState();
     contactKeys = new Set();
     contactExternalIDs = new Set();
     contactsLoaded = false;
     contactsIndexLoading = false;
-    connectRealtime();
-    ensureContactsLoaded();
-    loadConversations();
+    initializeChatAfterPasswordReady();
   });
 
   document.addEventListener("twacc:conversation-filter-changed", function (event) {
@@ -4827,6 +5152,13 @@
         return;
       }
       setContactMenuOpen(contactMenu ? contactMenu.hidden : true);
+    });
+  }
+
+  if (notificationMuteToggle) {
+    notificationMuteToggle.addEventListener("click", function (event) {
+      event.stopPropagation();
+      toggleNotificationMute();
     });
   }
 
@@ -5045,6 +5377,8 @@
   });
 
   messageForm.addEventListener("submit", sendMessage);
+  applyComposerMuteState();
+  refreshCurrentUserState();
   composerMentionMenu.addEventListener("mousedown", function (event) {
     event.preventDefault();
   });
@@ -5107,6 +5441,11 @@
     if (actionButton && actionButton.dataset.contextAction === "folders") {
       event.preventDefault();
       setConversationContextFoldersOpen(actionButton.getAttribute("aria-expanded") !== "true");
+      return;
+    }
+    if (actionButton && actionButton.dataset.contextAction === "notification-mute") {
+      event.preventDefault();
+      toggleConversationContextNotificationMute();
       return;
     }
     const folderButton = event.target.closest("[data-context-folder-id]");
@@ -5401,6 +5740,5 @@
   window.addEventListener("blur", refreshDocumentUnreadAttention);
 
   setupNotificationAudioUnlock();
-  connectRealtime();
-  loadConversations();
+  initializeChatAfterPasswordReady();
 })();
