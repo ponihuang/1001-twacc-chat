@@ -2558,6 +2558,72 @@ strong {
   display: none;
 }
 
+.password-change-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(24, 20, 17, 0.46);
+}
+
+.password-change-modal-backdrop[hidden] {
+  display: none;
+}
+
+.password-change-modal {
+  display: grid;
+  gap: 20px;
+  width: min(460px, 100%);
+  padding: 30px;
+  border: 1px solid rgba(92, 75, 57, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 251, 246, 0.98);
+  color: var(--text);
+  box-shadow: 0 30px 90px rgba(28, 22, 18, 0.28);
+}
+
+.password-change-modal-header {
+  display: grid;
+  gap: 8px;
+}
+
+.password-change-modal-header h2,
+.password-change-modal-header p {
+  margin: 0;
+}
+
+.password-change-modal-header h2 {
+  font-size: 1.7rem;
+  line-height: 1.2;
+}
+
+.password-change-modal-header p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.password-change-form {
+  gap: 10px;
+}
+
+.password-change-success {
+  min-height: 18px;
+  color: #2d6d3a;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.password-change-success[hidden] {
+  display: none;
+}
+
+body.is-password-change-required {
+  overflow: hidden;
+}
+
 .auth-actions {
   display: flex;
   gap: 10px;

@@ -8,6 +8,7 @@
     token: "twacc_chat_session_token",
     sourceSystem: "twacc_chat_source_system",
     isChatMuted: "twacc_chat_is_chat_muted",
+    mustChangePassword: "twacc_chat_must_change_password",
     activeConversationID: "twacc_chat_active_conversation_id",
     activeFolderID: "twacc_chat_active_folder_tab_id",
     folderCategories: "twacc_chat_folder_categories",
@@ -251,6 +252,46 @@
     return localStorage.getItem("twacc_chat_external_user_id") || "";
   }
 
+  function mustChangePasswordRequired() {
+    return localStorage.getItem(storageKeys.mustChangePassword) === "true";
+  }
+
+  function canInitializeChat() {
+    return Boolean(readSessionToken()) && !mustChangePasswordRequired();
+  }
+
+  function holdChatUntilPasswordChange() {
+    closeRealtimeSocket();
+    activeConversationID = 0;
+    pendingDirectTarget = null;
+    messageLoadToken += 1;
+    setConversationUIActive(false);
+    setConversationTitle("目前對話");
+    if (conversationList) {
+      conversationList.innerHTML = "";
+    }
+    if (folderTabs) {
+      folderTabs.hidden = true;
+    }
+    if (conversationSummary) {
+      conversationSummary.textContent = "請先修改登入密碼。";
+    }
+    if (messageBoard) {
+      messageBoard.innerHTML = "";
+    }
+    setMessageStatus("請先修改登入密碼後再使用聊天室。", true);
+  }
+
+  function initializeChatAfterPasswordReady() {
+    if (!canInitializeChat()) {
+      holdChatUntilPasswordChange();
+      return;
+    }
+    connectRealtime();
+    ensureContactsLoaded();
+    loadConversations();
+  }
+
   function accountStorageKey(base) {
     const token = readSessionToken();
     const sourceSystem = readSourceSystem();
@@ -389,7 +430,7 @@
 
   async function refreshCurrentUserState() {
     const headers = authHeaders();
-    if (!headers) {
+    if (!headers || mustChangePasswordRequired()) {
       setChatMuted(false);
       return;
     }
@@ -4815,16 +4856,19 @@
   }
 
   document.addEventListener("twacc:session-changed", function (event) {
-    isChatMuted = Boolean(event.detail && event.detail.isChatMuted);
+    const detail = event.detail || {};
+    if (detail.mustChangePassword) {
+      holdChatUntilPasswordChange();
+      return;
+    }
+    isChatMuted = Boolean(detail.isChatMuted);
     applyComposerMuteState();
     refreshCurrentUserState();
     contactKeys = new Set();
     contactExternalIDs = new Set();
     contactsLoaded = false;
     contactsIndexLoading = false;
-    connectRealtime();
-    ensureContactsLoaded();
-    loadConversations();
+    initializeChatAfterPasswordReady();
   });
 
   document.addEventListener("twacc:conversation-filter-changed", function (event) {
@@ -5530,6 +5574,5 @@
   window.addEventListener("blur", refreshDocumentUnreadAttention);
 
   setupNotificationAudioUnlock();
-  connectRealtime();
-  loadConversations();
+  initializeChatAfterPasswordReady();
 })();

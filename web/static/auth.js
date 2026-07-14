@@ -4,8 +4,10 @@
     return;
   }
 
+  const temporaryPasswordStorageKey = "twacc_chat_current_temporary_password";
   const loginForm = app.querySelector("[data-login-form]");
   const passwordChangeForm = app.querySelector("[data-password-change-form]");
+  const passwordChangeModal = app.querySelector("[data-password-change-modal]");
   const logoutButtons = Array.from(app.querySelectorAll("[data-logout-button]"));
   const statusNode = app.querySelector("[data-auth-status]");
   const loginStateNode = app.querySelector("[data-login-state]");
@@ -18,6 +20,10 @@
   const newPasswordInput = app.querySelector("#new-password");
   const newPasswordConfirmationInput = app.querySelector("#new-password-confirmation");
   const passwordChangeError = app.querySelector("[data-password-change-error]");
+  const currentPasswordError = app.querySelector("[data-current-password-error]");
+  const newPasswordError = app.querySelector("[data-new-password-error]");
+  const passwordConfirmationError = app.querySelector("[data-password-confirmation-error]");
+  const passwordChangeSuccess = app.querySelector("[data-password-change-success]");
   const deviceIDInput = app.querySelector("#device-id");
   const integrationTokenInput = app.querySelector("#integration-token");
   const forgotPasswordToggle = app.querySelector("[data-forgot-password-toggle]");
@@ -122,6 +128,7 @@
     localStorage.removeItem(storageKeys.displayName);
     localStorage.removeItem(storageKeys.isChatMuted);
     localStorage.removeItem(storageKeys.mustChangePassword);
+    sessionStorage.removeItem(temporaryPasswordStorageKey);
   }
 
   function sessionEventDetail(session) {
@@ -133,6 +140,7 @@
       externalUserID: session.externalUserID || "",
       displayName: session.displayName || "",
       isChatMuted: Boolean(session.isChatMuted),
+      mustChangePassword: Boolean(session.mustChangePassword),
       actor: session.sourceSystem && session.externalUserID ? [session.sourceSystem, session.externalUserID].join(" / ") : ""
     };
   }
@@ -150,24 +158,53 @@
     passwordInput.setAttribute("aria-invalid", hasError ? "true" : "false");
   }
 
-  function setPasswordChangeError(message) {
-    if (!passwordChangeError) {
+  function setFieldError(node, input, message) {
+    if (!node) {
       return;
     }
     const hasError = Boolean(message);
-    passwordChangeError.textContent = message || "";
-    passwordChangeError.hidden = !hasError;
+    node.textContent = message || "";
+    node.hidden = !hasError;
+    if (input) {
+      input.classList.toggle("is-error", hasError);
+      input.setAttribute("aria-invalid", hasError ? "true" : "false");
+    }
+  }
+
+  function clearPasswordChangeMessages() {
+    setFieldError(currentPasswordError, currentPasswordInput, "");
+    setFieldError(newPasswordError, newPasswordInput, "");
+    setFieldError(passwordConfirmationError, newPasswordConfirmationInput, "");
+    setFieldError(passwordChangeError, null, "");
+    if (passwordChangeSuccess) {
+      passwordChangeSuccess.textContent = "";
+      passwordChangeSuccess.hidden = true;
+    }
+  }
+
+  function setPasswordChangeError(message) {
+    setFieldError(passwordChangeError, null, message);
     [currentPasswordInput, newPasswordInput, newPasswordConfirmationInput].forEach(function (input) {
       if (!input) return;
+      const hasError = Boolean(message);
       input.classList.toggle("is-error", hasError);
       input.setAttribute("aria-invalid", hasError ? "true" : "false");
     });
   }
 
-  function showPasswordChangeForm(show) {
-    if (loginForm) loginForm.hidden = Boolean(show);
-    if (passwordChangeForm) passwordChangeForm.hidden = !show;
-    if (forgotPasswordToggle?.parentElement) forgotPasswordToggle.parentElement.hidden = Boolean(show);
+  function showPasswordChangeModal(show) {
+    if (passwordChangeModal) {
+      passwordChangeModal.hidden = !show;
+      document.body.classList.toggle("is-password-change-required", Boolean(show));
+    }
+    if (show && currentPasswordInput && !currentPasswordInput.value) {
+      currentPasswordInput.value = sessionStorage.getItem(temporaryPasswordStorageKey) || "";
+    }
+    if (show && newPasswordInput) {
+      window.requestAnimationFrame(function () {
+        newPasswordInput.focus();
+      });
+    }
   }
 
   function renderSessionState() {
@@ -185,13 +222,18 @@
       loginStateNode.textContent = "已登入：" + (session.displayName || session.externalUserID || "使用者");
       tokenStateNode.textContent = accountLabel + "，登入憑證有效";
       if (session.mustChangePassword) {
-        showPasswordChangeForm(true);
+        document.dispatchEvent(new CustomEvent("twacc:session-changed", { detail: sessionEventDetail(session) }));
+        if (passwordChangeModal) {
+          showPasswordChangeModal(true);
+        } else if (app.dataset.loginRedirect) {
+          window.location.assign(app.dataset.loginRedirect);
+        }
         statusNode.textContent = "請先更新密碼後再進入聊天室";
         statusNode.classList.remove("is-error");
         statusNode.classList.add("is-success");
         return;
       }
-      showPasswordChangeForm(false);
+      showPasswordChangeModal(false);
       statusNode.textContent = session.expiresAt
         ? "已保存 session token，過期時間：" + formatDateTime(session.expiresAt)
         : "已保存 session token";
@@ -210,7 +252,7 @@
     }
 
     loginStateNode.textContent = "未登入";
-    showPasswordChangeForm(false);
+    showPasswordChangeModal(false);
     tokenStateNode.textContent = "尚未保存 session token";
     statusNode.textContent = "尚未登入";
     statusNode.classList.remove("is-error", "is-success");
@@ -251,6 +293,36 @@
 
     const result = await parseJSON(response);
     return { response, result, payload };
+  }
+
+  async function refreshSessionProfileState() {
+    const token = localStorage.getItem(storageKeys.token) || "";
+    if (!token) {
+      return;
+    }
+    try {
+      const response = await fetch("/api/users/me/profile", {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const result = await parseJSON(response);
+      if (!response.ok || !result.success || !result.data) {
+        return;
+      }
+      localStorage.setItem(storageKeys.displayName, result.data.display_name || localStorage.getItem(storageKeys.displayName) || "");
+      localStorage.setItem(storageKeys.isChatMuted, result.data.is_chat_muted ? "true" : "false");
+      localStorage.setItem(storageKeys.mustChangePassword, result.data.must_change_password ? "true" : "false");
+      if (result.data.must_change_password) {
+        showPasswordChangeModal(true);
+        statusNode.textContent = "請先更新密碼後再進入聊天室";
+        statusNode.classList.remove("is-error");
+        statusNode.classList.add("is-success");
+        document.dispatchEvent(new CustomEvent("twacc:session-changed", { detail: sessionEventDetail(readSession()) }));
+        return;
+      }
+      showPasswordChangeModal(false);
+      document.dispatchEvent(new CustomEvent("twacc:session-changed", { detail: sessionEventDetail(readSession()) }));
+    } catch (_) {
+    }
   }
 
   async function loginUser(payload, integrationToken) {
@@ -311,12 +383,15 @@
       localStorage.setItem(storageKeys.externalUserID, loggedInPayload.external_user_id);
 
       if (responseData.result.data && responseData.result.data.must_change_password) {
+        sessionStorage.setItem(temporaryPasswordStorageKey, payload.password);
         statusNode.textContent = "請先更新密碼後再進入聊天室";
         statusNode.classList.remove("is-error");
         statusNode.classList.add("is-success");
-        showPasswordChangeForm(true);
-        if (currentPasswordInput) currentPasswordInput.value = payload.password;
-        if (newPasswordInput) newPasswordInput.focus();
+        if (passwordChangeModal) {
+          showPasswordChangeModal(true);
+        } else if (app.dataset.loginRedirect) {
+          window.location.assign(app.dataset.loginRedirect);
+        }
         return;
       }
 
@@ -334,12 +409,16 @@
 
   async function submitPasswordChange(event) {
     event.preventDefault();
-    setPasswordChangeError("");
+    clearPasswordChangeMessages();
     const currentPassword = currentPasswordInput?.value.trim() || "";
     const password = newPasswordInput?.value.trim() || "";
     const passwordConfirmation = newPasswordConfirmationInput?.value.trim() || "";
+    if (currentPasswordInput && !currentPassword) {
+      setFieldError(currentPasswordError, currentPasswordInput, "請輸入目前臨時密碼");
+      return;
+    }
     if (password !== passwordConfirmation) {
-      setPasswordChangeError("密碼確認不一致");
+      setFieldError(passwordConfirmationError, newPasswordConfirmationInput, "新密碼與確認新密碼不一致");
       return;
     }
     const token = localStorage.getItem(storageKeys.token) || "";
@@ -369,15 +448,23 @@
       }
 
       localStorage.setItem(storageKeys.mustChangePassword, "false");
+      sessionStorage.removeItem(temporaryPasswordStorageKey);
       if (result.data && result.data.display_name) {
         localStorage.setItem(storageKeys.displayName, result.data.display_name);
       }
-      statusNode.textContent = "密碼已更新";
-      statusNode.classList.add("is-success");
-      renderSessionState();
-      if (app.dataset.loginRedirect) {
-        window.location.assign(app.dataset.loginRedirect);
+      if (passwordChangeSuccess) {
+        passwordChangeSuccess.textContent = "密碼已更新，即將進入聊天室";
+        passwordChangeSuccess.hidden = false;
       }
+      statusNode.textContent = "密碼已更新，即將進入聊天室";
+      statusNode.classList.add("is-success");
+      window.setTimeout(function () {
+        showPasswordChangeModal(false);
+        renderSessionState();
+        if (app.dataset.loginRedirect) {
+          window.location.assign(app.dataset.loginRedirect);
+        }
+      }, 700);
     } catch (error) {
       statusNode.textContent = error.message || "更新密碼失敗";
       statusNode.classList.remove("is-success");
@@ -410,6 +497,10 @@
   if (passwordChangeForm) {
     passwordChangeForm.addEventListener("submit", submitPasswordChange);
   }
+  [currentPasswordInput, newPasswordInput, newPasswordConfirmationInput].forEach(function (input) {
+    if (!input) return;
+    input.addEventListener("input", clearPasswordChangeMessages);
+  });
   [externalUserIDInput, passwordInput].forEach(function (input) {
     input.addEventListener("input", function () {
       setLoginFieldError("");
@@ -436,4 +527,5 @@
     });
   }
   renderSessionState();
+  refreshSessionProfileState();
 })();
