@@ -34,7 +34,7 @@
     { key: 'status', title: '狀態', width: 100 },
     { key: 'source', title: '來源', width: 100 },
     { key: 'lastOnline', title: '最近在線', minWidth: 180 },
-    { key: 'options', title: '選項', width: 150 }
+    { key: 'options', title: '選項', width: 260 }
   ];
 
   const VIEW_ROUTES = {
@@ -843,6 +843,17 @@
         muteButton.addEventListener('click', () => toggleUserChatMute(user));
         cell.appendChild(muteButton);
 
+        const temporaryPasswordButton = document.createElement('button');
+        temporaryPasswordButton.type = 'button';
+        temporaryPasswordButton.className = 'table-action table-action-wide';
+        temporaryPasswordButton.textContent = '臨時密碼';
+        temporaryPasswordButton.title = user.email ? '寄送臨時密碼' : '使用者沒有 Email，無法寄送臨時密碼';
+        temporaryPasswordButton.disabled = !user.email;
+        if (user.email) {
+          temporaryPasswordButton.addEventListener('click', () => confirmSendTemporaryPassword(user));
+        }
+        cell.appendChild(temporaryPasswordButton);
+
         const editButton = document.createElement('button');
         editButton.type = 'button';
         editButton.className = 'table-action';
@@ -879,6 +890,43 @@
       await loadUsers();
     } catch (err) {
       showError(err.message || '更新禁言狀態失敗');
+    }
+  }
+
+  function confirmSendTemporaryPassword(user) {
+    if (!user?.id || !user.email) return;
+    openConfirmModal('寄送臨時密碼', [
+      `將寄送 6 位數臨時密碼至 ${user.email}。`,
+      { text: '送出後原密碼將失效，使用者登入後必須立即修改密碼。', className: 'text-danger' }
+    ], () => sendTemporaryPassword(user), '寄送');
+  }
+
+  async function sendTemporaryPassword(user) {
+    if (!user?.id) return;
+    if (elements.modalConfirmBtn) {
+      elements.modalConfirmBtn.disabled = true;
+      elements.modalConfirmBtn.textContent = '寄送中...';
+    }
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/users/${user.id}/temporary-password`, {
+        method: 'POST'
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '寄送臨時密碼失敗');
+      }
+
+      closeModal();
+      showSuccess('臨時密碼已寄送');
+      await loadUsers();
+    } catch (err) {
+      showError(err.message || '寄送臨時密碼失敗');
+      if (elements.modalConfirmBtn) {
+        elements.modalConfirmBtn.disabled = false;
+        elements.modalConfirmBtn.textContent = '寄送';
+      }
     }
   }
 

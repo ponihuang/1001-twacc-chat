@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"regexp"
 	"strconv"
@@ -33,6 +34,7 @@ var (
 	ErrUserInvitationCompleted     = errors.New("user invitation completed")
 	ErrUserInvitationNotFound      = errors.New("user invitation not found")
 	ErrInvitationMailerUnavailable = errors.New("invitation mailer unavailable")
+	ErrTemporaryPasswordMailFailed = errors.New("temporary password mail failed")
 	ErrPasswordConfirmation        = errors.New("password confirmation mismatch")
 	ErrInvalidStatus               = errors.New("invalid status")
 	ErrInvalidPassword             = errors.New("invalid password")
@@ -49,6 +51,7 @@ var (
 	ErrDeviceNotTrusted            = errors.New("device not trusted")
 	ErrIPNotAllowed                = errors.New("ip not allowed")
 	ErrNewDeviceApprovalRequired   = errors.New("new device approval required")
+	ErrTemporaryPasswordExpired    = errors.New("temporary password expired")
 )
 
 // Service implements external-system identity and login rules for chat access.
@@ -141,6 +144,9 @@ func (s *Service) Login(req LoginRequest, clientIP, userAgent string) (Response,
 	}
 	if !passwordMatches(password, user.PasswordHash) {
 		return Response{}, statusCode(ErrInvalidCredentials), ErrInvalidCredentials
+	}
+	if user.TemporaryPasswordExpiresAt != nil && user.MustChangePassword && time.Now().UTC().After(*user.TemporaryPasswordExpiresAt) {
+		return Response{}, statusCode(ErrTemporaryPasswordExpired), ErrTemporaryPasswordExpired
 	}
 
 	settings, err := s.repo.GetUserSecuritySettings(user.ID)
@@ -268,6 +274,42 @@ func (s *Service) UpdateProfile(actor SessionPrincipal, req ProfileUpdateRequest
 	}
 
 	return Response{Success: true, Code: "PROFILE_UPDATED", Message: "个人资料更新成功", Data: data}, 200, nil
+}
+
+// UpdatePassword changes the authenticated user's password and clears temporary password flags.
+func (s *Service) UpdatePassword(actor SessionPrincipal, req PasswordUpdateRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if actor.UserID <= 0 {
+		return Response{}, statusCode(ErrInsufficientRole), ErrInsufficientRole
+	}
+
+	user, err := s.repo.FindUserByID(actor.UserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if !passwordMatches(req.CurrentPassword, user.PasswordHash) {
+		return Response{}, statusCode(ErrInvalidCredentials), ErrInvalidCredentials
+	}
+	if strings.TrimSpace(req.Password) != strings.TrimSpace(req.PasswordConfirmation) {
+		return Response{}, statusCode(ErrPasswordConfirmation), ErrPasswordConfirmation
+	}
+	passwordHash, err := hashPassword(req.Password)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	updated, err := s.repo.UpdateUserPassword(actor.UserID, passwordHash)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	data, err := s.profileResponseData(updated)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{Success: true, Code: "PASSWORD_UPDATED", Message: "密碼已更新", Data: data}, 200, nil
 }
 
 // ListUsers returns users for the admin console. Only system_admin is allowed.
@@ -1048,6 +1090,59 @@ func (s *Service) UpdateUserChatMute(targetUserID int64, req AdminUpdateUserChat
 	}, 200, nil
 }
 
+// SendTemporaryPassword sends a generated temporary password to a user's email.
+func (s *Service) SendTemporaryPassword(targetUserID int64, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if targetUserID <= 0 {
+		return Response{}, statusCode(ErrInvalidUserID), ErrInvalidUserID
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if s.invitationMailer == nil {
+		return Response{}, statusCode(ErrInvitationMailerUnavailable), ErrInvitationMailerUnavailable
+	}
+
+	user, err := s.repo.FindUserByID(targetUserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	email := strings.TrimSpace(user.Email)
+	if email == "" || !strings.Contains(email, "@") {
+		return Response{}, statusCode(ErrInvalidEmail), ErrInvalidEmail
+	}
+
+	temporaryPassword, err := newTemporaryPassword()
+	if err != nil {
+		return Response{}, 500, err
+	}
+	passwordHash, err := hashPassword(temporaryPassword)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	expiresAt := time.Now().UTC().Add(30 * time.Minute)
+
+	if err := s.invitationMailer.SendTemporaryPassword(email, temporaryPassword, expiresAt); err != nil {
+		return Response{}, statusCode(ErrTemporaryPasswordMailFailed), ErrTemporaryPasswordMailFailed
+	}
+	updated, err := s.repo.UpdateUserTemporaryPassword(targetUserID, TemporaryPasswordParams{
+		PasswordHash: passwordHash,
+		ExpiresAt:    expiresAt,
+	})
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "TEMPORARY_PASSWORD_SENT",
+		Message: "臨時密碼已寄出",
+		Data:    adminUserSummary(updated),
+	}, 200, nil
+}
+
 // GetSystemAdmin returns one backend admin for editing. Only system_admin is allowed.
 func (s *Service) GetSystemAdmin(targetAdminID int64, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -1420,6 +1515,15 @@ func validatePassword(password string) error {
 	return nil
 }
 
+func newTemporaryPassword() (string, error) {
+	max := big.NewInt(1000000)
+	n, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
 func hashPassword(password string) (string, error) {
 	password = strings.TrimSpace(password)
 	if err := validatePassword(password); err != nil {
@@ -1521,24 +1625,28 @@ func (s *Service) profileResponseData(user User) (map[string]any, error) {
 	}
 
 	return map[string]any{
-		"role":             role,
-		"user_id":          user.ID,
-		"source_system":    user.SourceSystem,
-		"external_user_id": user.ExternalUserID,
-		"display_name":     user.DisplayName,
+		"role":                          role,
+		"user_id":                       user.ID,
+		"source_system":                 user.SourceSystem,
+		"external_user_id":              user.ExternalUserID,
+		"display_name":                  user.DisplayName,
+		"must_change_password":          user.MustChangePassword,
+		"temporary_password_expires_at": user.TemporaryPasswordExpiresAt,
 	}, nil
 }
 
 func adminUserSummary(user User) AdminUserSummary {
 	return AdminUserSummary{
-		ID:             user.ID,
-		ExternalUserID: user.ExternalUserID,
-		DisplayName:    user.DisplayName,
-		Email:          user.Email,
-		Status:         user.Status,
-		IsChatMuted:    user.IsChatMuted,
-		SourceSystem:   user.SourceSystem,
-		CreatedAt:      user.CreatedAt,
+		ID:                         user.ID,
+		ExternalUserID:             user.ExternalUserID,
+		DisplayName:                user.DisplayName,
+		Email:                      user.Email,
+		Status:                     user.Status,
+		IsChatMuted:                user.IsChatMuted,
+		MustChangePassword:         user.MustChangePassword,
+		TemporaryPasswordExpiresAt: user.TemporaryPasswordExpiresAt,
+		SourceSystem:               user.SourceSystem,
+		CreatedAt:                  user.CreatedAt,
 	}
 }
 
@@ -1607,8 +1715,12 @@ func statusCode(err error) int {
 		return 400
 	case errors.Is(err, ErrInvalidCredentials):
 		return 401
+	case errors.Is(err, ErrTemporaryPasswordExpired):
+		return 403
 	case errors.Is(err, ErrInvitationMailerUnavailable):
 		return 503
+	case errors.Is(err, ErrTemporaryPasswordMailFailed):
+		return 502
 	case errors.Is(err, ErrSystemAdminCannotChat),
 		errors.Is(err, ErrInsufficientRole),
 		errors.Is(err, ErrDeviceNotTrusted),

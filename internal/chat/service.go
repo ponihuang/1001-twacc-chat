@@ -34,6 +34,7 @@ var (
 	ErrMessageNotFound           = errors.New("message not found")
 	ErrMessageRecallForbidden    = errors.New("message recall forbidden")
 	ErrUserChatMuted             = errors.New("user chat muted")
+	ErrPasswordChangeRequired    = errors.New("password change required")
 )
 
 var mentionPattern = regexp.MustCompile(`(?:^|\s)@([A-Za-z0-9_.-]+|ALL)\b`)
@@ -792,6 +793,13 @@ func (s *Service) requireChatUser(userID int64) error {
 	if isAdmin {
 		return ErrSystemAdminCannotChat
 	}
+	mustChange, err := s.repo.MustChangePassword(userID)
+	if err != nil {
+		return err
+	}
+	if mustChange {
+		return ErrPasswordChangeRequired
+	}
 
 	return nil
 }
@@ -824,7 +832,7 @@ func statusCode(err error) int {
 		return 400
 	case errors.Is(err, ErrDirectChatSelfNotAllow), errors.Is(err, ErrContactSelfNotAllow):
 		return 409
-	case errors.Is(err, ErrSystemAdminCannotChat), errors.Is(err, ErrInsufficientRole), errors.Is(err, ErrUserChatMuted):
+	case errors.Is(err, ErrSystemAdminCannotChat), errors.Is(err, ErrInsufficientRole), errors.Is(err, ErrUserChatMuted), errors.Is(err, ErrPasswordChangeRequired):
 		return 403
 	case errors.Is(err, ErrMessageRecallForbidden):
 		return 403

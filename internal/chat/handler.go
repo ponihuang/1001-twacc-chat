@@ -804,6 +804,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "SYSTEM_ADMIN_CANNOT_CHAT", Message: "system_admin 不可使用聊天功能"}
 	case errors.Is(err, ErrUserChatMuted):
 		return Response{Success: false, Code: "USER_CHAT_MUTED", Message: "此用戶已被禁止發言"}
+	case errors.Is(err, ErrPasswordChangeRequired):
+		return Response{Success: false, Code: "PASSWORD_CHANGE_REQUIRED", Message: "請先修改密碼"}
 	case errors.Is(err, ErrInsufficientRole):
 		return Response{Success: false, Code: "INSUFFICIENT_ROLE", Message: "目前角色无权执行此操作"}
 	default:

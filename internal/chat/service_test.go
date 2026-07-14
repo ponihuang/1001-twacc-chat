@@ -71,6 +71,10 @@ func (m *mockRepository) IsChatMuted(userID int64) (bool, error) {
 	return m.mutedUsers[userID], nil
 }
 
+func (m *mockRepository) MustChangePassword(userID int64) (bool, error) {
+	return false, nil
+}
+
 func (m *mockRepository) ListConversations(userID int64) ([]ConversationSummary, error) {
 	return append([]ConversationSummary(nil), m.conversations[userID]...), nil
 }

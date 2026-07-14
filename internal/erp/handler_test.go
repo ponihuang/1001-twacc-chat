@@ -118,6 +118,14 @@ func (s *stubIntegrationRepository) UpdateUserChatMute(userID int64, params Admi
 	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: "User A", Status: "active", IsChatMuted: params.IsChatMuted}, nil
 }
 
+func (s *stubIntegrationRepository) UpdateUserTemporaryPassword(userID int64, params TemporaryPasswordParams) (User, error) {
+	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: "User A", Status: "active", MustChangePassword: true, TemporaryPasswordExpiresAt: &params.ExpiresAt}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateUserPassword(userID int64, passwordHash string) (User, error) {
+	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: "User A", Status: "active", PasswordHash: passwordHash}, nil
+}
+
 func (s *stubIntegrationRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
 	return User{ID: userID, SourceSystem: "erp", ExternalUserID: "user_a", DisplayName: displayName}, nil
 }

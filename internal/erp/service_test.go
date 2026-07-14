@@ -41,15 +41,23 @@ type mockSessions struct {
 }
 
 type mockInvitationMailer struct {
-	email     string
-	inviteURL string
-	expiresAt time.Time
-	err       error
+	email             string
+	inviteURL         string
+	temporaryPassword string
+	expiresAt         time.Time
+	err               error
 }
 
 func (m *mockInvitationMailer) SendUserInvitation(email, inviteURL string, expiresAt time.Time) error {
 	m.email = email
 	m.inviteURL = inviteURL
+	m.expiresAt = expiresAt
+	return m.err
+}
+
+func (m *mockInvitationMailer) SendTemporaryPassword(email, temporaryPassword string, expiresAt time.Time) error {
+	m.email = email
+	m.temporaryPassword = temporaryPassword
 	m.expiresAt = expiresAt
 	return m.err
 }
@@ -228,14 +236,16 @@ func (m *mockRepository) ListUsers(filter AdminUserFilter) (AdminUserPage, error
 	users := make([]AdminUserSummary, 0, len(m.usersByID))
 	for _, user := range m.usersByID {
 		users = append(users, AdminUserSummary{
-			ID:             user.ID,
-			ExternalUserID: user.ExternalUserID,
-			DisplayName:    user.DisplayName,
-			Email:          user.Email,
-			Status:         user.Status,
-			IsChatMuted:    user.IsChatMuted,
-			SourceSystem:   user.SourceSystem,
-			CreatedAt:      user.CreatedAt,
+			ID:                         user.ID,
+			ExternalUserID:             user.ExternalUserID,
+			DisplayName:                user.DisplayName,
+			Email:                      user.Email,
+			Status:                     user.Status,
+			IsChatMuted:                user.IsChatMuted,
+			MustChangePassword:         user.MustChangePassword,
+			TemporaryPasswordExpiresAt: user.TemporaryPasswordExpiresAt,
+			SourceSystem:               user.SourceSystem,
+			CreatedAt:                  user.CreatedAt,
 		})
 	}
 	return AdminUserPage{
@@ -416,6 +426,32 @@ func (m *mockRepository) UpdateUserChatMute(userID int64, params AdminUpdateUser
 		return User{}, ErrUserNotFound
 	}
 	user.IsChatMuted = params.IsChatMuted
+	m.usersByID[userID] = user
+	m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
+	return user, nil
+}
+
+func (m *mockRepository) UpdateUserTemporaryPassword(userID int64, params TemporaryPasswordParams) (User, error) {
+	user, ok := m.usersByID[userID]
+	if !ok {
+		return User{}, ErrUserNotFound
+	}
+	user.PasswordHash = params.PasswordHash
+	user.MustChangePassword = true
+	user.TemporaryPasswordExpiresAt = &params.ExpiresAt
+	m.usersByID[userID] = user
+	m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
+	return user, nil
+}
+
+func (m *mockRepository) UpdateUserPassword(userID int64, passwordHash string) (User, error) {
+	user, ok := m.usersByID[userID]
+	if !ok {
+		return User{}, ErrUserNotFound
+	}
+	user.PasswordHash = passwordHash
+	user.MustChangePassword = false
+	user.TemporaryPasswordExpiresAt = nil
 	m.usersByID[userID] = user
 	m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
 	return user, nil

@@ -9,19 +9,21 @@ import (
 
 // User stores the minimal fields required by external-system registration and login.
 type User struct {
-	ID              int64
-	SourceSystem    string
-	ExternalUserID  string
-	DisplayName     string
-	PasswordHash    string
-	Email           string
-	Language        string
-	WhatsAppAccount string
-	TelegramAccount string
-	Status          string
-	IsChatMuted     bool
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                         int64
+	SourceSystem               string
+	ExternalUserID             string
+	DisplayName                string
+	PasswordHash               string
+	Email                      string
+	Language                   string
+	WhatsAppAccount            string
+	TelegramAccount            string
+	Status                     string
+	IsChatMuted                bool
+	MustChangePassword         bool
+	TemporaryPasswordExpiresAt *time.Time
+	CreatedAt                  time.Time
+	UpdatedAt                  time.Time
 }
 
 // UserSecuritySettings stores per-user login restriction flags.
@@ -68,15 +70,17 @@ type AdminUserFilter struct {
 
 // AdminUserSummary is the API-facing user shape for the admin console.
 type AdminUserSummary struct {
-	ID             int64      `json:"id"`
-	ExternalUserID string     `json:"external_user_id"`
-	DisplayName    string     `json:"display_name"`
-	Email          string     `json:"email"`
-	Status         string     `json:"status"`
-	IsChatMuted    bool       `json:"is_chat_muted"`
-	SourceSystem   string     `json:"source_system"`
-	CreatedAt      time.Time  `json:"created_at"`
-	LastOnlineAt   *time.Time `json:"last_online_at,omitempty"`
+	ID                         int64      `json:"id"`
+	ExternalUserID             string     `json:"external_user_id"`
+	DisplayName                string     `json:"display_name"`
+	Email                      string     `json:"email"`
+	Status                     string     `json:"status"`
+	IsChatMuted                bool       `json:"is_chat_muted"`
+	MustChangePassword         bool       `json:"must_change_password"`
+	TemporaryPasswordExpiresAt *time.Time `json:"temporary_password_expires_at,omitempty"`
+	SourceSystem               string     `json:"source_system"`
+	CreatedAt                  time.Time  `json:"created_at"`
+	LastOnlineAt               *time.Time `json:"last_online_at,omitempty"`
 }
 
 // AdminUserPage is the paginated response for the admin user list.
@@ -273,6 +277,7 @@ type AdminSessionIssuer interface {
 // InvitationMailer sends user registration invitations.
 type InvitationMailer interface {
 	SendUserInvitation(email, inviteURL string, expiresAt time.Time) error
+	SendTemporaryPassword(email, temporaryPassword string, expiresAt time.Time) error
 }
 
 // SessionAuthenticator validates a Bearer session token.
@@ -343,6 +348,13 @@ type AdminUpdateUserRequest struct {
 // AdminUpdateUserChatMuteRequest is the system-admin payload for muting a user in chat.
 type AdminUpdateUserChatMuteRequest struct {
 	IsChatMuted bool `json:"is_chat_muted"`
+}
+
+// PasswordUpdateRequest is the authenticated user payload for changing password.
+type PasswordUpdateRequest struct {
+	CurrentPassword      string `json:"current_password"`
+	Password             string `json:"password"`
+	PasswordConfirmation string `json:"password_confirmation"`
 }
 
 // LoginRequest is the external-system login payload.
@@ -425,6 +437,12 @@ type AdminUpdateUserChatMuteParams struct {
 	IsChatMuted bool
 }
 
+// TemporaryPasswordParams carries a generated temporary password into storage.
+type TemporaryPasswordParams struct {
+	PasswordHash string
+	ExpiresAt    time.Time
+}
+
 // UserInvitationCreateParams carries validated invitation fields into storage.
 type UserInvitationCreateParams struct {
 	Email            string
@@ -478,6 +496,8 @@ type Repository interface {
 	UpdateSystemAdminLastLogin(adminUserID int64, ip string, at time.Time) error
 	UpdateUser(userID int64, params AdminUpdateUserParams) (User, error)
 	UpdateUserChatMute(userID int64, params AdminUpdateUserChatMuteParams) (User, error)
+	UpdateUserTemporaryPassword(userID int64, params TemporaryPasswordParams) (User, error)
+	UpdateUserPassword(userID int64, passwordHash string) (User, error)
 	UpdateUserProfile(userID int64, displayName string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)
 	GetUserSecuritySettings(userID int64) (UserSecuritySettings, error)

@@ -143,6 +143,33 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// UpdatePassword handles PATCH /api/users/me/password.
+func (h *Handler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.sessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req PasswordUpdateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.UpdatePassword(principal, req)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // ListUsers handles GET /api/system-admin/users.
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -529,6 +556,30 @@ func (h *Handler) UpdateUserChatMute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, status, err := h.service.UpdateUserChatMute(targetUserID, req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
+// SendTemporaryPassword handles POST /api/system-admin/users/{user_id}/temporary-password.
+func (h *Handler) SendTemporaryPassword(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+	targetUserID, ok := parseUserIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, err := h.service.SendTemporaryPassword(targetUserID, principal)
 	if err != nil {
 		writeJSON(w, status, errorResponse(err))
 		return
@@ -964,6 +1015,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "PASSWORD_CONFIRMATION_MISMATCH", Message: "密碼確認不一致"}
 	case errors.Is(err, ErrInvalidCredentials):
 		return Response{Success: false, Code: "INVALID_CREDENTIALS", Message: "帐号或密码错误"}
+	case errors.Is(err, ErrTemporaryPasswordExpired):
+		return Response{Success: false, Code: "TEMPORARY_PASSWORD_EXPIRED", Message: "臨時密碼已過期，請聯繫管理員重新寄送"}
 	case errors.Is(err, ErrInvalidUserID):
 		return Response{Success: false, Code: "INVALID_REQUEST", Message: "user_id 格式错误"}
 	case errors.Is(err, ErrDeviceIDRequired):
@@ -990,6 +1043,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "USER_INVITATION_NOT_FOUND", Message: "查無有效邀請"}
 	case errors.Is(err, ErrInvitationMailerUnavailable):
 		return Response{Success: false, Code: "MAILER_UNAVAILABLE", Message: "寄信服務尚未設定"}
+	case errors.Is(err, ErrTemporaryPasswordMailFailed):
+		return Response{Success: false, Code: "TEMPORARY_PASSWORD_MAIL_FAILED", Message: "臨時密碼寄送失敗，請確認寄信設定或稍後再試"}
 	case errors.Is(err, ErrSystemAdminCannotChat):
 		return Response{Success: false, Code: "SYSTEM_ADMIN_CANNOT_CHAT", Message: "system_admin 不可使用聊天功能"}
 	case errors.Is(err, ErrInsufficientRole):

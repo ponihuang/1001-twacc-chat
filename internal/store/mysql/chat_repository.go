@@ -46,6 +46,20 @@ func (r *ChatRepository) IsChatMuted(userID int64) (bool, error) {
 	return muted, nil
 }
 
+// MustChangePassword checks whether the user must change password before using chat.
+func (r *ChatRepository) MustChangePassword(userID int64) (bool, error) {
+	var mustChange bool
+	row := r.db.QueryRow(`SELECT must_change_password FROM users WHERE id = ? LIMIT 1`, userID)
+	if err := row.Scan(&mustChange); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, chat.ErrTargetUserNotFound
+		}
+		return false, fmt.Errorf("check user password state: %w", err)
+	}
+
+	return mustChange, nil
+}
+
 // ListConversations returns conversations for the given user ordered by recent activity.
 func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSummary, error) {
 	rows, err := r.db.Query(`
