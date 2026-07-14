@@ -44,6 +44,7 @@ func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, cha
 		mux.HandleFunc("POST /api/system-admin/users/{user_id}/temporary-password", integrationHandler.SendTemporaryPassword)
 		mux.HandleFunc("GET /api/system-admin/users/{user_id}/devices", integrationHandler.ListDevices)
 		mux.HandleFunc("PUT /api/system-admin/users/{user_id}/ip-whitelist", integrationHandler.UpdateIPWhitelist)
+		mux.HandleFunc("GET /api/users/me/profile", integrationHandler.GetProfile)
 		mux.HandleFunc("PATCH /api/users/me/profile", integrationHandler.UpdateProfile)
 		mux.HandleFunc("PATCH /api/users/me/password", integrationHandler.UpdatePassword)
 		mux.HandleFunc("POST /api/users/{user_id}/devices/{device_id}/approve", integrationHandler.ApproveDevice)

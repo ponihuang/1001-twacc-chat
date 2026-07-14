@@ -30,6 +30,7 @@
     sourceSystem: "twacc_chat_source_system",
     externalUserID: "twacc_chat_external_user_id",
     displayName: "twacc_chat_display_name",
+    isChatMuted: "twacc_chat_is_chat_muted",
     mustChangePassword: "twacc_chat_must_change_password",
     deviceID: "twacc_chat_device_id",
     integrationToken: "twacc_chat_integration_token"
@@ -83,6 +84,7 @@
         sourceSystem: "",
         externalUserID: "",
         displayName: "",
+        isChatMuted: false,
         mustChangePassword: false,
         deviceID: localStorage.getItem(storageKeys.deviceID) || "",
         integrationToken: localStorage.getItem(storageKeys.integrationToken) || ""
@@ -96,6 +98,7 @@
       sourceSystem: localStorage.getItem(storageKeys.sourceSystem) || "",
       externalUserID: localStorage.getItem(storageKeys.externalUserID) || "",
       displayName: localStorage.getItem(storageKeys.displayName) || "",
+      isChatMuted: localStorage.getItem(storageKeys.isChatMuted) === "true",
       mustChangePassword: localStorage.getItem(storageKeys.mustChangePassword) === "true",
       deviceID: localStorage.getItem(storageKeys.deviceID) || "",
       integrationToken: localStorage.getItem(storageKeys.integrationToken) || ""
@@ -117,6 +120,7 @@
     localStorage.removeItem(storageKeys.sourceSystem);
     localStorage.removeItem(storageKeys.externalUserID);
     localStorage.removeItem(storageKeys.displayName);
+    localStorage.removeItem(storageKeys.isChatMuted);
     localStorage.removeItem(storageKeys.mustChangePassword);
   }
 
@@ -128,6 +132,7 @@
       sourceSystem: session.sourceSystem || "",
       externalUserID: session.externalUserID || "",
       displayName: session.displayName || "",
+      isChatMuted: Boolean(session.isChatMuted),
       actor: session.sourceSystem && session.externalUserID ? [session.sourceSystem, session.externalUserID].join(" / ") : ""
     };
   }
@@ -300,6 +305,7 @@
       localStorage.setItem(storageKeys.expiresAt, responseData.result.expires_at || "");
       localStorage.setItem(storageKeys.role, responseData.result.data && responseData.result.data.role ? responseData.result.data.role : "");
       localStorage.setItem(storageKeys.displayName, responseData.result.data && responseData.result.data.display_name ? responseData.result.data.display_name : loggedInPayload.external_user_id);
+      localStorage.setItem(storageKeys.isChatMuted, responseData.result.data && responseData.result.data.is_chat_muted ? "true" : "false");
       localStorage.setItem(storageKeys.mustChangePassword, responseData.result.data && responseData.result.data.must_change_password ? "true" : "false");
       localStorage.setItem(storageKeys.sourceSystem, loggedInPayload.source_system);
       localStorage.setItem(storageKeys.externalUserID, loggedInPayload.external_user_id);

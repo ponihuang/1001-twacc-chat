@@ -3915,6 +3915,13 @@ strong {
   padding: 0 8px 0 0;
 }
 
+.composer.is-chat-muted .composer-fields,
+.composer-fields.is-chat-muted {
+  background: rgba(230, 226, 220, 0.76);
+  color: rgba(107, 98, 88, 0.62);
+  cursor: not-allowed;
+}
+
 .composer-fields:has(.composer-reply-preview:not([hidden])) {
   align-items: flex-end;
   padding-bottom: 6px;
@@ -4021,6 +4028,16 @@ strong {
   -ms-overflow-style: none;
 }
 
+.composer-input:disabled {
+  background: transparent;
+  color: rgba(107, 98, 88, 0.62);
+  cursor: not-allowed;
+}
+
+.composer-input:disabled::placeholder {
+  color: rgba(107, 98, 88, 0.62);
+}
+
 .composer-input::-webkit-scrollbar {
   width: 0;
   height: 0;
@@ -4052,6 +4069,18 @@ strong {
 .composer-icon-button[aria-expanded="true"] {
   background: rgba(92, 75, 57, 0.08);
   color: var(--text);
+}
+
+.composer-icon-button:disabled,
+.composer-actions .primary-button:disabled,
+.attachment-send-button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.composer-icon-button:disabled:hover {
+  background: transparent;
+  color: var(--muted);
 }
 
 .composer-icon-button svg {

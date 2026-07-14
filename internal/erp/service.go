@@ -276,6 +276,27 @@ func (s *Service) UpdateProfile(actor SessionPrincipal, req ProfileUpdateRequest
 	return Response{Success: true, Code: "PROFILE_UPDATED", Message: "个人资料更新成功", Data: data}, 200, nil
 }
 
+// GetProfile returns the authenticated user's current profile data.
+func (s *Service) GetProfile(actor SessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if actor.UserID <= 0 {
+		return Response{}, statusCode(ErrInsufficientRole), ErrInsufficientRole
+	}
+
+	user, err := s.repo.FindUserByID(actor.UserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	data, err := s.profileResponseData(user)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{Success: true, Code: "PROFILE_LOADED", Message: "个人资料读取成功", Data: data}, 200, nil
+}
+
 // UpdatePassword changes the authenticated user's password and clears temporary password flags.
 func (s *Service) UpdatePassword(actor SessionPrincipal, req PasswordUpdateRequest) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -1630,6 +1651,7 @@ func (s *Service) profileResponseData(user User) (map[string]any, error) {
 		"source_system":                 user.SourceSystem,
 		"external_user_id":              user.ExternalUserID,
 		"display_name":                  user.DisplayName,
+		"is_chat_muted":                 user.IsChatMuted,
 		"must_change_password":          user.MustChangePassword,
 		"temporary_password_expires_at": user.TemporaryPasswordExpiresAt,
 	}, nil

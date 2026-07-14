@@ -7,6 +7,7 @@
   const storageKeys = {
     token: "twacc_chat_session_token",
     sourceSystem: "twacc_chat_source_system",
+    isChatMuted: "twacc_chat_is_chat_muted",
     activeConversationID: "twacc_chat_active_conversation_id",
     activeFolderID: "twacc_chat_active_folder_tab_id",
     folderCategories: "twacc_chat_folder_categories",
@@ -82,6 +83,8 @@
   const realtimeStateNode = app.querySelector("[data-realtime-state]");
   const composerInput = messageForm.querySelector(".composer-input");
   const composerFileInput = messageForm.querySelector(".composer-file-input");
+  const composerSubmitButton = messageForm.querySelector("button[type='submit']");
+  const composerFields = messageForm.querySelector(".composer-fields");
   const fileStateNode = messageForm.querySelector("[data-file-state]");
   const attachmentToggle = messageForm.querySelector("[data-attachment-toggle]");
   const attachmentMenu = messageForm.querySelector("[data-attachment-menu]");
@@ -176,6 +179,7 @@
   let contactItems = [];
   let contactsLoaded = false;
   let contactsIndexLoading = false;
+  let isChatMuted = localStorage.getItem(storageKeys.isChatMuted) === "true";
   let mentionMembersCache = new Map();
   let mentionMenuItems = [];
   let mentionMenuActiveIndex = 0;
@@ -332,6 +336,83 @@
   function setMessageStatus(text, isError) {
     messageStatus.textContent = text;
     messageStatus.classList.toggle("is-error", Boolean(isError));
+  }
+
+  function applyComposerMuteState() {
+    const muted = Boolean(isChatMuted);
+    const placeholder = muted ? "此帳號已被禁止發言" : "輸入文字訊息";
+    const tooltip = muted ? "禁止發言" : "";
+    if (messageForm) {
+      messageForm.classList.toggle("is-chat-muted", muted);
+      messageForm.title = tooltip;
+    }
+    if (composerFields) {
+      composerFields.classList.toggle("is-chat-muted", muted);
+      composerFields.title = tooltip;
+    }
+    if (composerInput) {
+      composerInput.disabled = muted;
+      composerInput.placeholder = placeholder;
+      composerInput.title = tooltip;
+      if (muted) {
+        composerInput.value = "";
+        syncComposerInputHeight();
+        clearMentionMenu();
+      }
+    }
+    if (composerSubmitButton) {
+      composerSubmitButton.disabled = muted;
+      composerSubmitButton.title = tooltip;
+    }
+    if (attachmentToggle) {
+      attachmentToggle.disabled = muted;
+      attachmentToggle.title = tooltip;
+    }
+    if (composerFileInput) {
+      composerFileInput.disabled = muted;
+    }
+    if (attachmentSend) {
+      attachmentSend.disabled = muted;
+      attachmentSend.title = tooltip;
+    }
+    if (muted) {
+      setAttachmentMenuOpen(false);
+      closeAttachmentDialog(true);
+    }
+  }
+
+  function setChatMuted(muted) {
+    isChatMuted = Boolean(muted);
+    localStorage.setItem(storageKeys.isChatMuted, isChatMuted ? "true" : "false");
+    applyComposerMuteState();
+  }
+
+  async function refreshCurrentUserState() {
+    const headers = authHeaders();
+    if (!headers) {
+      setChatMuted(false);
+      return;
+    }
+    try {
+      const response = await fetch("/api/users/me/profile", {
+        headers: { Authorization: headers.Authorization }
+      });
+      const result = await parseJSON(response);
+      if (!response.ok || !result.success || !result.data) {
+        return;
+      }
+      setChatMuted(Boolean(result.data.is_chat_muted));
+    } catch (_) {
+    }
+  }
+
+  function applyChatErrorState(result) {
+    if (result && result.code === "USER_CHAT_MUTED") {
+      setChatMuted(true);
+      setMessageStatus("此帳號已被禁止發言", true);
+      return true;
+    }
+    return false;
   }
 
   function setConversationTitle(text) {
@@ -3059,6 +3140,10 @@
   }
 
   function chooseAttachment(kind) {
+    if (isChatMuted) {
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     if (!composerFileInput) {
       return;
     }
@@ -3241,6 +3326,10 @@
   }
 
   function openAttachmentDialog(files, kind) {
+    if (isChatMuted) {
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     if (!attachmentDialog || !attachmentPreview || !attachmentTitle) {
       return;
     }
@@ -3292,6 +3381,10 @@
   }
 
   function sendAttachmentFromDialog() {
+    if (isChatMuted) {
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     if (attachmentCaption) {
       composerInput.value = attachmentCaption.value.trim();
     }
@@ -4185,6 +4278,9 @@
   }
 
   function handleChatDragEnter(event) {
+    if (isChatMuted) {
+      return;
+    }
     if (!dragEventHasFiles(event) || attachmentDialog && !attachmentDialog.hidden) {
       return;
     }
@@ -4194,6 +4290,9 @@
   }
 
   function handleChatDragOver(event) {
+    if (isChatMuted) {
+      return;
+    }
     if (!dragEventHasFiles(event)) {
       return;
     }
@@ -4225,6 +4324,13 @@
   }
 
   function handleDropZoneDrop(event) {
+    if (isChatMuted) {
+      event.preventDefault();
+      dragDepth = 0;
+      setDropOverlayVisible(false);
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     if (!dragEventHasFiles(event)) {
       return;
     }
@@ -4235,6 +4341,10 @@
   }
 
   function handleAttachmentCaptionKeydown(event) {
+    if (isChatMuted) {
+      event.preventDefault();
+      return;
+    }
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
       return;
     }
@@ -4571,6 +4681,10 @@
 
   async function sendMessage(event) {
     event.preventDefault();
+    if (isChatMuted) {
+      setMessageStatus("此帳號已被禁止發言", true);
+      return;
+    }
     const headers = authHeaders();
     let content = composerInput.value.trim();
     const files = selectedAttachmentFiles.length
@@ -4611,6 +4725,9 @@
       });
       const result = await parseJSON(response);
       if (!response.ok || !result.success) {
+        if (applyChatErrorState(result)) {
+          return;
+        }
         setMessageStatus(result.message || "檔案送出失敗，請確認格式或大小後重試。", true);
         return;
       }
@@ -4622,6 +4739,9 @@
       });
       const result = await parseJSON(response);
       if (!response.ok || !result.success) {
+        if (applyChatErrorState(result)) {
+          return;
+        }
         setMessageStatus(result.message || "送出失敗。", true);
         return;
       }
@@ -4643,6 +4763,10 @@
   }
 
   function handleComposerKeydown(event) {
+    if (isChatMuted) {
+      event.preventDefault();
+      return;
+    }
     if (!composerMentionMenu.hidden) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -4690,7 +4814,10 @@
     composerInput.style.overflowY = composerInput.scrollHeight > maxHeight ? "auto" : "hidden";
   }
 
-  document.addEventListener("twacc:session-changed", function () {
+  document.addEventListener("twacc:session-changed", function (event) {
+    isChatMuted = Boolean(event.detail && event.detail.isChatMuted);
+    applyComposerMuteState();
+    refreshCurrentUserState();
     contactKeys = new Set();
     contactExternalIDs = new Set();
     contactsLoaded = false;
@@ -5045,6 +5172,8 @@
   });
 
   messageForm.addEventListener("submit", sendMessage);
+  applyComposerMuteState();
+  refreshCurrentUserState();
   composerMentionMenu.addEventListener("mousedown", function (event) {
     event.preventDefault();
   });
