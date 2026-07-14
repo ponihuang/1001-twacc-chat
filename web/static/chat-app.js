@@ -182,6 +182,7 @@
   let contactsLoaded = false;
   let contactsIndexLoading = false;
   let isChatMuted = localStorage.getItem(storageKeys.isChatMuted) === "true";
+  let conversationNotificationMuteStates = new Map();
   let mentionMembersCache = new Map();
   let mentionMenuItems = [];
   let mentionMenuActiveIndex = 0;
@@ -479,6 +480,7 @@
     if (!conversationID) {
       return;
     }
+    conversationNotificationMuteStates.set(conversationID, Boolean(muted));
     conversations = conversations.map(function (item) {
       if (Number(item.conversation_id || 0) !== conversationID) {
         return item;
@@ -495,7 +497,7 @@
     }
     const active = activeConversation();
     const hasConversation = Boolean(active && active.conversation_id);
-    const muted = Boolean(active && active.notification_muted);
+    const muted = hasConversation ? isConversationNotificationMuted(active.conversation_id) : false;
     notificationMuteToggle.hidden = !hasConversation;
     notificationMuteToggle.disabled = !hasConversation;
     notificationMuteToggle.classList.toggle("is-muted", muted);
@@ -1760,6 +1762,12 @@
 
   function renderConversationList(items) {
     conversations = items;
+    (items || []).forEach(function (item) {
+      const conversationID = Number(item && item.conversation_id ? item.conversation_id : 0);
+      if (conversationID) {
+        conversationNotificationMuteStates.set(conversationID, Boolean(item.notification_muted));
+      }
+    });
     syncConversationCatalog(items);
     updateDocumentUnreadTitle(items);
 
@@ -2508,6 +2516,20 @@
       && conversationID === Number(activeConversationID || 0);
   }
 
+  function isConversationNotificationMuted(conversationIDValue) {
+    const conversationID = Number(conversationIDValue || 0);
+    if (!conversationID) {
+      return false;
+    }
+    if (conversationNotificationMuteStates.has(conversationID)) {
+      return Boolean(conversationNotificationMuteStates.get(conversationID));
+    }
+    const item = conversations.find(function (conversation) {
+      return Number(conversation.conversation_id || 0) === conversationID;
+    });
+    return Boolean(item && item.notification_muted);
+  }
+
   function notificationAudioAPI() {
     return window.AudioContext || window.webkitAudioContext || null;
   }
@@ -2766,6 +2788,9 @@
       return false;
     }
     if (isOutgoingMessage(event.message || {})) {
+      return false;
+    }
+    if (isConversationNotificationMuted(realtimeEventConversationID(event))) {
       return false;
     }
     return !isCurrentVisibleConversationEvent(event);
