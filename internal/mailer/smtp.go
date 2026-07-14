@@ -138,24 +138,14 @@ func (m *SMTPMailer) SendUnreadNotification(email string, conversationTitle stri
 	if title == "" {
 		title = "TWACC Chat"
 	}
-	sender := strings.TrimSpace(latestSenderName)
-	if sender == "" {
-		sender = "有人"
-	}
-	preview := strings.TrimSpace(latestMessageText)
-	if preview == "" {
-		preview = "傳送了新訊息"
-	}
 	subject := "TWACC Chat 未讀訊息通知"
 	linkLine := "請登入 TWACC Chat 查看完整內容。"
 	if appURL := strings.TrimSpace(m.appURL); appURL != "" {
 		linkLine = fmt.Sprintf("請登入 TWACC Chat 查看完整內容：\n%s/chat", appURL)
 	}
-	body := fmt.Sprintf("您好，\n\n您在「%s」有 %d 則未讀訊息。\n\n最新訊息：\n%s：%s\n\n%s\n",
+	body := fmt.Sprintf("您好，\n\n您在「%s」有 %d 則未讀訊息。\n\n%s\n",
 		title,
 		unreadCount,
-		sender,
-		preview,
 		linkLine,
 	)
 
