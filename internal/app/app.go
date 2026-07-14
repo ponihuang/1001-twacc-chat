@@ -60,6 +60,7 @@ func Run() error {
 		var smtpMailer *mailer.SMTPMailer
 		if cfg.Mail.Enabled() {
 			smtpMailer = mailer.NewSMTPMailer(cfg.Mail)
+			smtpMailer.SetAppURL(cfg.AppURL)
 			integrationService.SetInvitationMailer(smtpMailer)
 		}
 		integrationHandler = erp.NewHandler(

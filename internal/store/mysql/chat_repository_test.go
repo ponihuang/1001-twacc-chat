@@ -19,3 +19,24 @@ func TestEnqueueEmailNotificationMergeDoesNotDelayDueAt(t *testing.T) {
 		t.Fatalf("enqueue SQL must not update due_at when merging pending notifications: %s", updateClause)
 	}
 }
+
+func TestNotificationPreviewForMediaMessages(t *testing.T) {
+	cases := []struct {
+		name        string
+		messageType string
+		content     string
+		want        string
+	}{
+		{name: "image", messageType: "image", content: "", want: "傳送了圖片"},
+		{name: "file", messageType: "file", content: "", want: "傳送了附件"},
+		{name: "text", messageType: "text", content: "  hello  ", want: "hello"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := notificationPreview(tc.messageType, tc.content); got != tc.want {
+				t.Fatalf("notificationPreview(%q, %q) = %q, want %q", tc.messageType, tc.content, got, tc.want)
+			}
+		})
+	}
+}

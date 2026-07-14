@@ -58,6 +58,9 @@
   const groupInfoCount = app.querySelector("[data-group-info-count]");
   const groupInfoDescription = app.querySelector("[data-group-info-description]");
   const groupInfoDescriptionText = app.querySelector("[data-group-info-description-text]");
+  const groupInfoNotification = app.querySelector("[data-group-info-notification]");
+  const groupInfoNotificationStatus = app.querySelector("[data-group-info-notification-status]");
+  const groupInfoNotificationToggle = app.querySelector("[data-group-info-notification-toggle]");
   const groupInfoMembers = app.querySelector("[data-group-info-members]");
   const groupInfoAddButton = app.querySelector("[data-group-info-add]");
   const groupAddMembers = app.querySelector("[data-group-add-members]");
@@ -488,6 +491,7 @@
       return Object.assign({}, item, { notification_muted: Boolean(muted) });
     });
     updateNotificationMuteControl();
+    updateGroupInfoNotificationControl();
     renderConversationList(conversations);
   }
 
@@ -543,6 +547,38 @@
       setMessageStatus(err.message || "通知靜音設定更新失敗。", true);
     } finally {
       updateNotificationMuteControl();
+    }
+  }
+
+  function updateGroupInfoNotificationControl() {
+    if (!groupInfoNotification || !groupInfoNotificationStatus || !groupInfoNotificationToggle) {
+      return;
+    }
+    const active = activeConversation();
+    const hasConversation = Boolean(active && active.conversation_id);
+    const muted = hasConversation ? isConversationNotificationMuted(active.conversation_id) : false;
+    groupInfoNotification.classList.toggle("is-muted", muted);
+    groupInfoNotificationToggle.disabled = !hasConversation;
+    groupInfoNotificationToggle.textContent = muted ? "解除靜音" : "靜音";
+    groupInfoNotificationToggle.setAttribute("aria-label", muted ? "解除 Email 通知靜音" : "靜音 Email 通知");
+    groupInfoNotificationStatus.textContent = muted
+      ? "一般未讀訊息不會寄送 Email 通知"
+      : "一般未讀訊息會寄送 Email 通知";
+  }
+
+  async function toggleGroupInfoNotificationMute() {
+    const active = activeConversation();
+    if (!active || !active.conversation_id || !groupInfoNotificationToggle) {
+      return;
+    }
+    groupInfoNotificationToggle.disabled = true;
+    try {
+      const data = await updateConversationNotificationMute(active.conversation_id, !Boolean(active.notification_muted));
+      setMessageStatus(Boolean(data && data.notification_muted) ? "已靜音 Email 通知。" : "已解除 Email 通知靜音。", false);
+    } catch (err) {
+      setMessageStatus(err.message || "通知靜音設定更新失敗。", true);
+    } finally {
+      updateGroupInfoNotificationControl();
     }
   }
 
@@ -818,6 +854,7 @@
       setGroupInfoPanelOpen(false);
     }
     updateNotificationMuteControl();
+    updateGroupInfoNotificationControl();
   }
 
   function updateContactActions() {
@@ -882,6 +919,7 @@
     if (groupInfoEditButton) {
       groupInfoEditButton.hidden = true;
     }
+    updateGroupInfoNotificationControl();
   }
 
   function memberRoleLabel(role) {
@@ -915,6 +953,7 @@
     if (groupInfoDescriptionText) {
       groupInfoDescriptionText.textContent = description;
     }
+    updateGroupInfoNotificationControl();
     if (!groupInfoMembers) {
       return;
     }
@@ -5159,6 +5198,13 @@
     notificationMuteToggle.addEventListener("click", function (event) {
       event.stopPropagation();
       toggleNotificationMute();
+    });
+  }
+
+  if (groupInfoNotificationToggle) {
+    groupInfoNotificationToggle.addEventListener("click", function (event) {
+      event.stopPropagation();
+      toggleGroupInfoNotificationMute();
     });
   }
 

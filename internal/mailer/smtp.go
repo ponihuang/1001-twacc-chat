@@ -21,6 +21,7 @@ type SMTPMailer struct {
 	password    string
 	fromAddress string
 	fromName    string
+	appURL      string
 }
 
 // NewSMTPMailer builds an SMTP-backed mailer from config.
@@ -33,6 +34,14 @@ func NewSMTPMailer(cfg config.MailConfig) *SMTPMailer {
 		fromAddress: cfg.SenderAddress(),
 		fromName:    cfg.FromName,
 	}
+}
+
+// SetAppURL sets the public application URL used in notification emails.
+func (m *SMTPMailer) SetAppURL(appURL string) {
+	if m == nil {
+		return
+	}
+	m.appURL = strings.TrimRight(strings.TrimSpace(appURL), "/")
 }
 
 // SendUserInvitation sends a registration invitation email.
@@ -138,11 +147,16 @@ func (m *SMTPMailer) SendUnreadNotification(email string, conversationTitle stri
 		preview = "傳送了新訊息"
 	}
 	subject := "TWACC Chat 未讀訊息通知"
-	body := fmt.Sprintf("您好，\n\n您在「%s」有 %d 則未讀訊息。\n\n最新訊息：\n%s：%s\n\n請登入 TWACC Chat 查看完整內容。\n",
+	linkLine := "請登入 TWACC Chat 查看完整內容。"
+	if appURL := strings.TrimSpace(m.appURL); appURL != "" {
+		linkLine = fmt.Sprintf("請登入 TWACC Chat 查看完整內容：\n%s/chat", appURL)
+	}
+	body := fmt.Sprintf("您好，\n\n您在「%s」有 %d 則未讀訊息。\n\n最新訊息：\n%s：%s\n\n%s\n",
 		title,
 		unreadCount,
 		sender,
 		preview,
+		linkLine,
 	)
 
 	var msg bytes.Buffer
