@@ -2502,6 +2502,25 @@ strong {
   color: var(--accent-strong);
 }
 
+.conversation-muted-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.conversation-muted-badge svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .conversation-card.is-placeholder {
   opacity: 0.88;
 }
@@ -2873,6 +2892,28 @@ body.is-password-change-required {
   width: 24px;
   height: 24px;
   fill: currentColor;
+}
+
+.chat-notification-mute-toggle svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chat-notification-mute-toggle .chat-notification-mute-bell-off,
+.chat-notification-mute-toggle.is-muted .chat-notification-mute-bell {
+  display: none;
+}
+
+.chat-notification-mute-toggle.is-muted .chat-notification-mute-bell-off {
+  display: block;
+}
+
+.chat-notification-mute-toggle.is-muted {
+  color: var(--accent-strong);
+  background: rgba(165, 63, 43, 0.1);
 }
 
 .chat-contact-menu {
@@ -3818,9 +3859,15 @@ body.is-password-change-required {
   cursor: pointer;
 }
 
+.conversation-context-action:hover,
 .conversation-context-action.is-active,
 .conversation-context-folder:hover {
   background: rgba(51, 144, 236, 0.08);
+}
+
+.conversation-context-action + .conversation-context-action {
+  margin-top: 4px;
+  border-top: 1px solid rgba(31, 27, 24, 0.08);
 }
 
 .conversation-context-action svg,

@@ -70,6 +70,7 @@
   const groupEditNameInput = app.querySelector("[data-group-edit-name]");
   const groupEditDescriptionInput = app.querySelector("[data-group-edit-description]");
   const groupEditSubmitButton = app.querySelector("[data-group-edit-submit]");
+  const notificationMuteToggle = app.querySelector("[data-notification-mute-toggle]");
   const contactMenuToggle = app.querySelector("[data-contact-menu-toggle]");
   const contactMenu = app.querySelector("[data-contact-menu]");
   const contactPanel = app.querySelector("[data-contact-panel]");
@@ -463,6 +464,86 @@
     conversationTitle.textContent = text || "目前對話";
   }
 
+  function notificationMuteHint(muted) {
+    return muted
+      ? "解除靜音。靜音後，一般未讀訊息不會寄送 Email 通知；當有人標註你或使用 @ALL 時，仍會寄送通知。"
+      : "靜音通知。靜音後，一般未讀訊息不會寄送 Email 通知；當有人標註你或使用 @ALL 時，仍會寄送通知。";
+  }
+
+  function setActiveConversationNotificationMuted(muted) {
+    setConversationNotificationMuted(activeConversationID, muted);
+  }
+
+  function setConversationNotificationMuted(conversationIDValue, muted) {
+    const conversationID = Number(conversationIDValue || 0);
+    if (!conversationID) {
+      return;
+    }
+    conversations = conversations.map(function (item) {
+      if (Number(item.conversation_id || 0) !== conversationID) {
+        return item;
+      }
+      return Object.assign({}, item, { notification_muted: Boolean(muted) });
+    });
+    updateNotificationMuteControl();
+    renderConversationList(conversations);
+  }
+
+  function updateNotificationMuteControl() {
+    if (!notificationMuteToggle) {
+      return;
+    }
+    const active = activeConversation();
+    const hasConversation = Boolean(active && active.conversation_id);
+    const muted = Boolean(active && active.notification_muted);
+    notificationMuteToggle.hidden = !hasConversation;
+    notificationMuteToggle.disabled = !hasConversation;
+    notificationMuteToggle.classList.toggle("is-muted", muted);
+    notificationMuteToggle.setAttribute("aria-pressed", muted ? "true" : "false");
+    notificationMuteToggle.setAttribute("aria-label", muted ? "解除靜音" : "靜音通知");
+    notificationMuteToggle.title = notificationMuteHint(muted);
+  }
+
+  async function updateConversationNotificationMute(conversationIDValue, nextMuted) {
+    const headers = authHeaders();
+    const conversationID = Number(conversationIDValue || 0);
+    if (!conversationID || !headers) {
+      return null;
+    }
+    const response = await fetch("/api/conversations/" + conversationID + "/notification-mute", {
+      method: "PATCH",
+      headers: Object.assign({ "Content-Type": "application/json" }, headers),
+      body: JSON.stringify({ notification_muted: Boolean(nextMuted) })
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || "通知靜音設定更新失敗。");
+    }
+    const data = result.data || {};
+    const muted = Boolean(data.notification_muted);
+    setConversationNotificationMuted(conversationID, muted);
+    return data;
+  }
+
+  async function toggleNotificationMute() {
+    const active = activeConversation();
+    if (!active || !active.conversation_id || !notificationMuteToggle) {
+      return;
+    }
+    notificationMuteToggle.disabled = true;
+    try {
+      const data = await updateConversationNotificationMute(active.conversation_id, !Boolean(active.notification_muted));
+      if (!data) {
+        return;
+      }
+      setMessageStatus(Boolean(data.notification_muted) ? "已靜音 Email 通知。" : "已解除 Email 通知靜音。", false);
+    } catch (err) {
+      setMessageStatus(err.message || "通知靜音設定更新失敗。", true);
+    } finally {
+      updateNotificationMuteControl();
+    }
+  }
+
   function totalUnreadCount(items) {
     return (items || []).reduce(function (total, item) {
       return total + Math.max(0, Number(item && item.unread_count ? item.unread_count : 0));
@@ -617,6 +698,7 @@
     }
     updateContactActions();
     updateGroupInfoAction();
+    updateNotificationMuteControl();
   }
 
   function setContactMenuOpen(isOpen) {
@@ -733,6 +815,7 @@
     if (!group) {
       setGroupInfoPanelOpen(false);
     }
+    updateNotificationMuteControl();
   }
 
   function updateContactActions() {
@@ -1392,6 +1475,7 @@
     renderConversationList(conversations);
     updateContactActions();
     updateGroupInfoAction();
+    updateNotificationMuteControl();
     setGroupInfoPanelOpen(false);
     loadMessages(activeConversationID);
   }
@@ -1472,6 +1556,11 @@
   function renderConversationContextMenu(conversationID) {
     const folders = customFolderCategories();
     const id = String(conversationID || "");
+    const targetConversation = conversations.find(function (item) {
+      return String(item.conversation_id || "") === id;
+    }) || null;
+    const notificationMuted = Boolean(targetConversation && targetConversation.notification_muted);
+    const notificationActionText = notificationMuted ? "關閉靜音" : "開啟靜音";
     const folderItems = folders.length ? folders.map(function (folder) {
       const ids = Array.isArray(folder.conversation_ids) ? folder.conversation_ids.map(String) : [];
       const checked = ids.indexOf(id) >= 0;
@@ -1493,6 +1582,14 @@
       "</svg>",
       "<span>加入分類</span>",
       '<svg class="conversation-context-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>',
+      "</button>",
+      '<button type="button" class="conversation-context-action" data-context-action="notification-mute">',
+      '<svg viewBox="0 0 24 24" aria-hidden="true">',
+      notificationMuted
+        ? '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path>'
+        : '<path d="M13.73 21a2 2 0 0 1-3.46 0"></path><path d="M18.63 13A17.9 17.9 0 0 1 18 8"></path><path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 7-3 9h14"></path><path d="m2 2 20 20"></path>',
+      "</svg>",
+      "<span>" + notificationActionText + "</span>",
       "</button>",
       "</div>",
       '<div class="conversation-context-folders" hidden>',
@@ -1549,6 +1646,32 @@
     saveFolderCategories(folders);
     renderConversationList(conversations);
     closeConversationContextMenu();
+  }
+
+  async function toggleConversationContextNotificationMute() {
+    if (!conversationContextTarget || !conversationContextTarget.conversationID) {
+      return;
+    }
+    const conversationID = String(conversationContextTarget.conversationID);
+    const targetConversation = conversations.find(function (item) {
+      return String(item.conversation_id || "") === conversationID;
+    });
+    if (!targetConversation) {
+      closeConversationContextMenu();
+      return;
+    }
+    try {
+      const data = await updateConversationNotificationMute(targetConversation.conversation_id, !Boolean(targetConversation.notification_muted));
+      if (Number(targetConversation.conversation_id || 0) === Number(activeConversationID || 0)) {
+        setMessageStatus(Boolean(data && data.notification_muted) ? "已靜音 Email 通知。" : "已解除 Email 通知靜音。", false);
+      }
+    } catch (err) {
+      if (Number(targetConversation.conversation_id || 0) === Number(activeConversationID || 0)) {
+        setMessageStatus(err.message || "通知靜音設定更新失敗。", true);
+      }
+    } finally {
+      closeConversationContextMenu();
+    }
   }
 
   function filteredConversations(items) {
@@ -1667,9 +1790,12 @@
       const unread = item.unread_count > 0
         ? ('<span class="conversation-unread-badge" aria-label="未讀訊息 ' + item.unread_count + ' 則">' + item.unread_count + "</span>")
         : "";
+      const muted = item.notification_muted
+        ? '<span class="conversation-muted-badge" title="已靜音通知" aria-label="已靜音通知"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><path d="M18.63 13A17.9 17.9 0 0 1 18 8"></path><path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 7-3 9h14"></path><path d="m2 2 20 20"></path></svg></span>'
+        : "";
       return [
         '<button type="button" class="conversation-card conversation-button' + active + '" data-conversation-id="' + item.conversation_id + '">',
-        '<span class="conversation-card-header"><strong>' + escapeHTML(item.title) + '</strong><span class="conversation-badges">' + mention + unread + "</span></span>",
+        '<span class="conversation-card-header"><strong>' + escapeHTML(item.title) + '</strong><span class="conversation-badges">' + muted + mention + unread + "</span></span>",
         "<span>" + escapeHTML(preview) + "</span>",
         "<small>" + escapeHTML(meta) + "</small>",
         "</button>"
@@ -4512,6 +4638,9 @@
     }
 
     const data = result.data || {};
+    if (typeof data.notification_muted === "boolean") {
+      setActiveConversationNotificationMuted(data.notification_muted);
+    }
     setConversationTitle(data.title || activeConversationTitle() || "目前對話");
     renderMessages(data, {
       forceBottom: Boolean(options.forceBottom),
@@ -5001,6 +5130,13 @@
     });
   }
 
+  if (notificationMuteToggle) {
+    notificationMuteToggle.addEventListener("click", function (event) {
+      event.stopPropagation();
+      toggleNotificationMute();
+    });
+  }
+
   if (groupInfoOpenButton) {
     groupInfoOpenButton.addEventListener("click", function () {
       if (!activeGroupConversation()) {
@@ -5280,6 +5416,11 @@
     if (actionButton && actionButton.dataset.contextAction === "folders") {
       event.preventDefault();
       setConversationContextFoldersOpen(actionButton.getAttribute("aria-expanded") !== "true");
+      return;
+    }
+    if (actionButton && actionButton.dataset.contextAction === "notification-mute") {
+      event.preventDefault();
+      toggleConversationContextNotificationMute();
       return;
     }
     const folderButton = event.target.closest("[data-context-folder-id]");

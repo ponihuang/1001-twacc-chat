@@ -60,6 +60,7 @@ func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, cha
 		mux.HandleFunc("GET /api/users/search", chatHandler.SearchUsers)
 		mux.HandleFunc("GET /api/messages/search", chatHandler.SearchMessages)
 		mux.HandleFunc("PATCH /api/conversations/{conversation_id}", chatHandler.UpdateConversation)
+		mux.HandleFunc("PATCH /api/conversations/{conversation_id}/notification-mute", chatHandler.UpdateConversationNotificationMute)
 		mux.HandleFunc("GET /api/conversations/{conversation_id}/members", chatHandler.ListConversationMembers)
 		mux.HandleFunc("POST /api/conversations/{conversation_id}/members", chatHandler.AddConversationMembers)
 		mux.HandleFunc("DELETE /api/conversations/{conversation_id}/members", chatHandler.RemoveConversationMember)

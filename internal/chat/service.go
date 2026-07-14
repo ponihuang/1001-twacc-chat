@@ -182,6 +182,7 @@ func (s *Service) ListConversations(actor SessionPrincipal) (Response, int, erro
 			LastMessagePreview: conversation.LastMessagePreview,
 			UnreadCount:        conversation.UnreadCount,
 			HasUnreadMention:   conversation.HasUnreadMention,
+			NotificationMuted:  conversation.NotificationMuted,
 		}
 		if !conversation.LastMessageAt.IsZero() {
 			item.LastMessageAt = conversation.LastMessageAt.Format(time.RFC3339)
@@ -284,6 +285,34 @@ func (s *Service) UpdateConversation(actor SessionPrincipal, conversationID int6
 		})
 	}
 	return s.ListConversationMembers(actor, conversationID)
+}
+
+// UpdateConversationNotificationMute updates the current user's email notification mute state for a conversation.
+func (s *Service) UpdateConversationNotificationMute(actor SessionPrincipal, conversationID int64, req UpdateConversationNotificationMuteRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if conversationID <= 0 {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+
+	conversation, err := s.repo.UpdateConversationNotificationMute(actor.UserID, conversationID, req.NotificationMuted)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "CONVERSATION_NOTIFICATION_MUTE_UPDATED",
+		Message: "通知靜音設定已更新",
+		Data: ConversationNotificationMuteData{
+			ConversationID:    conversation.ID,
+			NotificationMuted: conversation.NotificationMuted,
+		},
+	}, 200, nil
 }
 
 // AddConversationMembers adds members to a group visible to the actor.
@@ -511,6 +540,7 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 			ConversationID:       conversation.ID,
 			Type:                 conversation.Type,
 			Title:                conversation.Title,
+			NotificationMuted:    conversation.NotificationMuted,
 			FirstUnreadMessageID: firstUnreadMessageID,
 			Messages:             items,
 		},
