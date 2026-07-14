@@ -24,6 +24,8 @@ func Run() error {
 	var integrationHandler *erp.Handler
 	var chatHandler *chat.Handler
 	realtimeHub := chat.NewHub()
+	appCtx, stopApp := context.WithCancel(context.Background())
+	defer stopApp()
 	if cfg.EnableMySQL {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -55,8 +57,10 @@ func Run() error {
 		integrationService.SetRequireTrustedDevice(cfg.RequireTrustedDevice)
 		integrationService.SetInvitationTTL(cfg.UserInvitationTTL)
 		integrationService.SetInvitationBaseURL(cfg.AppURL)
+		var smtpMailer *mailer.SMTPMailer
 		if cfg.Mail.Enabled() {
-			integrationService.SetInvitationMailer(mailer.NewSMTPMailer(cfg.Mail))
+			smtpMailer = mailer.NewSMTPMailer(cfg.Mail)
+			integrationService.SetInvitationMailer(smtpMailer)
 		}
 		integrationHandler = erp.NewHandler(
 			integrationService,
@@ -69,6 +73,9 @@ func Run() error {
 
 		chatRepo := storemysql.NewChatRepository(dbStore.DB())
 		chatService := chat.NewService(chatRepo, realtimeHub)
+		if smtpMailer != nil {
+			go chat.NewEmailNotificationWorker(chatRepo, smtpMailer).Start(appCtx)
+		}
 		chatHandler = chat.NewHandler(chatService, sessionService, realtimeHub, chat.NewLocalFileStore(filepath.Join("web", "uploads")))
 	} else {
 		integrationHandler = erp.NewHandler(

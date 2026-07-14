@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"1001-twacc-chat/internal/chat"
 )
@@ -12,6 +14,14 @@ import (
 type ChatRepository struct {
 	db *sql.DB
 }
+
+const enqueueEmailNotificationSQL = `
+		INSERT INTO chat_email_notifications
+			(user_id, conversation_id, first_message_id, latest_message_id, due_at, status, active_key, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, 'pending', ?, NOW(), NOW())
+		ON DUPLICATE KEY UPDATE
+			latest_message_id = GREATEST(latest_message_id, VALUES(latest_message_id)),
+			updated_at = NOW()`
 
 // NewChatRepository creates a MySQL chat repository.
 func NewChatRepository(db *sql.DB) *ChatRepository {
@@ -624,7 +634,8 @@ func (r *ChatRepository) ListConversationMembers(conversationID int64) ([]chat.C
 		       u.source_system,
 		       u.external_user_id,
 		       u.display_name,
-		       cm.role
+		       cm.role,
+		       cm.is_notification_muted
 		  FROM conversation_members cm
 		  JOIN users u ON u.id = cm.user_id
 		 WHERE cm.conversation_id = ?
@@ -644,7 +655,7 @@ func (r *ChatRepository) ListConversationMembers(conversationID int64) ([]chat.C
 	members := make([]chat.ConversationMember, 0)
 	for rows.Next() {
 		var item chat.ConversationMember
-		if err := rows.Scan(&item.UserID, &item.SourceSystem, &item.ExternalUserID, &item.DisplayName, &item.Role); err != nil {
+		if err := rows.Scan(&item.UserID, &item.SourceSystem, &item.ExternalUserID, &item.DisplayName, &item.Role, &item.NotificationMuted); err != nil {
 			return nil, fmt.Errorf("scan conversation member details: %w", err)
 		}
 		members = append(members, item)
@@ -690,6 +701,39 @@ func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (c
 	}
 
 	return conversation, nil
+}
+
+func (r *ChatRepository) conversationTitleForUser(userID, conversationID int64) (string, error) {
+	var title string
+	row := r.db.QueryRow(`
+		SELECT
+			CASE
+				WHEN c.type = 'direct' THEN COALESCE(
+					(
+						SELECT u.display_name
+						  FROM conversation_members cm2
+						  JOIN users u ON u.id = cm2.user_id
+						 WHERE cm2.conversation_id = c.id
+						   AND cm2.user_id <> ?
+						 ORDER BY cm2.id ASC
+						 LIMIT 1
+					),
+					COALESCE(NULLIF(c.name, ''), 'Direct Conversation')
+				)
+				ELSE COALESCE(NULLIF(c.name, ''), 'Unnamed Group')
+			END AS title
+		  FROM conversation_members cm
+		  JOIN conversations c ON c.id = cm.conversation_id
+		 WHERE cm.user_id = ?
+		   AND c.id = ?
+		 LIMIT 1`, userID, userID, conversationID)
+	if err := row.Scan(&title); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", chat.ErrConversationNotFound
+		}
+		return "", fmt.Errorf("load conversation title: %w", err)
+	}
+	return title, nil
 }
 
 // UpdateConversationNotificationMute stores the current user's email notification mute state for a conversation.
@@ -948,6 +992,37 @@ func (r *ChatRepository) MarkConversationReadUntil(userID, conversationID, messa
 	return nil
 }
 
+// CancelPendingEmailNotificationIfNoUnread cancels pending email notifications when the user has no unread incoming messages.
+func (r *ChatRepository) CancelPendingEmailNotificationIfNoUnread(userID, conversationID int64) error {
+	if _, err := r.db.Exec(`
+		UPDATE chat_email_notifications n
+		   SET n.status = 'cancelled',
+		       n.cancelled_at = NOW(),
+		       n.active_key = NULL,
+		       n.updated_at = NOW()
+		 WHERE n.user_id = ?
+		   AND n.conversation_id = ?
+		   AND n.status = 'pending'
+		   AND NOT EXISTS (
+				SELECT 1
+				  FROM messages m
+				 WHERE m.conversation_id = n.conversation_id
+				   AND m.is_recalled = FALSE
+				   AND m.sender_id <> n.user_id
+				   AND m.id > COALESCE((
+						SELECT cr.last_read_message_id
+						  FROM conversation_reads cr
+						 WHERE cr.conversation_id = n.conversation_id
+						   AND cr.user_id = n.user_id
+						 LIMIT 1
+				   ), 0)
+				 LIMIT 1
+		   )`, userID, conversationID); err != nil {
+		return fmt.Errorf("cancel pending chat email notification if read: %w", err)
+	}
+	return nil
+}
+
 // CreateMessageMentions stores mention targets for a message.
 func (r *ChatRepository) CreateMessageMentions(messageID, conversationID int64, mentions []chat.MessageMentionInput) error {
 	if len(mentions) == 0 {
@@ -974,6 +1049,224 @@ func (r *ChatRepository) CreateMessageMentions(messageID, conversationID int64, 
 		}
 	}
 
+	return nil
+}
+
+// EnqueueEmailNotification creates or merges a pending unread email notification.
+func (r *ChatRepository) EnqueueEmailNotification(userID, conversationID, messageID int64, dueAt time.Time) error {
+	activeKey := fmt.Sprintf("%d:%d", userID, conversationID)
+	if _, err := r.db.Exec(enqueueEmailNotificationSQL,
+		userID,
+		conversationID,
+		messageID,
+		messageID,
+		dueAt,
+		activeKey,
+	); err != nil {
+		return fmt.Errorf("enqueue chat email notification: %w", err)
+	}
+	return nil
+}
+
+// RecoverStaleEmailNotifications returns abandoned processing jobs to pending for retry.
+func (r *ChatRepository) RecoverStaleEmailNotifications(now time.Time, staleBefore time.Time) error {
+	if _, err := r.db.Exec(`
+		UPDATE chat_email_notifications
+		   SET status = 'pending',
+		       due_at = ?,
+		       processing_started_at = NULL,
+		       lock_token = NULL,
+		       active_key = NULL,
+		       updated_at = NOW()
+		 WHERE status = 'processing'
+		   AND processing_started_at IS NOT NULL
+		   AND processing_started_at < ?`, now, staleBefore); err != nil {
+		return fmt.Errorf("recover stale chat email notifications: %w", err)
+	}
+	return nil
+}
+
+// ClaimDueEmailNotification atomically claims one due pending email notification.
+func (r *ChatRepository) ClaimDueEmailNotification(now time.Time, lockToken string) (*chat.EmailNotificationSchedule, error) {
+	result, err := r.db.Exec(`
+		UPDATE chat_email_notifications
+		   SET status = 'processing',
+		       processing_started_at = ?,
+		       lock_token = ?,
+		       active_key = NULL,
+		       updated_at = NOW()
+		 WHERE status = 'pending'
+		   AND due_at <= ?
+		 ORDER BY due_at ASC, id ASC
+		 LIMIT 1`, now, lockToken, now)
+	if err != nil {
+		return nil, fmt.Errorf("claim chat email notification: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("claim chat email notification rows affected: %w", err)
+	}
+	if affected == 0 {
+		return nil, nil
+	}
+
+	var schedule chat.EmailNotificationSchedule
+	row := r.db.QueryRow(`
+		SELECT id, user_id, conversation_id, first_message_id, latest_message_id, attempt_count
+		  FROM chat_email_notifications
+		 WHERE lock_token = ?
+		   AND status = 'processing'
+		 LIMIT 1`, lockToken)
+	if err := row.Scan(
+		&schedule.ID,
+		&schedule.UserID,
+		&schedule.ConversationID,
+		&schedule.FirstMessageID,
+		&schedule.LatestMessageID,
+		&schedule.AttemptCount,
+	); err != nil {
+		return nil, fmt.Errorf("load claimed chat email notification: %w", err)
+	}
+	return &schedule, nil
+}
+
+// LoadEmailNotificationDelivery returns data needed to decide whether a claimed notification should be sent.
+func (r *ChatRepository) LoadEmailNotificationDelivery(schedule chat.EmailNotificationSchedule) (chat.EmailNotificationDelivery, error) {
+	delivery := chat.EmailNotificationDelivery{
+		ScheduleID:     schedule.ID,
+		UserID:         schedule.UserID,
+		ConversationID: schedule.ConversationID,
+	}
+
+	row := r.db.QueryRow(`
+		SELECT COALESCE(email, ''), status
+		  FROM users
+		 WHERE id = ?
+		 LIMIT 1`, schedule.UserID)
+	if err := row.Scan(&delivery.Email, &delivery.UserStatus); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return delivery, nil
+		}
+		return chat.EmailNotificationDelivery{}, fmt.Errorf("load chat email notification user: %w", err)
+	}
+
+	var memberExists int
+	row = r.db.QueryRow(`
+		SELECT 1
+		  FROM conversation_members
+		 WHERE conversation_id = ?
+		   AND user_id = ?
+		 LIMIT 1`, schedule.ConversationID, schedule.UserID)
+	if err := row.Scan(&memberExists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			delivery.IsMember = false
+			return delivery, nil
+		}
+		return chat.EmailNotificationDelivery{}, fmt.Errorf("load chat email notification member: %w", err)
+	}
+	delivery.IsMember = true
+
+	if title, err := r.conversationTitleForUser(schedule.UserID, schedule.ConversationID); err != nil {
+		return chat.EmailNotificationDelivery{}, err
+	} else {
+		delivery.ConversationTitle = title
+	}
+
+	var latestUnreadID sql.NullInt64
+	row = r.db.QueryRow(`
+		SELECT COUNT(*), MAX(m.id)
+		  FROM messages m
+		 WHERE m.conversation_id = ?
+		   AND m.is_recalled = FALSE
+		   AND m.sender_id <> ?
+		   AND m.id BETWEEN ? AND ?
+		   AND m.id > COALESCE((
+				SELECT cr.last_read_message_id
+				  FROM conversation_reads cr
+				 WHERE cr.conversation_id = ?
+				   AND cr.user_id = ?
+				 LIMIT 1
+		   ), 0)`,
+		schedule.ConversationID,
+		schedule.UserID,
+		schedule.FirstMessageID,
+		schedule.LatestMessageID,
+		schedule.ConversationID,
+		schedule.UserID,
+	)
+	if err := row.Scan(&delivery.UnreadCount, &latestUnreadID); err != nil {
+		return chat.EmailNotificationDelivery{}, fmt.Errorf("load chat email notification unread count: %w", err)
+	}
+	if delivery.UnreadCount <= 0 || !latestUnreadID.Valid {
+		return delivery, nil
+	}
+
+	row = r.db.QueryRow(`
+		SELECT m.message_type, m.content, u.display_name
+		  FROM messages m
+		  JOIN users u ON u.id = m.sender_id
+		 WHERE m.id = ?
+		 LIMIT 1`, latestUnreadID.Int64)
+	if err := row.Scan(&delivery.LatestMessageType, &delivery.LatestMessageText, &delivery.LatestSenderName); err != nil {
+		return chat.EmailNotificationDelivery{}, fmt.Errorf("load chat email notification latest message: %w", err)
+	}
+	delivery.LatestMessageText = notificationPreview(delivery.LatestMessageType, delivery.LatestMessageText)
+	return delivery, nil
+}
+
+// MarkEmailNotificationSent marks a claimed email notification as sent.
+func (r *ChatRepository) MarkEmailNotificationSent(scheduleID int64, sentAt time.Time) error {
+	if _, err := r.db.Exec(`
+		UPDATE chat_email_notifications
+		   SET status = 'sent',
+		       sent_at = ?,
+		       lock_token = NULL,
+		       updated_at = NOW()
+		 WHERE id = ?`, sentAt, scheduleID); err != nil {
+		return fmt.Errorf("mark chat email notification sent: %w", err)
+	}
+	return nil
+}
+
+// MarkEmailNotificationCancelled marks a claimed email notification as cancelled.
+func (r *ChatRepository) MarkEmailNotificationCancelled(scheduleID int64, cancelledAt time.Time) error {
+	if _, err := r.db.Exec(`
+		UPDATE chat_email_notifications
+		   SET status = 'cancelled',
+		       cancelled_at = ?,
+		       lock_token = NULL,
+		       active_key = NULL,
+		       updated_at = NOW()
+		 WHERE id = ?`, cancelledAt, scheduleID); err != nil {
+		return fmt.Errorf("mark chat email notification cancelled: %w", err)
+	}
+	return nil
+}
+
+// MarkEmailNotificationFailed records an email notification delivery failure.
+func (r *ChatRepository) MarkEmailNotificationFailed(scheduleID int64, retryAt time.Time, maxAttempts int, errMessage string) error {
+	message := strings.TrimSpace(errMessage)
+	if len(message) > 1000 {
+		message = message[:1000]
+	}
+	if _, err := r.db.Exec(`
+		UPDATE chat_email_notifications
+		   SET attempt_count = attempt_count + 1,
+		       last_error = ?,
+		       status = CASE WHEN attempt_count + 1 >= ? THEN 'failed' ELSE 'pending' END,
+		       due_at = CASE WHEN attempt_count + 1 >= ? THEN due_at ELSE ? END,
+		       lock_token = NULL,
+		       active_key = NULL,
+		       updated_at = NOW()
+		 WHERE id = ?`,
+		message,
+		maxAttempts,
+		maxAttempts,
+		retryAt,
+		scheduleID,
+	); err != nil {
+		return fmt.Errorf("mark chat email notification failed: %w", err)
+	}
 	return nil
 }
 
@@ -1154,4 +1447,15 @@ func (r *ChatRepository) DeleteMessage(conversationID, messageID, actorUserID in
 		return fmt.Errorf("commit recall message: %w", err)
 	}
 	return nil
+}
+
+func notificationPreview(messageType, content string) string {
+	switch strings.ToLower(strings.TrimSpace(messageType)) {
+	case "image":
+		return "傳送了圖片"
+	case "file":
+		return "傳送了附件"
+	default:
+		return strings.TrimSpace(content)
+	}
 }

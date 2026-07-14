@@ -21,8 +21,11 @@ type mockRepository struct {
 	searchLimit          int
 	memberIDs            map[int64][]int64
 	markedReads          []readMarker
+	cancelledEmailReads  []readMarker
 	createdMentions      []MessageMentionInput
 	createdMessages      []CreateMessageInput
+	enqueuedEmails       []emailEnqueue
+	enqueueEmailErr      error
 	createMessageResult  Message
 	createMessageErr     error
 	deletedMessages      []int64
@@ -56,12 +59,34 @@ type mockRepository struct {
 	listMembersErr       error
 	mutedUsers           map[int64]bool
 	notificationMutes    map[string]bool
+	recoverStaleCalls    int
+	recoverStaleNow      time.Time
+	recoverStaleBefore   time.Time
+	recoverStaleErr      error
+	claimSchedules       []*EmailNotificationSchedule
+	claimTokens          []string
+	claimErr             error
+	delivery             EmailNotificationDelivery
+	deliveryErr          error
+	sentScheduleID       int64
+	cancelledScheduleID  int64
+	failedScheduleID     int64
+	failedRetryAt        time.Time
+	failedMaxAttempts    int
+	failedErrMessage     string
 }
 
 type readMarker struct {
 	userID         int64
 	conversationID int64
 	messageID      int64
+}
+
+type emailEnqueue struct {
+	userID         int64
+	conversationID int64
+	messageID      int64
+	dueAt          time.Time
 }
 
 func (m *mockRepository) IsSystemAdmin(userID int64) (bool, error) {
@@ -171,8 +196,74 @@ func (m *mockRepository) MarkConversationReadUntil(userID, conversationID, messa
 	return nil
 }
 
+func (m *mockRepository) CancelPendingEmailNotificationIfNoUnread(userID, conversationID int64) error {
+	m.cancelledEmailReads = append(m.cancelledEmailReads, readMarker{userID: userID, conversationID: conversationID})
+	return nil
+}
+
 func (m *mockRepository) CreateMessageMentions(messageID, conversationID int64, mentions []MessageMentionInput) error {
 	m.createdMentions = append([]MessageMentionInput(nil), mentions...)
+	return nil
+}
+
+func (m *mockRepository) EnqueueEmailNotification(userID, conversationID, messageID int64, dueAt time.Time) error {
+	if m.enqueueEmailErr != nil {
+		return m.enqueueEmailErr
+	}
+	m.enqueuedEmails = append(m.enqueuedEmails, emailEnqueue{userID: userID, conversationID: conversationID, messageID: messageID, dueAt: dueAt})
+	return nil
+}
+
+func (m *mockRepository) RecoverStaleEmailNotifications(now time.Time, staleBefore time.Time) error {
+	m.recoverStaleCalls++
+	m.recoverStaleNow = now
+	m.recoverStaleBefore = staleBefore
+	return m.recoverStaleErr
+}
+
+func (m *mockRepository) ClaimDueEmailNotification(now time.Time, lockToken string) (*EmailNotificationSchedule, error) {
+	m.claimTokens = append(m.claimTokens, lockToken)
+	if m.claimErr != nil {
+		return nil, m.claimErr
+	}
+	if len(m.claimSchedules) == 0 {
+		return nil, nil
+	}
+	schedule := m.claimSchedules[0]
+	m.claimSchedules = m.claimSchedules[1:]
+	return schedule, nil
+}
+
+func (m *mockRepository) LoadEmailNotificationDelivery(schedule EmailNotificationSchedule) (EmailNotificationDelivery, error) {
+	if m.deliveryErr != nil {
+		return EmailNotificationDelivery{}, m.deliveryErr
+	}
+	delivery := m.delivery
+	delivery.ScheduleID = schedule.ID
+	if delivery.UserID == 0 {
+		delivery.UserID = schedule.UserID
+	}
+	if delivery.ConversationID == 0 {
+		delivery.ConversationID = schedule.ConversationID
+	}
+	return delivery, nil
+}
+
+func (m *mockRepository) MarkEmailNotificationSent(scheduleID int64, sentAt time.Time) error {
+	m.sentScheduleID = scheduleID
+	return nil
+}
+
+func (m *mockRepository) MarkEmailNotificationCancelled(scheduleID int64, cancelledAt time.Time) error {
+	m.cancelledScheduleID = scheduleID
+	return nil
+}
+
+func (m *mockRepository) MarkEmailNotificationFailed(scheduleID int64, retryAt time.Time, maxAttempts int, errMessage string) error {
+	m.failedScheduleID = scheduleID
+	m.failedRetryAt = retryAt
+	m.failedMaxAttempts = maxAttempts
+	m.failedErrMessage = errMessage
 	return nil
 }
 
@@ -593,6 +684,9 @@ func TestMarkConversationRead(t *testing.T) {
 	if len(repo.markedReads) != 1 || repo.markedReads[0] != (readMarker{userID: 7, conversationID: 9, messageID: 22}) {
 		t.Fatalf("unexpected read markers: %+v", repo.markedReads)
 	}
+	if len(repo.cancelledEmailReads) != 1 || repo.cancelledEmailReads[0] != (readMarker{userID: 7, conversationID: 9}) {
+		t.Fatalf("unexpected email notification cancel calls: %+v", repo.cancelledEmailReads)
+	}
 }
 
 func TestListMessagesRejectsMissingConversation(t *testing.T) {
@@ -831,6 +925,10 @@ func TestSendMessage(t *testing.T) {
 		memberIDs: map[int64][]int64{
 			9: {7, 8},
 		},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "sender", DisplayName: "Sender"},
+			{UserID: 8, SourceSystem: "erp", ExternalUserID: "receiver", DisplayName: "Receiver"},
+		},
 		createMessageResult: Message{
 			ID:             3,
 			ConversationID: 9,
@@ -870,6 +968,144 @@ func TestSendMessage(t *testing.T) {
 	}
 	if broker.event.EventType != "message.created" || broker.event.ConversationID != 9 {
 		t.Fatalf("unexpected realtime event: %+v", broker.event)
+	}
+	if len(repo.enqueuedEmails) != 1 {
+		t.Fatalf("len(enqueuedEmails) = %d, want 1", len(repo.enqueuedEmails))
+	}
+	if repo.enqueuedEmails[0].userID != 8 || repo.enqueuedEmails[0].userID == 7 {
+		t.Fatalf("unexpected email enqueue recipients: %+v", repo.enqueuedEmails)
+	}
+}
+
+func TestSendMessageDoesNotFailWhenEmailNotificationEnqueueFails(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 9): {ID: 9, Type: "direct", Title: "王小明"},
+		},
+		memberIDs: map[int64][]int64{9: {7, 8}},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "sender", DisplayName: "Sender"},
+			{UserID: 8, SourceSystem: "erp", ExternalUserID: "receiver", DisplayName: "Receiver"},
+		},
+		createMessageResult: Message{
+			ID:             3,
+			ConversationID: 9,
+			SenderID:       7,
+			SenderName:     "你",
+			MessageType:    "text",
+			Content:        "hello",
+			CreatedAt:      time.Date(2026, 4, 7, 1, 2, 0, 0, time.UTC),
+		},
+		enqueueEmailErr: errors.New("email queue unavailable"),
+	}
+	service := NewService(repo, nil)
+
+	resp, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "text", Content: "hello"})
+	if err != nil {
+		t.Fatalf("SendMessage returned error: %v", err)
+	}
+	if status != 201 || !resp.Success {
+		t.Fatalf("unexpected response status=%d resp=%+v", status, resp)
+	}
+	if len(repo.createdMessages) != 1 {
+		t.Fatalf("message should still be created when email enqueue fails")
+	}
+}
+
+func TestSendMessageSkipsMutedConversationNormalMessage(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 9): {ID: 9, Type: "direct", Title: "王小明"},
+		},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "sender", DisplayName: "Sender"},
+			{UserID: 8, SourceSystem: "erp", ExternalUserID: "receiver", DisplayName: "Receiver", NotificationMuted: true},
+		},
+		createMessageResult: Message{
+			ID:             4,
+			ConversationID: 9,
+			SenderID:       7,
+			SenderName:     "你",
+			MessageType:    "text",
+			Content:        "hello",
+			CreatedAt:      time.Date(2026, 4, 7, 1, 2, 0, 0, time.UTC),
+		},
+	}
+	service := NewService(repo, nil)
+
+	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "text", Content: "hello"})
+	if err != nil || status != 201 {
+		t.Fatalf("SendMessage err=%v status=%d, want nil 201", err, status)
+	}
+	if len(repo.enqueuedEmails) != 0 {
+		t.Fatalf("muted normal message should not enqueue email: %+v", repo.enqueuedEmails)
+	}
+}
+
+func TestSendMessageEnqueuesMutedConversationMentionedUser(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 9): {ID: 9, Type: "group", Title: "測試群組"},
+		},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "sender", DisplayName: "Sender"},
+			{UserID: 8, SourceSystem: "erp", ExternalUserID: "etest01", DisplayName: "E Test", NotificationMuted: true},
+			{UserID: 9, SourceSystem: "erp", ExternalUserID: "other", DisplayName: "Other", NotificationMuted: true},
+		},
+		createMessageResult: Message{
+			ID:             5,
+			ConversationID: 9,
+			SenderID:       7,
+			SenderName:     "Sender",
+			MessageType:    "text",
+			Content:        "@etest01 hello",
+			CreatedAt:      time.Date(2026, 4, 7, 1, 2, 0, 0, time.UTC),
+		},
+	}
+	service := NewService(repo, nil)
+
+	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "text", Content: "@etest01 hello"})
+	if err != nil || status != 201 {
+		t.Fatalf("SendMessage err=%v status=%d, want nil 201", err, status)
+	}
+	if len(repo.enqueuedEmails) != 1 || repo.enqueuedEmails[0].userID != 8 {
+		t.Fatalf("expected only mentioned muted user to be enqueued: %+v", repo.enqueuedEmails)
+	}
+}
+
+func TestSendMessageEnqueuesMutedConversationAllMention(t *testing.T) {
+	repo := &mockRepository{
+		headers: map[string]Conversation{
+			conversationKey(7, 9): {ID: 9, Type: "group", Title: "測試群組"},
+		},
+		members: []ConversationMember{
+			{UserID: 7, SourceSystem: "erp", ExternalUserID: "sender", DisplayName: "Sender"},
+			{UserID: 8, SourceSystem: "erp", ExternalUserID: "one", DisplayName: "One", NotificationMuted: true},
+			{UserID: 9, SourceSystem: "erp", ExternalUserID: "two", DisplayName: "Two", NotificationMuted: true},
+		},
+		createMessageResult: Message{
+			ID:             6,
+			ConversationID: 9,
+			SenderID:       7,
+			SenderName:     "Sender",
+			MessageType:    "text",
+			Content:        "@ALL hello",
+			CreatedAt:      time.Date(2026, 4, 7, 1, 2, 0, 0, time.UTC),
+		},
+	}
+	service := NewService(repo, nil)
+
+	_, status, err := service.SendMessage(9, SessionPrincipal{UserID: 7}, CreateMessageRequest{Type: "text", Content: "@ALL hello"})
+	if err != nil || status != 201 {
+		t.Fatalf("SendMessage err=%v status=%d, want nil 201", err, status)
+	}
+	if len(repo.enqueuedEmails) != 2 {
+		t.Fatalf("expected two muted @ALL recipients: %+v", repo.enqueuedEmails)
+	}
+	for _, item := range repo.enqueuedEmails {
+		if item.userID == 7 {
+			t.Fatalf("sender should not be enqueued: %+v", repo.enqueuedEmails)
+		}
 	}
 }
 

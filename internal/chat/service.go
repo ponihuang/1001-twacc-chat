@@ -3,18 +3,20 @@ package chat
 import (
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
 )
 
 const (
-	messageListLimit   = 100
-	messageSearchLimit = 30
-	userSearchLimit    = 10
-	textMessageType    = "text"
-	imageMessageType   = "image"
-	fileMessageType    = "file"
+	messageListLimit       = 100
+	messageSearchLimit     = 30
+	userSearchLimit        = 10
+	emailNotificationDelay = 5 * time.Minute
+	textMessageType        = "text"
+	imageMessageType       = "image"
+	fileMessageType        = "file"
 )
 
 var (
@@ -564,6 +566,9 @@ func (s *Service) MarkConversationRead(conversationID int64, actor SessionPrinci
 	if err := s.repo.MarkConversationReadUntil(actor.UserID, conversationID, req.LastReadMessageID); err != nil {
 		return Response{}, statusCode(err), err
 	}
+	if err := s.repo.CancelPendingEmailNotificationIfNoUnread(actor.UserID, conversationID); err != nil {
+		return Response{}, 500, err
+	}
 
 	return Response{
 		Success: true,
@@ -652,7 +657,8 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 		return Response{}, statusCode(ErrAttachmentRequired), ErrAttachmentRequired
 	}
 
-	if _, err := s.repo.GetConversationForUser(actor.UserID, conversationID); err != nil {
+	conversation, err := s.repo.GetConversationForUser(actor.UserID, conversationID)
+	if err != nil {
 		return Response{}, statusCode(err), err
 	}
 
@@ -666,12 +672,16 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
-	if mentions, err := s.messageMentions(conversationID, actor.UserID, content); err != nil {
+	var mentions []MessageMentionInput
+	if mentions, err = s.messageMentions(conversationID, actor.UserID, content); err != nil {
 		return Response{}, 500, err
 	} else if len(mentions) > 0 {
 		if err := s.repo.CreateMessageMentions(created.ID, conversationID, mentions); err != nil {
 			return Response{}, 500, err
 		}
+	}
+	if err := s.enqueueUnreadEmailNotifications(conversation, actor.UserID, created.ID, mentions); err != nil {
+		log.Printf("enqueue unread email notifications conversation=%d message=%d: %v", conversation.ID, created.ID, err)
 	}
 
 	item := MessageItem{
@@ -706,6 +716,41 @@ func (s *Service) SendMessage(conversationID int64, actor SessionPrincipal, req 
 			Message:        item,
 		},
 	}, 201, nil
+}
+
+func (s *Service) enqueueUnreadEmailNotifications(conversation Conversation, senderUserID, messageID int64, mentions []MessageMentionInput) error {
+	if messageID <= 0 || conversation.ID <= 0 {
+		return nil
+	}
+	members, err := s.repo.ListConversationMembers(conversation.ID)
+	if err != nil {
+		return err
+	}
+
+	mentioned := make(map[int64]bool, len(mentions))
+	for _, mention := range mentions {
+		if mention.UserID <= 0 {
+			continue
+		}
+		if mention.MentionType == "all" && conversation.Type != "group" {
+			continue
+		}
+		mentioned[mention.UserID] = true
+	}
+
+	dueAt := time.Now().UTC().Add(emailNotificationDelay)
+	for _, member := range members {
+		if member.UserID <= 0 || member.UserID == senderUserID {
+			continue
+		}
+		if member.NotificationMuted && !mentioned[member.UserID] {
+			continue
+		}
+		if err := s.repo.EnqueueEmailNotification(member.UserID, conversation.ID, messageID, dueAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) messageMentions(conversationID, actorUserID int64, content string) ([]MessageMentionInput, error) {

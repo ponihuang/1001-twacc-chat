@@ -269,11 +269,12 @@ type ContactListData struct {
 
 // ConversationMember stores a visible member in a conversation.
 type ConversationMember struct {
-	UserID         int64
-	SourceSystem   string
-	ExternalUserID string
-	DisplayName    string
-	Role           string
+	UserID            int64
+	SourceSystem      string
+	ExternalUserID    string
+	DisplayName       string
+	Role              string
+	NotificationMuted bool
 }
 
 // ConversationMemberItem is the API-facing conversation member payload.
@@ -321,6 +322,36 @@ type Broker interface {
 	Subscribe(userID int64) (<-chan RealtimeEvent, func())
 }
 
+// EmailNotificationSchedule stores one claimed unread email notification job.
+type EmailNotificationSchedule struct {
+	ID              int64
+	UserID          int64
+	ConversationID  int64
+	FirstMessageID  int64
+	LatestMessageID int64
+	AttemptCount    int
+}
+
+// EmailNotificationDelivery contains the data needed to decide and send an unread email.
+type EmailNotificationDelivery struct {
+	ScheduleID        int64
+	UserID            int64
+	ConversationID    int64
+	ConversationTitle string
+	Email             string
+	UserStatus        string
+	IsMember          bool
+	UnreadCount       int
+	LatestMessageType string
+	LatestMessageText string
+	LatestSenderName  string
+}
+
+// UnreadNotificationMailer sends unread chat notification emails.
+type UnreadNotificationMailer interface {
+	SendUnreadNotification(email string, conversationTitle string, unreadCount int, latestSenderName string, latestMessageText string) error
+}
+
 // Repository defines persistence required by chat list and message list endpoints.
 type Repository interface {
 	IsSystemAdmin(userID int64) (bool, error)
@@ -344,7 +375,15 @@ type Repository interface {
 	SearchMessages(userID int64, query string, limit int) ([]Message, error)
 	MarkConversationRead(userID, conversationID int64) error
 	MarkConversationReadUntil(userID, conversationID, messageID int64) error
+	CancelPendingEmailNotificationIfNoUnread(userID, conversationID int64) error
 	CreateMessageMentions(messageID, conversationID int64, mentions []MessageMentionInput) error
+	EnqueueEmailNotification(userID, conversationID, messageID int64, dueAt time.Time) error
+	RecoverStaleEmailNotifications(now time.Time, staleBefore time.Time) error
+	ClaimDueEmailNotification(now time.Time, lockToken string) (*EmailNotificationSchedule, error)
+	LoadEmailNotificationDelivery(schedule EmailNotificationSchedule) (EmailNotificationDelivery, error)
+	MarkEmailNotificationSent(scheduleID int64, sentAt time.Time) error
+	MarkEmailNotificationCancelled(scheduleID int64, cancelledAt time.Time) error
+	MarkEmailNotificationFailed(scheduleID int64, retryAt time.Time, maxAttempts int, errMessage string) error
 	CreateMessage(input CreateMessageInput) (Message, error)
 	DeleteMessage(conversationID, messageID, actorUserID int64) error
 }
