@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=bulk-invite-20260714a">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-lucide-icons-20260715a">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
   <script defer src="/admin/static/admin-app.js?v=temporary-password-20260714a"></script>
 </head>
@@ -19,13 +19,25 @@
 
         <div class="sidebar-group is-open" data-sidebar-group="users">
           <button type="button" class="sidebar-root is-group-open" data-sidebar-toggle>
-            <span class="menu-glyph" aria-hidden="true">◉</span>
+            <span class="menu-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </span>
             <span>用戶</span>
             <span class="menu-caret" aria-hidden="true">⌃</span>
           </button>
           <div class="sidebar-submenu">
             <button type="button" class="sidebar-subitem is-active" data-menu-item="users">
-              <span class="menu-glyph" aria-hidden="true">▣</span>
+              <span class="menu-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <circle cx="12" cy="8" r="5"></circle>
+                  <path d="M20 21a8 8 0 0 0-16 0"></path>
+                </svg>
+              </span>
               <span>用戶管理</span>
             </button>
             <button type="button" class="sidebar-subitem" data-menu-item="userInvitations">
@@ -43,7 +55,13 @@
           </button>
           <div class="sidebar-submenu">
             <button type="button" class="sidebar-subitem" data-menu-item="admins">
-              <span class="menu-glyph" aria-hidden="true">◉</span>
+              <span class="menu-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M3 21v-2a4 4 0 0 1 4-4h4"></path>
+                  <polygon points="17 13 18.2 15.5 21 15.9 19 17.9 19.5 20.7 17 19.3 14.5 20.7 15 17.9 13 15.9 15.8 15.5 17 13"></polygon>
+                </svg>
+              </span>
               <span>管理員帳號</span>
             </button>
           </div>
@@ -55,7 +73,12 @@
       <header class="admin-header">
         <button type="button" class="header-toggle" aria-label="切換選單">☰</button>
         <div class="admin-header-tools">
-          <span class="admin-avatar" aria-hidden="true">●</span>
+          <span class="admin-avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <circle cx="12" cy="8" r="5"></circle>
+              <path d="M20 21a8 8 0 0 0-16 0"></path>
+            </svg>
+          </span>
           <span class="admin-name" id="header-admin-name">admin</span>
           <button type="button" class="btn btn-small" id="logout-button">登出</button>
         </div>
