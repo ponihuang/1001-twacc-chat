@@ -263,7 +263,21 @@ func (s *Service) UpdateProfile(actor SessionPrincipal, req ProfileUpdateRequest
 		return Response{}, statusCode(ErrInvalidDisplayName), ErrInvalidDisplayName
 	}
 
-	user, err := s.repo.UpdateUserProfile(actor.UserID, displayName)
+	email := normalizeEmail(req.Email)
+	if email != "" && !isValidEmail(email) {
+		return Response{}, statusCode(ErrInvalidEmail), ErrInvalidEmail
+	}
+	if email != "" {
+		existing, err := s.repo.FindUserByEmail(email)
+		if err == nil && existing.ID != actor.UserID {
+			return Response{}, statusCode(ErrEmailAlreadyExists), ErrEmailAlreadyExists
+		}
+		if err != nil && !errors.Is(err, ErrUserNotFound) {
+			return Response{}, statusCode(err), err
+		}
+	}
+
+	user, err := s.repo.UpdateUserProfile(actor.UserID, displayName, email)
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
@@ -1651,6 +1665,7 @@ func (s *Service) profileResponseData(user User) (map[string]any, error) {
 		"source_system":                 user.SourceSystem,
 		"external_user_id":              user.ExternalUserID,
 		"display_name":                  user.DisplayName,
+		"email":                         user.Email,
 		"is_chat_muted":                 user.IsChatMuted,
 		"must_change_password":          user.MustChangePassword,
 		"temporary_password_expires_at": user.TemporaryPasswordExpiresAt,

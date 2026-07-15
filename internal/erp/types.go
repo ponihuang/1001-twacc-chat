@@ -375,6 +375,7 @@ type AdminLoginRequest struct {
 // ProfileUpdateRequest is the current-user profile update payload.
 type ProfileUpdateRequest struct {
 	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
 }
 
 // IPWhitelistUpdateRequest is the system-admin whitelist payload.
@@ -498,7 +499,7 @@ type Repository interface {
 	UpdateUserChatMute(userID int64, params AdminUpdateUserChatMuteParams) (User, error)
 	UpdateUserTemporaryPassword(userID int64, params TemporaryPasswordParams) (User, error)
 	UpdateUserPassword(userID int64, passwordHash string) (User, error)
-	UpdateUserProfile(userID int64, displayName string) (User, error)
+	UpdateUserProfile(userID int64, displayName string, email string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)
 	GetUserSecuritySettings(userID int64) (UserSecuritySettings, error)
 	ListActiveIPWhitelistRules(userID int64) ([]string, error)

@@ -126,8 +126,8 @@ func (s *stubIntegrationRepository) UpdateUserPassword(userID int64, passwordHas
 	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: "User A", Status: "active", PasswordHash: passwordHash}, nil
 }
 
-func (s *stubIntegrationRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
-	return User{ID: userID, SourceSystem: "erp", ExternalUserID: "user_a", DisplayName: displayName}, nil
+func (s *stubIntegrationRepository) UpdateUserProfile(userID int64, displayName string, email string) (User, error) {
+	return User{ID: userID, SourceSystem: "erp", ExternalUserID: "user_a", DisplayName: displayName, Email: email}, nil
 }
 
 func (s *stubIntegrationRepository) IsSystemAdmin(userID int64) (bool, error) {

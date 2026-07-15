@@ -1311,8 +1311,13 @@ func (r *IntegrationRepository) UpdateUserPassword(userID int64, passwordHash st
 }
 
 // UpdateUserProfile updates mutable profile fields for a user.
-func (r *IntegrationRepository) UpdateUserProfile(userID int64, displayName string) (erp.User, error) {
-	result, err := r.db.Exec(`UPDATE users SET display_name = ? WHERE id = ?`, strings.TrimSpace(displayName), userID)
+func (r *IntegrationRepository) UpdateUserProfile(userID int64, displayName string, email string) (erp.User, error) {
+	result, err := r.db.Exec(
+		`UPDATE users SET display_name = ?, email = NULLIF(?, '') WHERE id = ?`,
+		strings.TrimSpace(displayName),
+		strings.TrimSpace(email),
+		userID,
+	)
 	if err != nil {
 		return erp.User{}, fmt.Errorf("update user profile: %w", err)
 	}
