@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-lucide-icons-20260715a">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-account-menu-20260715a">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
   <script defer src="/admin/static/admin-app.js?v=temporary-password-20260714a"></script>
 </head>
@@ -73,14 +73,34 @@
       <header class="admin-header">
         <button type="button" class="header-toggle" aria-label="切換選單">☰</button>
         <div class="admin-header-tools">
-          <span class="admin-avatar" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <circle cx="12" cy="8" r="5"></circle>
-              <path d="M20 21a8 8 0 0 0-16 0"></path>
-            </svg>
-          </span>
-          <span class="admin-name" id="header-admin-name">admin</span>
-          <button type="button" class="btn btn-small" id="logout-button">登出</button>
+          <div class="admin-account-menu" data-admin-account-menu>
+            <button type="button" class="admin-account-trigger" id="admin-account-trigger" aria-haspopup="menu" aria-expanded="false">
+              <span class="admin-avatar" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <circle cx="12" cy="8" r="5"></circle>
+                  <path d="M20 21a8 8 0 0 0-16 0"></path>
+                </svg>
+              </span>
+              <span class="admin-name" id="header-admin-name">admin</span>
+            </button>
+            <div class="admin-account-dropdown" data-admin-account-dropdown role="menu" aria-labelledby="admin-account-trigger" hidden>
+              <button type="button" class="admin-account-menu-item" data-admin-profile-action role="menuitem">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="8" r="5"></circle>
+                  <path d="M20 21a8 8 0 0 0-16 0"></path>
+                </svg>
+                <span>個人資料</span>
+              </button>
+              <button type="button" class="admin-account-menu-item" id="logout-button" role="menuitem">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" x2="9" y1="12" y2="12"></line>
+                </svg>
+                <span>登出</span>
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 

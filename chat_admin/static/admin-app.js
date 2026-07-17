@@ -239,6 +239,12 @@
       modalBody: document.getElementById('modal-body'),
       modalConfirmBtn: document.getElementById('modal-confirm-btn'),
       modalCancelBtn: document.getElementById('modal-cancel-btn'),
+
+      // Header account menu
+      adminAccountMenu: document.querySelector('[data-admin-account-menu]'),
+      adminAccountTrigger: document.getElementById('admin-account-trigger'),
+      adminAccountDropdown: document.querySelector('[data-admin-account-dropdown]'),
+      adminProfileAction: document.querySelector('[data-admin-profile-action]'),
       
       // Logout
       logoutButton: document.getElementById('logout-button')
@@ -279,6 +285,33 @@
 
     window.addEventListener('popstate', () => {
       switchView(resolveInitialView(), { skipHistory: true });
+    });
+
+    if (elements.adminAccountTrigger) {
+      elements.adminAccountTrigger.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleAdminAccountMenu();
+      });
+    }
+
+    if (elements.adminProfileAction) {
+      elements.adminProfileAction.addEventListener('click', () => {
+        closeAdminAccountMenu();
+        openCurrentAdminEdit();
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!elements.adminAccountMenu || elements.adminAccountMenu.contains(e.target)) {
+        return;
+      }
+      closeAdminAccountMenu();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeAdminAccountMenu();
+      }
     });
 
     // User management
@@ -452,6 +485,34 @@
         logout();
       });
     }
+  }
+
+  function toggleAdminAccountMenu() {
+    if (!elements.adminAccountTrigger || !elements.adminAccountDropdown) return;
+
+    const isOpen = elements.adminAccountTrigger.getAttribute('aria-expanded') === 'true';
+    setAdminAccountMenuOpen(!isOpen);
+  }
+
+  function closeAdminAccountMenu() {
+    setAdminAccountMenuOpen(false);
+  }
+
+  function setAdminAccountMenuOpen(isOpen) {
+    if (!elements.adminAccountTrigger || !elements.adminAccountDropdown) return;
+
+    elements.adminAccountTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    elements.adminAccountDropdown.hidden = !isOpen;
+  }
+
+  function openCurrentAdminEdit() {
+    const currentAdminID = getUserId();
+    if (!currentAdminID) {
+      showError('找不到目前登入管理員');
+      return;
+    }
+
+    openAdminEdit(currentAdminID);
   }
 
   function openUserInviteModal() {
