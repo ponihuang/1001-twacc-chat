@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-account-menu-20260715a">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-conversations-20260717a">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=temporary-password-20260714a"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-conversations-20260717a"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
@@ -43,6 +43,30 @@
             <button type="button" class="sidebar-subitem" data-menu-item="userInvitations">
               <span class="menu-glyph" aria-hidden="true">◇</span>
               <span>註冊邀請</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-group" data-sidebar-group="chat">
+          <button type="button" class="sidebar-root" data-sidebar-toggle>
+            <span class="menu-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+              </svg>
+            </span>
+            <span>聊天</span>
+            <span class="menu-caret" aria-hidden="true">⌄</span>
+          </button>
+          <div class="sidebar-submenu">
+            <button type="button" class="sidebar-subitem" data-menu-item="conversations">
+              <span class="menu-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+                  <path d="M8 9h8"></path>
+                  <path d="M8 13h5"></path>
+                </svg>
+              </span>
+              <span>聊天紀錄</span>
             </button>
           </div>
         </div>
@@ -140,6 +164,94 @@
               <span>記憶體 <b id="health-memory">--</b></span>
               <span>連接 <b id="health-concurrent">--</b></span>
               <span>運行 <b id="health-uptime">--</b></span>
+            </div>
+          </div>
+        </section>
+
+        <section data-view="conversations" hidden>
+          <div class="admin-page-panel">
+            <p class="admin-breadcrumb">首頁 / 聊天紀錄</p>
+
+            <form class="admin-conversation-filter-panel" id="admin-conversation-filter-form" aria-label="聊天紀錄篩選">
+              <label>
+                <span>模式</span>
+                <select id="admin-conversation-type">
+                  <option value="">全部</option>
+                  <option value="direct">一對一</option>
+                  <option value="group">群組</option>
+                </select>
+              </label>
+              <label class="filter-wide">
+                <span>關鍵字</span>
+                <input type="search" id="admin-conversation-keyword" placeholder="搜尋群組名稱、帳號、名稱" autocomplete="off">
+              </label>
+              <label>
+                <span>最後活動開始時間</span>
+                <input type="date" id="admin-conversation-last-from" autocomplete="off">
+              </label>
+              <label>
+                <span>最後活動結束時間</span>
+                <input type="date" id="admin-conversation-last-to" autocomplete="off">
+              </label>
+              <div class="filter-actions">
+                <button type="submit" class="btn" id="refresh-admin-conversations-btn">搜尋</button>
+                <button type="button" class="btn" id="reset-admin-conversations-btn">重設</button>
+              </div>
+            </form>
+
+            <section class="user-table-card admin-conversation-table-card">
+              <div class="is-empty" id="admin-conversations-loading" hidden>
+                <div class="loading"></div>
+                <p>載入中...</p>
+              </div>
+              <div class="is-empty" id="admin-conversations-empty" hidden>
+                <p>找不到聊天紀錄</p>
+              </div>
+              <table class="data-table admin-conversation-list-table" id="admin-conversations-table">
+                <thead>
+                  <tr>
+                    <th>聊天室 ID</th>
+                    <th>模式</th>
+                    <th>名稱</th>
+                    <th>成員數</th>
+                    <th>最後訊息</th>
+                    <th>最後發言者</th>
+                    <th>最後活動時間</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-conversations-tbody"></tbody>
+              </table>
+            </section>
+            <div class="table-pagination" id="admin-conversations-pagination" hidden>
+              <span class="pagination-total">總筆數: <strong id="admin-conversations-total">0</strong></span>
+              <nav class="pagination-pages" id="admin-conversations-pages" aria-label="聊天紀錄列表分頁"></nav>
+              <label class="pagination-size">
+                <span class="sr-only">每頁筆數</span>
+                <select id="admin-conversations-per-page">
+                  <option value="10" selected>10 / 頁</option>
+                  <option value="20">20 / 頁</option>
+                  <option value="50">50 / 頁</option>
+                  <option value="100">100 / 頁</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section data-view="conversationDetail" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="conversations" aria-label="返回聊天紀錄">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="conversations">聊天紀錄</button>
+              <span>/</span>
+              <span>聊天室明細</span>
+            </nav>
+            <div class="placeholder-panel">
+              <h2>聊天室明細</h2>
+              <p>聊天室明細尚未完成</p>
             </div>
           </div>
         </section>

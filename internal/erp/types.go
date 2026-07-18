@@ -246,6 +246,42 @@ type SystemAdminPage struct {
 	TotalPages int                  `json:"total_pages"`
 }
 
+// AdminConversationFilter contains supported filters for the admin conversation list.
+type AdminConversationFilter struct {
+	Type             string
+	Keyword          string
+	LastActivityFrom *time.Time
+	LastActivityTo   *time.Time
+	Page             int
+	PerPage          int
+}
+
+// AdminConversationSummary is the API-facing conversation shape for the admin console.
+type AdminConversationSummary struct {
+	ID                     int64      `json:"id"`
+	Type                   string     `json:"type"`
+	Name                   string     `json:"name"`
+	MemberCount            int        `json:"member_count"`
+	LastMessage            string     `json:"last_message"`
+	LastMessageType        string     `json:"last_message_type"`
+	LastMessageAt          *time.Time `json:"last_message_at,omitempty"`
+	LastSenderID           int64      `json:"last_sender_id,omitempty"`
+	LastSenderAccount      string     `json:"last_sender_account,omitempty"`
+	LastSenderName         string     `json:"last_sender_name,omitempty"`
+	LastActivityAt         time.Time  `json:"last_activity_at"`
+	CreatedAt              time.Time  `json:"created_at"`
+	LatestMessageAvailable bool       `json:"latest_message_available"`
+}
+
+// AdminConversationPage is the paginated response for the admin conversation list.
+type AdminConversationPage struct {
+	Items      []AdminConversationSummary `json:"items"`
+	Total      int                        `json:"total"`
+	Page       int                        `json:"page"`
+	PerPage    int                        `json:"per_page"`
+	TotalPages int                        `json:"total_pages"`
+}
+
 // SystemAdminBootstrapResult describes an idempotent first-admin bootstrap run.
 type SystemAdminBootstrapResult struct {
 	Admin        SystemAdminSummary
@@ -489,6 +525,7 @@ type Repository interface {
 	MarkUserInvitationSent(invitationID int64, sentAt time.Time) error
 	AcceptUserInvitation(params AcceptUserInvitationParams) (User, error)
 	ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error)
+	ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)
 	FindSystemAdminByAccount(account string) (SystemAdminSummary, error)
 	CreateSystemAdmin(params SystemAdminCreateParams) (SystemAdminSummary, error)

@@ -354,6 +354,33 @@ func (h *Handler) ListSystemAdmins(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// ListAdminConversations handles GET /api/system-admin/conversations.
+func (h *Handler) ListAdminConversations(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	filter, err := parseAdminConversationFilter(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	resp, status, err := h.service.ListAdminConversations(filter, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // CreateUser handles POST /api/system-admin/users.
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -981,6 +1008,50 @@ func parseSystemAdminFilter(r *http.Request) (SystemAdminFilter, error) {
 		if err != nil || !validAdminPerPage(filter.PerPage) {
 			return SystemAdminFilter{}, fmt.Errorf("每頁筆數格式錯誤")
 		}
+	}
+
+	return filter, nil
+}
+
+func parseAdminConversationFilter(r *http.Request) (AdminConversationFilter, error) {
+	query := r.URL.Query()
+	filter := AdminConversationFilter{
+		Type:    strings.TrimSpace(query.Get("type")),
+		Keyword: strings.TrimSpace(query.Get("keyword")),
+		Page:    1,
+		PerPage: 10,
+	}
+	if filter.Type != "" && filter.Type != "direct" && filter.Type != "group" {
+		return AdminConversationFilter{}, fmt.Errorf("模式格式錯誤")
+	}
+
+	var err error
+	if value := strings.TrimSpace(query.Get("page")); value != "" {
+		filter.Page, err = strconv.Atoi(value)
+		if err != nil || filter.Page < 1 {
+			return AdminConversationFilter{}, fmt.Errorf("頁碼格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("per_page")); value != "" {
+		filter.PerPage, err = strconv.Atoi(value)
+		if err != nil || !validAdminPerPage(filter.PerPage) {
+			return AdminConversationFilter{}, fmt.Errorf("每頁筆數格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("last_activity_from")); value != "" {
+		filter.LastActivityFrom, err = parseAdminDate(value, false)
+		if err != nil {
+			return AdminConversationFilter{}, fmt.Errorf("最後活動開始時間格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("last_activity_to")); value != "" {
+		filter.LastActivityTo, err = parseAdminDate(value, true)
+		if err != nil {
+			return AdminConversationFilter{}, fmt.Errorf("最後活動結束時間格式錯誤")
+		}
+	}
+	if filter.LastActivityFrom != nil && filter.LastActivityTo != nil && filter.LastActivityFrom.After(*filter.LastActivityTo) {
+		return AdminConversationFilter{}, fmt.Errorf("最後活動開始時間不可晚於結束時間")
 	}
 
 	return filter, nil

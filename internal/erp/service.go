@@ -557,6 +557,28 @@ func (s *Service) ListSystemAdmins(filter SystemAdminFilter, actor AdminSessionP
 	}, 200, nil
 }
 
+// ListAdminConversations returns read-only chat conversations for the admin console.
+func (s *Service) ListAdminConversations(filter AdminConversationFilter, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	conversations, err := s.repo.ListAdminConversations(filter)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_CONVERSATIONS_OK",
+		Message: "聊天紀錄列表讀取成功",
+		Data:    conversations,
+	}, 200, nil
+}
+
 // CreateUser creates an active user from the admin console. Only system_admin is allowed.
 func (s *Service) CreateUser(req AdminCreateUserRequest, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {

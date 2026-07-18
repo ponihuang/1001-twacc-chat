@@ -19,6 +19,8 @@
   let userInvitationsPage = 1;
   let userInvitationsPerPage = 10;
   let bulkInvitePrecheck = null;
+  let adminConversationsPage = 1;
+  let adminConversationsPerPage = 10;
   let adminsPage = 1;
   let adminsPerPage = 10;
   let modalConfirmHandler = null;
@@ -43,6 +45,8 @@
     userCreate: '/office/user/create',
     userInvitations: '/office/user/invitations',
     userEdit: null,
+    conversations: '/office/conversations',
+    conversationDetail: null,
     admins: '/office/admins',
     adminCreate: '/office/admins/create',
     adminEdit: null
@@ -66,6 +70,9 @@
     if (adminEditMatch) {
       editingAdminUserID = adminEditMatch[1];
       return 'adminEdit';
+    }
+    if (window.location.pathname.match(/^\/office\/conversations\/[^/]+$/)) {
+      return 'conversationDetail';
     }
     return ROUTE_VIEWS[window.location.pathname] || 'dashboard';
   }
@@ -167,6 +174,23 @@
       editUserStatus: document.getElementById('edit-user-status'),
       submitEditUser: document.getElementById('submit-edit-user'),
       resetEditUser: document.getElementById('reset-edit-user'),
+
+      // Conversations
+      adminConversationFilterForm: document.getElementById('admin-conversation-filter-form'),
+      adminConversationType: document.getElementById('admin-conversation-type'),
+      adminConversationKeyword: document.getElementById('admin-conversation-keyword'),
+      adminConversationLastFrom: document.getElementById('admin-conversation-last-from'),
+      adminConversationLastTo: document.getElementById('admin-conversation-last-to'),
+      adminConversationsTable: document.getElementById('admin-conversations-table'),
+      adminConversationsTbody: document.getElementById('admin-conversations-tbody'),
+      adminConversationsLoading: document.getElementById('admin-conversations-loading'),
+      adminConversationsEmpty: document.getElementById('admin-conversations-empty'),
+      adminConversationsPagination: document.getElementById('admin-conversations-pagination'),
+      adminConversationsTotal: document.getElementById('admin-conversations-total'),
+      adminConversationsPages: document.getElementById('admin-conversations-pages'),
+      adminConversationsPerPage: document.getElementById('admin-conversations-per-page'),
+      refreshAdminConversationsBtn: document.getElementById('refresh-admin-conversations-btn'),
+      resetAdminConversationsBtn: document.getElementById('reset-admin-conversations-btn'),
 
       // Admins
       adminFilterForm: document.getElementById('admin-filter-form'),
@@ -390,6 +414,25 @@
       elements.resetEditUser.addEventListener('click', resetUserEditForm);
     }
 
+    // Conversation records
+    if (elements.adminConversationFilterForm) {
+      elements.adminConversationFilterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        adminConversationsPage = 1;
+        loadAdminConversations();
+      });
+    }
+    if (elements.adminConversationsPerPage) {
+      elements.adminConversationsPerPage.addEventListener('change', () => {
+        adminConversationsPerPage = Number(elements.adminConversationsPerPage.value) || 10;
+        adminConversationsPage = 1;
+        loadAdminConversations();
+      });
+    }
+    if (elements.resetAdminConversationsBtn) {
+      elements.resetAdminConversationsBtn.addEventListener('click', resetAdminConversationFilters);
+    }
+
     // Admin management
     if (elements.adminFilterForm) {
       elements.adminFilterForm.addEventListener('submit', (e) => {
@@ -560,7 +603,8 @@
     if (!options.skipHistory) {
       const nextPath = options.path || VIEW_ROUTES[viewName] || (
         viewName === 'userEdit' && editingUserID ? `/office/user/${editingUserID}/edit` :
-        viewName === 'adminEdit' && editingAdminUserID ? `/office/admins/${editingAdminUserID}/edit` : ''
+        viewName === 'adminEdit' && editingAdminUserID ? `/office/admins/${editingAdminUserID}/edit` :
+        viewName === 'conversationDetail' ? window.location.pathname : ''
       );
       if (nextPath && window.location.pathname !== nextPath) {
         const method = options.replace ? 'replaceState' : 'pushState';
@@ -571,7 +615,9 @@
     // Update menu items
     const activeMenuItem = viewName === 'userCreate' || viewName === 'userEdit'
       ? 'users'
-      : viewName === 'adminCreate' || viewName === 'adminEdit' ? 'admins' : viewName;
+      : viewName === 'adminCreate' || viewName === 'adminEdit'
+        ? 'admins'
+        : viewName === 'conversationDetail' ? 'conversations' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
       item.classList.toggle('is-active', item.getAttribute('data-menu-item') === activeMenuItem);
     });
@@ -604,6 +650,9 @@
         break;
       case 'userEdit':
         loadUserForEdit();
+        break;
+      case 'conversations':
+        loadAdminConversations();
         break;
       case 'admins':
         loadAdmins();
@@ -1216,6 +1265,180 @@
     if (elements.userInvitationsLoading) elements.userInvitationsLoading.hidden = true;
     if (elements.userInvitationsEmpty) elements.userInvitationsEmpty.hidden = false;
     if (elements.userInvitationsTable) elements.userInvitationsTable.hidden = true;
+  }
+
+  async function loadAdminConversations() {
+    if (elements.adminConversationsLoading) elements.adminConversationsLoading.hidden = false;
+    if (elements.adminConversationsEmpty) elements.adminConversationsEmpty.hidden = true;
+    if (elements.adminConversationsTable) elements.adminConversationsTable.hidden = true;
+    if (elements.adminConversationsPagination) elements.adminConversationsPagination.hidden = true;
+
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/conversations?${buildAdminConversationQuery().toString()}`);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入聊天紀錄失敗');
+      }
+
+      const pageData = data.data || {};
+      const conversations = Array.isArray(pageData.items) ? pageData.items : [];
+      const total = Number(pageData.total) || 0;
+      const totalPages = Number(pageData.total_pages) || 0;
+      adminConversationsPage = Number(pageData.page) || adminConversationsPage;
+      adminConversationsPerPage = Number(pageData.per_page) || adminConversationsPerPage;
+
+      if (conversations.length === 0) {
+        showAdminConversationsEmpty();
+        renderAdminConversationsPagination(total, totalPages);
+        return;
+      }
+
+      populateAdminConversationsTable(conversations);
+      if (elements.adminConversationsTable) elements.adminConversationsTable.hidden = false;
+      renderAdminConversationsPagination(total, totalPages);
+    } catch (err) {
+      showError('載入聊天紀錄失敗: ' + err.message);
+      showAdminConversationsEmpty();
+    } finally {
+      if (elements.adminConversationsLoading) elements.adminConversationsLoading.hidden = true;
+    }
+  }
+
+  function buildAdminConversationQuery() {
+    const params = new URLSearchParams();
+    const type = elements.adminConversationType?.value?.trim();
+    const keyword = elements.adminConversationKeyword?.value?.trim();
+    const lastFrom = elements.adminConversationLastFrom?.value?.trim();
+    const lastTo = elements.adminConversationLastTo?.value?.trim();
+    if (type) params.set('type', type);
+    if (keyword) params.set('keyword', keyword);
+    if (lastFrom) params.set('last_activity_from', lastFrom);
+    if (lastTo) params.set('last_activity_to', lastTo);
+    params.set('page', String(adminConversationsPage));
+    params.set('per_page', String(adminConversationsPerPage));
+    return params;
+  }
+
+  function populateAdminConversationsTable(conversations) {
+    if (!elements.adminConversationsTbody) return;
+
+    elements.adminConversationsTbody.replaceChildren();
+    conversations.forEach(conversation => {
+      const row = document.createElement('tr');
+      [
+        String(conversation.id || ''),
+        conversationTypeLabel(conversation.type),
+        conversation.name || '--',
+        String(conversation.member_count || 0),
+        conversation.latest_message_available ? (conversation.last_message || '--') : '--',
+        conversationLastSender(conversation),
+        formatDate(conversation.last_activity_at),
+        null
+      ].forEach((value, index) => {
+        const cell = document.createElement('td');
+        if (index === 0) {
+          const id = document.createElement('span');
+          id.className = 'account-link';
+          id.textContent = value;
+          cell.appendChild(id);
+        } else if (index === 1) {
+          const badge = document.createElement('span');
+          badge.className = 'status-badge';
+          badge.textContent = value;
+          cell.appendChild(badge);
+        } else if (index === 4) {
+          cell.className = 'admin-conversation-message-cell';
+          cell.textContent = value;
+        } else if (index === 7) {
+          const viewButton = document.createElement('button');
+          viewButton.type = 'button';
+          viewButton.className = 'btn invitation-action-btn';
+          viewButton.textContent = '查看';
+          viewButton.addEventListener('click', () => {
+            switchView('conversationDetail', { path: `/office/conversations/${encodeURIComponent(conversation.id)}` });
+          });
+          cell.appendChild(viewButton);
+        } else {
+          cell.textContent = value;
+        }
+        row.appendChild(cell);
+      });
+      elements.adminConversationsTbody.appendChild(row);
+    });
+  }
+
+  function conversationTypeLabel(type) {
+    switch (type) {
+      case 'direct':
+        return '一對一';
+      case 'group':
+        return '群組';
+      default:
+        return type || '--';
+    }
+  }
+
+  function conversationLastSender(conversation) {
+    if (!conversation || !conversation.latest_message_available) {
+      return '--';
+    }
+    return conversation.last_sender_name || conversation.last_sender_account || (
+      conversation.last_sender_id ? `使用者#${conversation.last_sender_id}` : '--'
+    );
+  }
+
+  function renderAdminConversationsPagination(total, totalPages) {
+    if (!elements.adminConversationsPagination || !elements.adminConversationsPages) return;
+
+    if (elements.adminConversationsTotal) elements.adminConversationsTotal.textContent = String(total);
+    if (elements.adminConversationsPerPage) elements.adminConversationsPerPage.value = String(adminConversationsPerPage);
+    elements.adminConversationsPages.replaceChildren();
+
+    const addButton = (label, page, options = {}) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pagination-button';
+      button.textContent = label;
+      button.disabled = Boolean(options.disabled);
+      if (options.current) {
+        button.classList.add('is-current');
+        button.setAttribute('aria-current', 'page');
+      } else if (!options.disabled) {
+        button.addEventListener('click', () => {
+          adminConversationsPage = page;
+          loadAdminConversations();
+        });
+      }
+      elements.adminConversationsPages.appendChild(button);
+    };
+
+    addButton('‹', adminConversationsPage - 1, { disabled: adminConversationsPage <= 1 });
+    paginationSequence(adminConversationsPage, totalPages).forEach(page => {
+      if (page === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '…';
+        elements.adminConversationsPages.appendChild(ellipsis);
+        return;
+      }
+      addButton(String(page), page, { current: page === adminConversationsPage });
+    });
+    addButton('›', adminConversationsPage + 1, { disabled: adminConversationsPage >= totalPages || totalPages === 0 });
+    elements.adminConversationsPagination.hidden = false;
+  }
+
+  function showAdminConversationsEmpty() {
+    if (elements.adminConversationsLoading) elements.adminConversationsLoading.hidden = true;
+    if (elements.adminConversationsEmpty) elements.adminConversationsEmpty.hidden = false;
+    if (elements.adminConversationsTable) elements.adminConversationsTable.hidden = true;
+  }
+
+  function resetAdminConversationFilters() {
+    if (elements.adminConversationFilterForm) elements.adminConversationFilterForm.reset();
+    adminConversationsPage = 1;
+    loadAdminConversations();
   }
 
   function paginationSequence(current, totalPages) {
