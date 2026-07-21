@@ -4,12 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-conversation-detail-20260721a">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-rwd-20260721a">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-conversation-detail-20260721a"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-rwd-20260721a"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
+    <button type="button" class="admin-sidebar-backdrop" data-sidebar-backdrop aria-label="關閉選單" hidden></button>
     <aside class="admin-sidebar">
       <nav class="sidebar-menu" data-sidebar-menu aria-label="管理功能">
         <button type="button" class="sidebar-root" data-menu-item="dashboard">
