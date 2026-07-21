@@ -4,12 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-conversation-detail-20260721a">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-filter-rwd-20260721e">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-conversation-detail-20260721a"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-filter-rwd-20260721e"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
+    <button type="button" class="admin-sidebar-backdrop" data-sidebar-backdrop aria-label="關閉選單" hidden></button>
     <aside class="admin-sidebar">
       <nav class="sidebar-menu" data-sidebar-menu aria-label="管理功能">
         <button type="button" class="sidebar-root" data-menu-item="dashboard">
@@ -173,25 +174,25 @@
             <p class="admin-breadcrumb">首頁 / 聊天紀錄</p>
 
             <form class="admin-conversation-filter-panel" id="admin-conversation-filter-form" aria-label="聊天紀錄篩選">
-              <label>
+              <label class="filter-start-time">
+                <span>開始時間</span>
+                <input type="date" id="admin-conversation-last-from" autocomplete="off">
+              </label>
+              <label class="filter-end-time">
+                <span>結束時間</span>
+                <input type="date" id="admin-conversation-last-to" autocomplete="off">
+              </label>
+              <label class="filter-wide">
+                <span>關鍵字</span>
+                <input type="search" id="admin-conversation-keyword" placeholder="搜尋群組名稱、帳號、名稱" autocomplete="off">
+              </label>
+              <label class="filter-mode">
                 <span>模式</span>
                 <select id="admin-conversation-type">
                   <option value="">全部</option>
                   <option value="direct">一對一</option>
                   <option value="group">群組</option>
                 </select>
-              </label>
-              <label class="filter-wide">
-                <span>關鍵字</span>
-                <input type="search" id="admin-conversation-keyword" placeholder="搜尋群組名稱、帳號、名稱" autocomplete="off">
-              </label>
-              <label>
-                <span>最後活動開始時間</span>
-                <input type="date" id="admin-conversation-last-from" autocomplete="off">
-              </label>
-              <label>
-                <span>最後活動結束時間</span>
-                <input type="date" id="admin-conversation-last-to" autocomplete="off">
               </label>
               <div class="filter-actions">
                 <button type="submit" class="btn" id="refresh-admin-conversations-btn">搜尋</button>
@@ -366,6 +367,14 @@
             <p class="admin-breadcrumb">首頁 / 用戶管理</p>
 
             <form class="user-filter-panel" id="user-filter-form" aria-label="用戶篩選">
+              <label class="filter-start-time">
+                <span>開始時間</span>
+                <input type="date" id="user-created-from" autocomplete="off">
+              </label>
+              <label class="filter-end-time">
+                <span>結束時間</span>
+                <input type="date" id="user-created-to" autocomplete="off">
+              </label>
               <label class="filter-account">
                 <span>帳號</span>
                 <input type="search" id="user-search" placeholder="搜尋帳號" autocomplete="off">
@@ -378,7 +387,7 @@
                 <span>Email</span>
                 <input type="search" id="user-email" inputmode="email" placeholder="請輸入完整Email" autocomplete="off">
               </label>
-              <label>
+              <label class="filter-status">
                 <span>狀態</span>
                 <select id="user-status">
                   <option value="">全部</option>
@@ -386,7 +395,7 @@
                   <option value="inactive">停用</option>
                 </select>
               </label>
-              <label>
+              <label class="filter-source">
                 <span>來源</span>
                 <select id="user-source">
                   <option value="">全部</option>
@@ -403,17 +412,9 @@
                   <option value="last_online_desc">最近在線</option>
                 </select>
               </label>
-              <label class="filter-start-time">
-                <span>開始時間</span>
-                <input type="date" id="user-created-from" autocomplete="off">
-              </label>
-              <label>
-                <span>結束時間</span>
-                <input type="date" id="user-created-to" autocomplete="off">
-              </label>
               <div class="filter-actions">
                 <button type="submit" class="btn" id="refresh-users-btn">搜尋</button>
-                <button type="button" class="btn btn-primary" data-menu-item="userCreate">新增</button>
+                <button type="button" class="btn btn-success" data-menu-item="userCreate">新增</button>
               </div>
             </form>
 
@@ -539,8 +540,8 @@
               </label>
               <div class="filter-actions">
                 <button type="submit" class="btn" id="refresh-user-invitations-btn">搜尋</button>
-                <button type="button" class="btn" id="open-bulk-user-invite-modal">批量新增</button>
-                <button type="button" class="btn btn-primary" id="open-user-invite-modal">新增</button>
+                <button type="button" class="btn btn-success" id="open-bulk-user-invite-modal">批量新增</button>
+                <button type="button" class="btn btn-success" id="open-user-invite-modal">新增</button>
               </div>
             </form>
 
@@ -642,7 +643,7 @@
                 <span>名稱</span>
                 <input type="search" id="admin-display-name" placeholder="請輸入" autocomplete="off">
               </label>
-              <label>
+              <label class="filter-status">
                 <span>狀態</span>
                 <select id="admin-status">
                   <option value="">全部</option>
@@ -652,7 +653,7 @@
               </label>
               <div class="filter-actions admin-filter-actions">
                 <button type="submit" class="btn" id="refresh-admins-btn">搜尋</button>
-                <button type="button" class="btn btn-primary" data-menu-item="adminCreate">新增</button>
+                <button type="button" class="btn btn-success" data-menu-item="adminCreate">新增</button>
               </div>
             </form>
 

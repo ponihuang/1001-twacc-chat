@@ -94,6 +94,7 @@
     renderTableColumns(elements.usersTable, elements.usersColgroup, elements.usersThead, USER_COLUMNS);
     setupOverlayScrollbar(document.getElementById('users-table-scroll'));
     setupEventListeners();
+    setupDateInputPickers();
     switchView(resolveInitialView(), { replace: true });
     await loadInitialData();
   }
@@ -104,6 +105,9 @@
   function cacheElements() {
     elements = {
       // Navigation
+      appShell: document.querySelector('[data-admin-app]'),
+      headerToggle: document.querySelector('.header-toggle'),
+      sidebarBackdrop: document.querySelector('[data-sidebar-backdrop]'),
       menu: document.querySelector('[data-sidebar-menu]'),
       mainContent: document.querySelector('[data-main-content]'),
       views: document.querySelectorAll('[data-view]'),
@@ -321,6 +325,13 @@
    */
   function setupEventListeners() {
     // Menu items
+    if (elements.headerToggle) {
+      elements.headerToggle.addEventListener('click', toggleAdminSidebar);
+    }
+    if (elements.sidebarBackdrop) {
+      elements.sidebarBackdrop.addEventListener('click', closeAdminSidebar);
+    }
+
     if (elements.menu) {
       elements.menu.addEventListener('click', (e) => {
         const groupToggle = e.target.closest('[data-sidebar-toggle]');
@@ -335,6 +346,7 @@
         const menuItem = e.target.closest('[data-menu-item]');
         if (menuItem) {
           switchView(menuItem.getAttribute('data-menu-item'));
+          closeAdminSidebar();
         }
       });
     }
@@ -350,6 +362,7 @@
 
     window.addEventListener('popstate', () => {
       switchView(resolveInitialView(), { skipHistory: true });
+      closeAdminSidebar();
     });
 
     if (elements.adminAccountTrigger) {
@@ -376,6 +389,7 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeAdminAccountMenu();
+        closeAdminSidebar();
       }
     });
 
@@ -588,6 +602,56 @@
         e.preventDefault();
         logout();
       });
+    }
+  }
+
+  function setupDateInputPickers() {
+    document.querySelectorAll('input[type="date"]').forEach((input) => {
+      if (input.dataset.pickerTriggerBound === 'true') {
+        return;
+      }
+      input.dataset.pickerTriggerBound = 'true';
+      updateDateInputPlaceholder(input);
+      input.addEventListener('input', () => updateDateInputPlaceholder(input));
+      input.addEventListener('change', () => updateDateInputPlaceholder(input));
+      input.addEventListener('click', () => {
+        if (typeof input.showPicker !== 'function') {
+          return;
+        }
+        try {
+          input.showPicker();
+        } catch (error) {
+          // Some browsers throw when the native picker is already open.
+        }
+      });
+    });
+  }
+
+  function updateDateInputPlaceholder(input) {
+    const field = input.closest('label');
+    if (!field) {
+      return;
+    }
+    field.classList.toggle('date-field-empty', !input.value);
+  }
+
+  function toggleAdminSidebar() {
+    if (!elements.appShell) return;
+    setAdminSidebarOpen(!elements.appShell.classList.contains('is-sidebar-open'));
+  }
+
+  function closeAdminSidebar() {
+    setAdminSidebarOpen(false);
+  }
+
+  function setAdminSidebarOpen(isOpen) {
+    if (!elements.appShell) return;
+    elements.appShell.classList.toggle('is-sidebar-open', Boolean(isOpen));
+    if (elements.headerToggle) {
+      elements.headerToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+    if (elements.sidebarBackdrop) {
+      elements.sidebarBackdrop.hidden = !isOpen;
     }
   }
 
