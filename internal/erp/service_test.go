@@ -331,6 +331,32 @@ func (m *mockRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdmin
 	}, nil
 }
 
+func (m *mockRepository) ListAdminRoles(filter AdminRoleFilter) (AdminRolePage, error) {
+	return AdminRolePage{
+		Items:      []AdminRoleSummary{},
+		Total:      0,
+		Page:       filter.Page,
+		PerPage:    filter.PerPage,
+		TotalPages: 0,
+	}, nil
+}
+
+func (m *mockRepository) FindAdminRoleByID(roleID int64) (AdminRoleSummary, error) {
+	return AdminRoleSummary{}, ErrUserNotFound
+}
+
+func (m *mockRepository) FindAdminRoleByCode(code string) (AdminRoleSummary, error) {
+	return AdminRoleSummary{}, ErrUserNotFound
+}
+
+func (m *mockRepository) CreateAdminRole(params AdminRoleCreateParams) (AdminRoleSummary, error) {
+	return AdminRoleSummary{ID: 1, Code: params.Code, Name: params.Name, Status: params.Status}, nil
+}
+
+func (m *mockRepository) UpdateAdminRole(roleID int64, params AdminRoleUpdateParams) (AdminRoleSummary, error) {
+	return AdminRoleSummary{ID: roleID, Code: "system_admin", Name: params.Name, Status: params.Status}, nil
+}
+
 func (m *mockRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{
 		Items:      []AdminConversationSummary{},

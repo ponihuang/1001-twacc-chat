@@ -683,6 +683,19 @@ button:disabled {
   min-width: 1100px;
 }
 
+.permission-filter-panel label {
+  flex-basis: 260px;
+}
+
+.permission-list-table {
+  min-width: 900px;
+}
+
+#permission-create-form,
+#permission-edit-form {
+  width: min(560px, 100%);
+}
+
 .admin-conversation-table-card {
   margin-top: 16px;
 }

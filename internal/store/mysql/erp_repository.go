@@ -1518,14 +1518,15 @@ func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (
 		args = append(args, value)
 	}
 
-	from := ` FROM admin_users a`
+	from := ` FROM admin_users a
+	          LEFT JOIN admin_roles ar ON ar.code = a.role`
 
 	var total int
 	if err := r.db.QueryRow("SELECT COUNT(*)"+from+where.String(), args...).Scan(&total); err != nil {
 		return erp.SystemAdminPage{}, fmt.Errorf("count system admins: %w", err)
 	}
 
-	query := `SELECT a.id, a.id, a.account, a.display_name, a.password_hash, a.role, a.status,
+	query := `SELECT a.id, a.id, a.account, a.display_name, a.password_hash, a.role, COALESCE(ar.name, ''), a.status,
 	                 a.last_login_at, COALESCE(a.last_login_ip, '')
 	            ` + from + where.String() + `
 	        ORDER BY a.created_at DESC, a.id DESC
@@ -1549,6 +1550,7 @@ func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (
 			&admin.DisplayName,
 			&admin.PasswordHash,
 			&admin.Role,
+			&admin.RoleName,
 			&admin.Status,
 			&lastLogin,
 			&admin.LastLoginIP,
@@ -1559,7 +1561,9 @@ func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (
 		if lastLogin.Valid {
 			admin.LastLoginAt = &lastLogin.Time
 		}
-		admin.RoleName = systemAdminRoleName(admin.Role)
+		if admin.RoleName == "" {
+			admin.RoleName = systemAdminRoleName(admin.Role)
+		}
 		admins = append(admins, admin)
 	}
 	if err := rows.Err(); err != nil {
@@ -1579,6 +1583,178 @@ func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (
 	}, nil
 }
 
+// ListAdminRoles returns one page of backend admin roles.
+func (r *IntegrationRepository) ListAdminRoles(filter erp.AdminRoleFilter) (erp.AdminRolePage, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage < 1 {
+		perPage = 10
+	}
+
+	var where strings.Builder
+	where.WriteString(" WHERE 1 = 1")
+	args := make([]any, 0, 1)
+	if value := strings.TrimSpace(filter.Role); value != "" {
+		where.WriteString(" AND (r.code LIKE ? OR r.name LIKE ?)")
+		like := "%" + value + "%"
+		args = append(args, like, like)
+	}
+
+	var total int
+	if err := r.db.QueryRow("SELECT COUNT(*) FROM admin_roles r"+where.String(), args...).Scan(&total); err != nil {
+		return erp.AdminRolePage{}, fmt.Errorf("count admin roles: %w", err)
+	}
+
+	query := `SELECT r.id, r.code, r.name, COUNT(a.id) AS admin_count, r.status, r.created_at, r.updated_at
+	            FROM admin_roles r
+	       LEFT JOIN admin_users a ON a.role = r.code
+	         ` + where.String() + `
+	        GROUP BY r.id, r.code, r.name, r.status, r.created_at, r.updated_at
+	        ORDER BY r.created_at DESC, r.id DESC
+	           LIMIT ? OFFSET ?`
+	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return erp.AdminRolePage{}, fmt.Errorf("list admin roles: %w", err)
+	}
+	defer rows.Close()
+
+	roles := make([]erp.AdminRoleSummary, 0)
+	for rows.Next() {
+		role, err := scanAdminRole(rows)
+		if err != nil {
+			return erp.AdminRolePage{}, fmt.Errorf("scan admin role list: %w", err)
+		}
+		roles = append(roles, role)
+	}
+	if err := rows.Err(); err != nil {
+		return erp.AdminRolePage{}, fmt.Errorf("iterate admin role list: %w", err)
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+	return erp.AdminRolePage{
+		Items:      roles,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// FindAdminRoleByID loads a backend admin role by numeric id.
+func (r *IntegrationRepository) FindAdminRoleByID(roleID int64) (erp.AdminRoleSummary, error) {
+	return r.findAdminRole("r.id = ?", roleID)
+}
+
+// FindAdminRoleByCode loads a backend admin role by code.
+func (r *IntegrationRepository) FindAdminRoleByCode(code string) (erp.AdminRoleSummary, error) {
+	return r.findAdminRole("r.code = ?", strings.TrimSpace(code))
+}
+
+func (r *IntegrationRepository) findAdminRole(predicate string, arg any) (erp.AdminRoleSummary, error) {
+	row := r.db.QueryRow(
+		`SELECT r.id, r.code, r.name, COUNT(a.id) AS admin_count, r.status, r.created_at, r.updated_at
+		   FROM admin_roles r
+	  LEFT JOIN admin_users a ON a.role = r.code
+		  WHERE `+predicate+`
+	   GROUP BY r.id, r.code, r.name, r.status, r.created_at, r.updated_at
+		  LIMIT 1`,
+		arg,
+	)
+	role, err := scanAdminRole(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.AdminRoleSummary{}, erp.ErrUserNotFound
+		}
+		return erp.AdminRoleSummary{}, fmt.Errorf("find admin role: %w", err)
+	}
+	return role, nil
+}
+
+// CreateAdminRole creates a backend admin role.
+func (r *IntegrationRepository) CreateAdminRole(params erp.AdminRoleCreateParams) (erp.AdminRoleSummary, error) {
+	result, err := r.db.Exec(
+		`INSERT INTO admin_roles (code, name, status, created_by)
+		 VALUES (?, ?, ?, ?)`,
+		params.Code,
+		params.Name,
+		params.Status,
+		nullableInt64(params.CreatedBy),
+	)
+	if err != nil {
+		if isDuplicate(err) {
+			return erp.AdminRoleSummary{}, erp.ErrRoleAlreadyExists
+		}
+		return erp.AdminRoleSummary{}, fmt.Errorf("create admin role: %w", err)
+	}
+
+	roleID, err := result.LastInsertId()
+	if err != nil {
+		return erp.AdminRoleSummary{}, fmt.Errorf("read admin role id: %w", err)
+	}
+
+	return r.FindAdminRoleByID(roleID)
+}
+
+// UpdateAdminRole applies mutable backend admin role fields.
+func (r *IntegrationRepository) UpdateAdminRole(roleID int64, params erp.AdminRoleUpdateParams) (erp.AdminRoleSummary, error) {
+	result, err := r.db.Exec(
+		`UPDATE admin_roles
+		    SET name = ?, status = ?
+		  WHERE id = ?`,
+		params.Name,
+		params.Status,
+		roleID,
+	)
+	if err != nil {
+		return erp.AdminRoleSummary{}, fmt.Errorf("update admin role: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return erp.AdminRoleSummary{}, fmt.Errorf("read admin role update result: %w", err)
+	}
+	if affected == 0 {
+		return erp.AdminRoleSummary{}, erp.ErrUserNotFound
+	}
+
+	return r.FindAdminRoleByID(roleID)
+}
+
+type adminRoleScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanAdminRole(scanner adminRoleScanner) (erp.AdminRoleSummary, error) {
+	var role erp.AdminRoleSummary
+	var createdAt sql.NullTime
+	var updatedAt sql.NullTime
+	if err := scanner.Scan(
+		&role.ID,
+		&role.Code,
+		&role.Name,
+		&role.AdminCount,
+		&role.Status,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return erp.AdminRoleSummary{}, err
+	}
+	if createdAt.Valid {
+		role.CreatedAt = &createdAt.Time
+	}
+	if updatedAt.Valid {
+		role.UpdatedAt = &updatedAt.Time
+	}
+	return role, nil
+}
+
 // FindSystemAdminByID loads a backend admin by numeric id.
 func (r *IntegrationRepository) FindSystemAdminByID(adminUserID int64) (erp.SystemAdminSummary, error) {
 	return r.findSystemAdmin("a.id = ?", adminUserID)
@@ -1593,9 +1769,10 @@ func (r *IntegrationRepository) findSystemAdmin(predicate string, arg any) (erp.
 	var admin erp.SystemAdminSummary
 	var lastLogin sql.NullTime
 	row := r.db.QueryRow(
-		`SELECT a.id, a.id, a.account, a.display_name, a.password_hash, a.role, a.status,
+		`SELECT a.id, a.id, a.account, a.display_name, a.password_hash, a.role, COALESCE(ar.name, ''), a.status,
 		        a.last_login_at, COALESCE(a.last_login_ip, '')
 		   FROM admin_users a
+		   LEFT JOIN admin_roles ar ON ar.code = a.role
 		  WHERE `+predicate+`
 		  LIMIT 1`,
 		arg,
@@ -1607,6 +1784,7 @@ func (r *IntegrationRepository) findSystemAdmin(predicate string, arg any) (erp.
 		&admin.DisplayName,
 		&admin.PasswordHash,
 		&admin.Role,
+		&admin.RoleName,
 		&admin.Status,
 		&lastLogin,
 		&admin.LastLoginIP,
@@ -1617,7 +1795,9 @@ func (r *IntegrationRepository) findSystemAdmin(predicate string, arg any) (erp.
 		return erp.SystemAdminSummary{}, fmt.Errorf("find system admin: %w", err)
 	}
 	admin.AdminUserID = admin.UserID
-	admin.RoleName = systemAdminRoleName(admin.Role)
+	if admin.RoleName == "" {
+		admin.RoleName = systemAdminRoleName(admin.Role)
+	}
 	if lastLogin.Valid {
 		admin.LastLoginAt = &lastLogin.Time
 	}

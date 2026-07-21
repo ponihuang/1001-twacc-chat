@@ -21,6 +21,9 @@ func registerAdminRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, pa
 	mux.HandleFunc("/office/admins", methodHandler("GET", adminDashboardHandler))
 	mux.HandleFunc("/office/admins/create", methodHandler("GET", adminDashboardHandler))
 	mux.HandleFunc("GET /office/admins/{user_id}/edit", adminDashboardHandler)
+	mux.HandleFunc("/office/permissions", methodHandler("GET", adminDashboardHandler))
+	mux.HandleFunc("/office/permissions/create", methodHandler("GET", adminDashboardHandler))
+	mux.HandleFunc("GET /office/permissions/{role_id}/edit", adminDashboardHandler)
 	if integrationHandler != nil {
 		mux.HandleFunc("/admin/api/login", methodHandler("POST", integrationHandler.AdminLogin))
 	}

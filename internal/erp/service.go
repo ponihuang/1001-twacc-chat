@@ -18,6 +18,7 @@ import (
 
 var sourceSystemPattern = regexp.MustCompile(`^[a-z0-9_-]{2,50}$`)
 var passwordPattern = regexp.MustCompile(`^[A-Za-z0-9[:punct:]]{4,20}$`)
+var adminRoleCodePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{2,50}$`)
 
 const passwordHashIterations = 120000
 const bulkInvitationTXTMaxBytes = 2 << 20
@@ -37,6 +38,8 @@ var (
 	ErrTemporaryPasswordMailFailed = errors.New("temporary password mail failed")
 	ErrPasswordConfirmation        = errors.New("password confirmation mismatch")
 	ErrInvalidStatus               = errors.New("invalid status")
+	ErrInvalidRole                 = errors.New("invalid role")
+	ErrRoleAlreadyExists           = errors.New("role already exists")
 	ErrInvalidPassword             = errors.New("invalid password")
 	ErrInvalidCredentials          = errors.New("invalid credentials")
 	ErrInvalidUserID               = errors.New("invalid user id")
@@ -569,6 +572,28 @@ func (s *Service) ListSystemAdmins(filter SystemAdminFilter, actor AdminSessionP
 		Code:    "SYSTEM_ADMINS_OK",
 		Message: "管理員列表讀取成功",
 		Data:    admins,
+	}, 200, nil
+}
+
+// ListAdminRoles returns backend admin roles for the admin console.
+func (s *Service) ListAdminRoles(filter AdminRoleFilter, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	roles, err := s.repo.ListAdminRoles(filter)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLES_OK",
+		Message: "角色列表讀取成功",
+		Data:    roles,
 	}, 200, nil
 }
 
@@ -1299,6 +1324,88 @@ func (s *Service) UpdateSystemAdmin(targetAdminID int64, req SystemAdminCreateRe
 	}, 200, nil
 }
 
+// CreateAdminRole creates a backend admin role.
+func (s *Service) CreateAdminRole(req AdminRoleCreateRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	params, err := validateAdminRoleCreateRequest(req, actor.AdminUserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	role, err := s.repo.CreateAdminRole(params)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLE_CREATED",
+		Message: "角色已新增",
+		Data:    role,
+	}, 201, nil
+}
+
+// GetAdminRole returns one backend admin role for editing.
+func (s *Service) GetAdminRole(roleID int64, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if roleID <= 0 {
+		return Response{}, statusCode(ErrInvalidRole), ErrInvalidRole
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	role, err := s.repo.FindAdminRoleByID(roleID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLE_OK",
+		Message: "角色讀取成功",
+		Data:    role,
+	}, 200, nil
+}
+
+// UpdateAdminRole updates mutable backend admin role fields.
+func (s *Service) UpdateAdminRole(roleID int64, req AdminRoleCreateRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if roleID <= 0 {
+		return Response{}, statusCode(ErrInvalidRole), ErrInvalidRole
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	params, err := validateAdminRoleUpdateRequest(req)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	role, err := s.repo.UpdateAdminRole(roleID, params)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLE_UPDATED",
+		Message: "角色已更新",
+		Data:    role,
+	}, 200, nil
+}
+
 // ListDevices returns the recent devices for a target user. Only system_admin is allowed.
 func (s *Service) ListDevices(targetUserID int64, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -1591,6 +1698,50 @@ func normalizeSystemAdminRole(role string) string {
 	return role
 }
 
+func validateAdminRoleCreateRequest(req AdminRoleCreateRequest, createdBy int64) (AdminRoleCreateParams, error) {
+	code := strings.TrimSpace(req.Code)
+	name := strings.TrimSpace(req.Name)
+	status, err := normalizeAdminRoleStatus(req.Status)
+	if err != nil {
+		return AdminRoleCreateParams{}, err
+	}
+	if !adminRoleCodePattern.MatchString(code) {
+		return AdminRoleCreateParams{}, ErrInvalidRole
+	}
+	if name == "" || len([]rune(name)) > 100 {
+		return AdminRoleCreateParams{}, ErrInvalidRole
+	}
+	return AdminRoleCreateParams{
+		Code:      code,
+		Name:      name,
+		Status:    status,
+		CreatedBy: createdBy,
+	}, nil
+}
+
+func validateAdminRoleUpdateRequest(req AdminRoleCreateRequest) (AdminRoleUpdateParams, error) {
+	name := strings.TrimSpace(req.Name)
+	status, err := normalizeAdminRoleStatus(req.Status)
+	if err != nil {
+		return AdminRoleUpdateParams{}, err
+	}
+	if name == "" || len([]rune(name)) > 100 {
+		return AdminRoleUpdateParams{}, ErrInvalidRole
+	}
+	return AdminRoleUpdateParams{Name: name, Status: status}, nil
+}
+
+func normalizeAdminRoleStatus(status string) (string, error) {
+	status = strings.TrimSpace(status)
+	if status == "" {
+		status = "active"
+	}
+	if status != "active" && status != "inactive" {
+		return "", ErrInvalidStatus
+	}
+	return status, nil
+}
+
 func validatePassword(password string) error {
 	if !passwordPattern.MatchString(strings.TrimSpace(password)) {
 		return ErrInvalidPassword
@@ -1790,6 +1941,7 @@ func statusCode(err error) int {
 		errors.Is(err, ErrInvalidDisplayName),
 		errors.Is(err, ErrInvalidEmail),
 		errors.Is(err, ErrInvalidStatus),
+		errors.Is(err, ErrInvalidRole),
 		errors.Is(err, ErrInvalidPassword),
 		errors.Is(err, ErrPasswordConfirmation),
 		errors.Is(err, ErrInvalidUserID),
@@ -1817,7 +1969,8 @@ func statusCode(err error) int {
 		errors.Is(err, ErrUserInvitationNotFound),
 		errors.Is(err, ErrConversationNotFound):
 		return 404
-	case errors.Is(err, ErrUserAlreadyExists):
+	case errors.Is(err, ErrUserAlreadyExists),
+		errors.Is(err, ErrRoleAlreadyExists):
 		return 409
 	case errors.Is(err, ErrEmailAlreadyExists),
 		errors.Is(err, ErrUserInvitationPending),

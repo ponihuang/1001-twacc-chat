@@ -26,6 +26,10 @@
   let adminConversationMessagesPerPage = 20;
   let adminsPage = 1;
   let adminsPerPage = 10;
+  let permissionRolesPage = 1;
+  let permissionRolesPerPage = 10;
+  let editingPermissionRoleID = null;
+  let originalEditablePermissionRole = null;
   let modalConfirmHandler = null;
 
   // Adjust each user-table column here. Use width for a fixed width or
@@ -52,7 +56,10 @@
     conversationDetail: null,
     admins: '/office/admins',
     adminCreate: '/office/admins/create',
-    adminEdit: null
+    adminEdit: null,
+    permissions: '/office/permissions',
+    permissionCreate: '/office/permissions/create',
+    permissionEdit: null
   };
 
   const ROUTE_VIEWS = Object.entries(VIEW_ROUTES).reduce((routes, [viewName, path]) => {
@@ -73,6 +80,11 @@
     if (adminEditMatch) {
       editingAdminUserID = adminEditMatch[1];
       return 'adminEdit';
+    }
+    const permissionEditMatch = window.location.pathname.match(/^\/office\/permissions\/(\d+)\/edit$/);
+    if (permissionEditMatch) {
+      editingPermissionRoleID = permissionEditMatch[1];
+      return 'permissionEdit';
     }
     const conversationDetailMatch = window.location.pathname.match(/^\/office\/conversations\/([^/]+)$/);
     if (conversationDetailMatch) {
@@ -265,6 +277,29 @@
       editAdminStatus: document.getElementById('edit-admin-status'),
       submitEditAdmin: document.getElementById('submit-edit-admin'),
       resetEditAdmin: document.getElementById('reset-edit-admin'),
+
+      // Permissions
+      permissionFilterForm: document.getElementById('permission-filter-form'),
+      permissionRoleSearch: document.getElementById('permission-role-search'),
+      permissionsTable: document.getElementById('permissions-table'),
+      permissionsTbody: document.getElementById('permissions-tbody'),
+      permissionsLoading: document.getElementById('permissions-loading'),
+      permissionsEmpty: document.getElementById('permissions-empty'),
+      permissionsPagination: document.getElementById('permissions-pagination'),
+      permissionsTotal: document.getElementById('permissions-total'),
+      permissionsPages: document.getElementById('permissions-pages'),
+      permissionsPerPage: document.getElementById('permissions-per-page'),
+      refreshPermissionsBtn: document.getElementById('refresh-permissions-btn'),
+      permissionCreateForm: document.getElementById('permission-create-form'),
+      createPermissionCode: document.getElementById('create-permission-code'),
+      createPermissionName: document.getElementById('create-permission-name'),
+      submitCreatePermission: document.getElementById('submit-create-permission'),
+      permissionEditForm: document.getElementById('permission-edit-form'),
+      editPermissionCode: document.getElementById('edit-permission-code'),
+      editPermissionName: document.getElementById('edit-permission-name'),
+      editPermissionStatus: document.getElementById('edit-permission-status'),
+      submitEditPermission: document.getElementById('submit-edit-permission'),
+      resetEditPermission: document.getElementById('reset-edit-permission'),
       
       // Devices
       deviceUserId: document.getElementById('device-user-id'),
@@ -532,6 +567,29 @@
     if (elements.resetEditAdmin) {
       elements.resetEditAdmin.addEventListener('click', resetAdminEditForm);
     }
+    if (elements.permissionFilterForm) {
+      elements.permissionFilterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        permissionRolesPage = 1;
+        loadPermissionRoles();
+      });
+    }
+    if (elements.permissionsPerPage) {
+      elements.permissionsPerPage.addEventListener('change', () => {
+        permissionRolesPerPage = Number(elements.permissionsPerPage.value) || 10;
+        permissionRolesPage = 1;
+        loadPermissionRoles();
+      });
+    }
+    if (elements.permissionCreateForm) {
+      elements.permissionCreateForm.addEventListener('submit', createPermissionRole);
+    }
+    if (elements.permissionEditForm) {
+      elements.permissionEditForm.addEventListener('submit', updatePermissionRole);
+    }
+    if (elements.resetEditPermission) {
+      elements.resetEditPermission.addEventListener('click', resetPermissionRoleEditForm);
+    }
 
     // Devices management
     if (elements.searchDevicesBtn) {
@@ -729,11 +787,17 @@
       const match = detailPath.match(/^\/office\/conversations\/([^/]+)$/);
       activeAdminConversationID = match ? decodeURIComponent(match[1]) : activeAdminConversationID;
     }
+    if (viewName === 'permissionEdit') {
+      const editPath = options.path || window.location.pathname;
+      const match = editPath.match(/^\/office\/permissions\/(\d+)\/edit$/);
+      editingPermissionRoleID = match ? match[1] : editingPermissionRoleID;
+    }
 
     if (!options.skipHistory) {
       const nextPath = options.path || VIEW_ROUTES[viewName] || (
         viewName === 'userEdit' && editingUserID ? `/office/user/${editingUserID}/edit` :
         viewName === 'adminEdit' && editingAdminUserID ? `/office/admins/${editingAdminUserID}/edit` :
+        viewName === 'permissionEdit' && editingPermissionRoleID ? `/office/permissions/${editingPermissionRoleID}/edit` :
         viewName === 'conversationDetail' ? window.location.pathname : ''
       );
       if (nextPath && window.location.pathname !== nextPath) {
@@ -747,7 +811,9 @@
       ? 'users'
       : viewName === 'adminCreate' || viewName === 'adminEdit'
         ? 'admins'
-        : viewName === 'conversationDetail' ? 'conversations' : viewName;
+        : viewName === 'permissionCreate' || viewName === 'permissionEdit'
+          ? 'permissions'
+          : viewName === 'conversationDetail' ? 'conversations' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
       item.classList.toggle('is-active', item.getAttribute('data-menu-item') === activeMenuItem);
     });
@@ -796,6 +862,16 @@
         break;
       case 'adminEdit':
         loadAdminForEdit();
+        break;
+      case 'permissions':
+        loadPermissionRoles();
+        break;
+      case 'permissionCreate':
+        elements.permissionCreateForm?.reset();
+        elements.createPermissionCode?.focus();
+        break;
+      case 'permissionEdit':
+        loadPermissionRoleForEdit();
         break;
       case 'devices':
         // Already handled by button
@@ -2190,6 +2266,257 @@
       showError(err.message || '更新管理員失敗');
     } finally {
       if (elements.submitEditAdmin) elements.submitEditAdmin.disabled = false;
+    }
+  }
+
+  async function loadPermissionRoles() {
+    if (elements.permissionsLoading) elements.permissionsLoading.hidden = false;
+    if (elements.permissionsEmpty) elements.permissionsEmpty.hidden = true;
+    if (elements.permissionsTable) elements.permissionsTable.hidden = true;
+    if (elements.permissionsPagination) elements.permissionsPagination.hidden = true;
+
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/roles?${buildPermissionRoleQuery().toString()}`);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入權限列表失敗');
+      }
+
+      const pageData = data.data || {};
+      const roles = Array.isArray(pageData.items) ? pageData.items : [];
+      const total = Number(pageData.total) || 0;
+      const totalPages = Number(pageData.total_pages) || 0;
+      permissionRolesPage = Number(pageData.page) || permissionRolesPage;
+      permissionRolesPerPage = Number(pageData.per_page) || permissionRolesPerPage;
+
+      if (roles.length === 0) {
+        showPermissionRolesEmpty();
+        renderPermissionRolesPagination(total, totalPages);
+        return;
+      }
+
+      populatePermissionRolesTable(roles);
+      if (elements.permissionsTable) elements.permissionsTable.hidden = false;
+      renderPermissionRolesPagination(total, totalPages);
+    } catch (err) {
+      showError('載入權限列表失敗: ' + err.message);
+      showPermissionRolesEmpty();
+    } finally {
+      if (elements.permissionsLoading) elements.permissionsLoading.hidden = true;
+    }
+  }
+
+  function buildPermissionRoleQuery() {
+    const params = new URLSearchParams();
+    const role = elements.permissionRoleSearch?.value?.trim();
+    if (role) params.set('role', role);
+    params.set('page', String(permissionRolesPage));
+    params.set('per_page', String(permissionRolesPerPage));
+    return params;
+  }
+
+  function populatePermissionRolesTable(roles) {
+    if (!elements.permissionsTbody) return;
+
+    elements.permissionsTbody.replaceChildren();
+    roles.forEach((role) => {
+      const row = document.createElement('tr');
+      [
+        role.id || '--',
+        role.code || '--',
+        role.name || '--',
+        Number(role.admin_count) || 0,
+        null,
+        null
+      ].forEach((value, index) => {
+        const cell = document.createElement('td');
+        if (index === 0) {
+          const id = document.createElement('span');
+          id.className = 'account-link';
+          id.textContent = value;
+          cell.appendChild(id);
+        } else if (index === 4) {
+          const status = document.createElement('span');
+          status.className = 'status-badge';
+          status.textContent = role.status === 'active' ? '啟用' : '停用';
+          cell.appendChild(status);
+        } else if (index === 5) {
+          cell.className = 'actions-cell';
+          const editButton = document.createElement('button');
+          editButton.type = 'button';
+          editButton.className = 'table-action';
+          editButton.textContent = '編輯';
+          editButton.title = '編輯權限';
+          editButton.addEventListener('click', () => openPermissionRoleEdit(role.id));
+          cell.appendChild(editButton);
+        } else {
+          cell.textContent = value;
+        }
+        row.appendChild(cell);
+      });
+      elements.permissionsTbody.appendChild(row);
+    });
+  }
+
+  function renderPermissionRolesPagination(total, totalPages) {
+    if (!elements.permissionsPagination || !elements.permissionsPages) return;
+
+    if (elements.permissionsTotal) elements.permissionsTotal.textContent = String(total);
+    if (elements.permissionsPerPage) elements.permissionsPerPage.value = String(permissionRolesPerPage);
+    elements.permissionsPages.replaceChildren();
+
+    const addButton = (label, page, options = {}) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pagination-button';
+      button.textContent = label;
+      button.disabled = Boolean(options.disabled);
+      if (options.current) {
+        button.classList.add('is-current');
+        button.setAttribute('aria-current', 'page');
+      } else if (!options.disabled) {
+        button.addEventListener('click', () => {
+          permissionRolesPage = page;
+          loadPermissionRoles();
+        });
+      }
+      elements.permissionsPages.appendChild(button);
+    };
+
+    addButton('‹', permissionRolesPage - 1, { disabled: permissionRolesPage <= 1 });
+    paginationSequence(permissionRolesPage, totalPages).forEach(page => {
+      if (page === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '…';
+        elements.permissionsPages.appendChild(ellipsis);
+        return;
+      }
+      addButton(String(page), page, { current: page === permissionRolesPage });
+    });
+    addButton('›', permissionRolesPage + 1, { disabled: permissionRolesPage >= totalPages || totalPages === 0 });
+    elements.permissionsPagination.hidden = false;
+  }
+
+  function showPermissionRolesEmpty() {
+    if (elements.permissionsLoading) elements.permissionsLoading.hidden = true;
+    if (elements.permissionsEmpty) elements.permissionsEmpty.hidden = false;
+    if (elements.permissionsTable) elements.permissionsTable.hidden = true;
+  }
+
+  async function createPermissionRole(event) {
+    event.preventDefault();
+
+    const payload = {
+      code: elements.createPermissionCode?.value?.trim() || '',
+      name: elements.createPermissionName?.value?.trim() || ''
+    };
+    if (!payload.code || !payload.name) {
+      showError('請填寫代碼與名稱');
+      return;
+    }
+
+    if (elements.submitCreatePermission) elements.submitCreatePermission.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/roles', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '建立權限失敗');
+      }
+
+      permissionRolesPage = 1;
+      showSuccess('權限已建立');
+      switchView('permissions');
+    } catch (err) {
+      showError(err.message || '建立權限失敗');
+    } finally {
+      if (elements.submitCreatePermission) elements.submitCreatePermission.disabled = false;
+    }
+  }
+
+  function openPermissionRoleEdit(roleID) {
+    editingPermissionRoleID = String(roleID);
+    switchView('permissionEdit', { path: `/office/permissions/${encodeURIComponent(editingPermissionRoleID)}/edit` });
+  }
+
+  async function loadPermissionRoleForEdit() {
+    if (!editingPermissionRoleID || !elements.permissionEditForm) return;
+
+    if (elements.submitEditPermission) elements.submitEditPermission.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/roles/${encodeURIComponent(editingPermissionRoleID)}`);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入權限資料失敗');
+      }
+
+      const role = data.data || {};
+      originalEditablePermissionRole = {
+        code: role.code || '',
+        name: role.name || '',
+        status: role.status || 'active'
+      };
+      resetPermissionRoleEditForm();
+      elements.editPermissionName?.focus();
+    } catch (err) {
+      showError(err.message || '載入權限資料失敗');
+      switchView('permissions');
+    } finally {
+      if (elements.submitEditPermission) elements.submitEditPermission.disabled = false;
+    }
+  }
+
+  function resetPermissionRoleEditForm() {
+    if (!originalEditablePermissionRole) return;
+
+    if (elements.editPermissionCode) elements.editPermissionCode.value = originalEditablePermissionRole.code;
+    if (elements.editPermissionName) elements.editPermissionName.value = originalEditablePermissionRole.name;
+    if (elements.editPermissionStatus) elements.editPermissionStatus.value = originalEditablePermissionRole.status;
+  }
+
+  async function updatePermissionRole(event) {
+    event.preventDefault();
+    if (!editingPermissionRoleID || !originalEditablePermissionRole) return;
+
+    const payload = {
+      code: originalEditablePermissionRole.code,
+      name: elements.editPermissionName?.value?.trim() || '',
+      status: elements.editPermissionStatus?.value || 'active'
+    };
+    if (!payload.name) {
+      showError('請填寫名稱');
+      elements.editPermissionName?.focus();
+      return;
+    }
+
+    if (elements.submitEditPermission) elements.submitEditPermission.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/roles/${encodeURIComponent(editingPermissionRoleID)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '更新權限失敗');
+      }
+
+      showSuccess('權限已更新');
+      switchView('permissions');
+    } catch (err) {
+      showError(err.message || '更新權限失敗');
+    } finally {
+      if (elements.submitEditPermission) elements.submitEditPermission.disabled = false;
     }
   }
 

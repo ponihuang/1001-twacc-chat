@@ -90,6 +90,26 @@ func (s *stubIntegrationRepository) ListSystemAdmins(filter SystemAdminFilter) (
 	return SystemAdminPage{Items: []SystemAdminSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
 
+func (s *stubIntegrationRepository) ListAdminRoles(filter AdminRoleFilter) (AdminRolePage, error) {
+	return AdminRolePage{Items: []AdminRoleSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
+}
+
+func (s *stubIntegrationRepository) FindAdminRoleByID(roleID int64) (AdminRoleSummary, error) {
+	return AdminRoleSummary{}, ErrUserNotFound
+}
+
+func (s *stubIntegrationRepository) FindAdminRoleByCode(code string) (AdminRoleSummary, error) {
+	return AdminRoleSummary{}, ErrUserNotFound
+}
+
+func (s *stubIntegrationRepository) CreateAdminRole(params AdminRoleCreateParams) (AdminRoleSummary, error) {
+	return AdminRoleSummary{ID: 1, Code: params.Code, Name: params.Name, Status: params.Status}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateAdminRole(roleID int64, params AdminRoleUpdateParams) (AdminRoleSummary, error) {
+	return AdminRoleSummary{ID: roleID, Code: "system_admin", Name: params.Name, Status: params.Status}, nil
+}
+
 func (s *stubIntegrationRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{Items: []AdminConversationSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }

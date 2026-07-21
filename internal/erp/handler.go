@@ -354,6 +354,33 @@ func (h *Handler) ListSystemAdmins(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// ListAdminRoles handles GET /api/system-admin/roles.
+func (h *Handler) ListAdminRoles(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	filter, err := parseAdminRoleFilter(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	resp, status, err := h.service.ListAdminRoles(filter, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // ListAdminConversations handles GET /api/system-admin/conversations.
 func (h *Handler) ListAdminConversations(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -554,6 +581,33 @@ func (h *Handler) CreateSystemAdmin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// CreateAdminRole handles POST /api/system-admin/roles.
+func (h *Handler) CreateAdminRole(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminRoleCreateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.CreateAdminRole(req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // GetUser handles GET /api/system-admin/users/{user_id}.
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -709,6 +763,60 @@ func (h *Handler) UpdateSystemAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, status, err := h.service.UpdateSystemAdmin(targetAdminID, req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
+// GetAdminRole handles GET /api/system-admin/roles/{role_id}.
+func (h *Handler) GetAdminRole(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+	roleID, ok := parseAdminRoleIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, err := h.service.GetAdminRole(roleID, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
+// UpdateAdminRole handles PATCH /api/system-admin/roles/{role_id}.
+func (h *Handler) UpdateAdminRole(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+	roleID, ok := parseAdminRoleIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminRoleCreateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.UpdateAdminRole(roleID, req, principal)
 	if err != nil {
 		writeJSON(w, status, errorResponse(err))
 		return
@@ -944,6 +1052,16 @@ func parseUserIDPath(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return targetUserID, true
 }
 
+func parseAdminRoleIDPath(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	roleID, err := strconv.ParseInt(strings.TrimSpace(r.PathValue("role_id")), 10, 64)
+	if err != nil || roleID <= 0 {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "role_id 格式錯誤"})
+		return 0, false
+	}
+
+	return roleID, true
+}
+
 func parseAdminUserFilter(r *http.Request) (AdminUserFilter, error) {
 	query := r.URL.Query()
 	filter := AdminUserFilter{
@@ -1034,6 +1152,31 @@ func parseSystemAdminFilter(r *http.Request) (SystemAdminFilter, error) {
 		filter.PerPage, err = strconv.Atoi(value)
 		if err != nil || !validAdminPerPage(filter.PerPage) {
 			return SystemAdminFilter{}, fmt.Errorf("每頁筆數格式錯誤")
+		}
+	}
+
+	return filter, nil
+}
+
+func parseAdminRoleFilter(r *http.Request) (AdminRoleFilter, error) {
+	query := r.URL.Query()
+	filter := AdminRoleFilter{
+		Role:    strings.TrimSpace(query.Get("role")),
+		Page:    1,
+		PerPage: 10,
+	}
+
+	var err error
+	if value := strings.TrimSpace(query.Get("page")); value != "" {
+		filter.Page, err = strconv.Atoi(value)
+		if err != nil || filter.Page < 1 {
+			return AdminRoleFilter{}, fmt.Errorf("頁碼格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("per_page")); value != "" {
+		filter.PerPage, err = strconv.Atoi(value)
+		if err != nil || !validAdminPerPage(filter.PerPage) {
+			return AdminRoleFilter{}, fmt.Errorf("每頁筆數格式錯誤")
 		}
 	}
 
@@ -1186,6 +1329,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "INVALID_EMAIL", Message: "Email 格式错误"}
 	case errors.Is(err, ErrInvalidStatus):
 		return Response{Success: false, Code: "INVALID_STATUS", Message: "状态仅支持 active 或 inactive"}
+	case errors.Is(err, ErrInvalidRole):
+		return Response{Success: false, Code: "INVALID_ROLE", Message: "角色代碼或名稱格式錯誤"}
 	case errors.Is(err, ErrInvalidPassword):
 		return Response{Success: false, Code: "INVALID_PASSWORD", Message: "密码需为 4 到 20 码，且只能包含英文、数字或特殊符号"}
 	case errors.Is(err, ErrPasswordConfirmation):
@@ -1208,6 +1353,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "NOT_FOUND", Message: "查无对应装置"}
 	case errors.Is(err, ErrUserAlreadyExists):
 		return Response{Success: false, Code: "USER_ALREADY_EXISTS", Message: "该外部用户已存在"}
+	case errors.Is(err, ErrRoleAlreadyExists):
+		return Response{Success: false, Code: "ROLE_ALREADY_EXISTS", Message: "角色代碼已存在"}
 	case errors.Is(err, ErrEmailAlreadyExists):
 		return Response{Success: false, Code: "EMAIL_ALREADY_EXISTS", Message: "Email 已存在"}
 	case errors.Is(err, ErrBulkInvitationTooMany):
