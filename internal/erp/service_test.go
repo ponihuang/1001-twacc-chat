@@ -357,6 +357,14 @@ func (m *mockRepository) UpdateAdminRole(roleID int64, params AdminRoleUpdatePar
 	return AdminRoleSummary{ID: roleID, Code: "system_admin", Name: params.Name, Status: params.Status}, nil
 }
 
+func (m *mockRepository) ListAdminRolePermissions(roleID int64) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (m *mockRepository) ReplaceAdminRolePermissions(roleID int64, permissions map[string]bool) error {
+	return nil
+}
+
 func (m *mockRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{
 		Items:      []AdminConversationSummary{},

@@ -273,6 +273,27 @@ type AdminRolePage struct {
 	TotalPages int                `json:"total_pages"`
 }
 
+// AdminPermissionItem is one editable permission switch for a backend role.
+type AdminPermissionItem struct {
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	Enabled  bool   `json:"enabled"`
+}
+
+// AdminPermissionGroup groups permissions by the admin sidebar category.
+type AdminPermissionGroup struct {
+	Key   string                `json:"key"`
+	Name  string                `json:"name"`
+	Items []AdminPermissionItem `json:"items"`
+}
+
+// AdminRolePermissionDetail is the API-facing permission detail shape.
+type AdminRolePermissionDetail struct {
+	Role   AdminRoleSummary       `json:"role"`
+	Groups []AdminPermissionGroup `json:"groups"`
+}
+
 // AdminConversationFilter contains supported filters for the admin conversation list.
 type AdminConversationFilter struct {
 	Type             string
@@ -479,6 +500,17 @@ type AdminRoleCreateRequest struct {
 	Status string `json:"status"`
 }
 
+// AdminRolePermissionSetting is one role permission setting submitted by the admin UI.
+type AdminRolePermissionSetting struct {
+	Key     string `json:"key"`
+	Enabled bool   `json:"enabled"`
+}
+
+// AdminRolePermissionUpdateRequest is the payload for replacing role permissions.
+type AdminRolePermissionUpdateRequest struct {
+	Permissions []AdminRolePermissionSetting `json:"permissions"`
+}
+
 // AdminUpdateUserRequest is the system-admin payload for updating a user.
 type AdminUpdateUserRequest struct {
 	Password    string `json:"password"`
@@ -651,6 +683,8 @@ type Repository interface {
 	FindAdminRoleByCode(code string) (AdminRoleSummary, error)
 	CreateAdminRole(params AdminRoleCreateParams) (AdminRoleSummary, error)
 	UpdateAdminRole(roleID int64, params AdminRoleUpdateParams) (AdminRoleSummary, error)
+	ListAdminRolePermissions(roleID int64) (map[string]bool, error)
+	ReplaceAdminRolePermissions(roleID int64, permissions map[string]bool) error
 	ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error)
 	GetAdminConversationDetail(filter AdminConversationMessageFilter) (AdminConversationDetail, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)

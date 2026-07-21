@@ -824,6 +824,60 @@ func (h *Handler) UpdateAdminRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// GetAdminRolePermissions handles GET /api/system-admin/roles/{role_id}/permissions.
+func (h *Handler) GetAdminRolePermissions(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+	roleID, ok := parseAdminRoleIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	resp, status, err := h.service.GetAdminRolePermissions(roleID, r.URL.Query().Get("keyword"), principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
+// UpdateAdminRolePermissions handles PATCH /api/system-admin/roles/{role_id}/permissions.
+func (h *Handler) UpdateAdminRolePermissions(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+	roleID, ok := parseAdminRoleIDPath(w, r)
+	if !ok {
+		return
+	}
+
+	var req AdminRolePermissionUpdateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: "请求格式错误"})
+		return
+	}
+
+	resp, status, err := h.service.UpdateAdminRolePermissions(roleID, req, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+	writeJSON(w, status, resp)
+}
+
 // ListDevices handles GET /api/system-admin/users/{user_id}/devices.
 func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {

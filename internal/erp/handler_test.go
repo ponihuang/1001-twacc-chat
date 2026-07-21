@@ -110,6 +110,14 @@ func (s *stubIntegrationRepository) UpdateAdminRole(roleID int64, params AdminRo
 	return AdminRoleSummary{ID: roleID, Code: "system_admin", Name: params.Name, Status: params.Status}, nil
 }
 
+func (s *stubIntegrationRepository) ListAdminRolePermissions(roleID int64) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (s *stubIntegrationRepository) ReplaceAdminRolePermissions(roleID int64, permissions map[string]bool) error {
+	return nil
+}
+
 func (s *stubIntegrationRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{Items: []AdminConversationSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }

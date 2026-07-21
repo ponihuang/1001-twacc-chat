@@ -35,6 +35,8 @@ func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, cha
 		mux.HandleFunc("POST /api/system-admin/roles", integrationHandler.CreateAdminRole)
 		mux.HandleFunc("GET /api/system-admin/roles/{role_id}", integrationHandler.GetAdminRole)
 		mux.HandleFunc("PATCH /api/system-admin/roles/{role_id}", integrationHandler.UpdateAdminRole)
+		mux.HandleFunc("GET /api/system-admin/roles/{role_id}/permissions", integrationHandler.GetAdminRolePermissions)
+		mux.HandleFunc("PATCH /api/system-admin/roles/{role_id}/permissions", integrationHandler.UpdateAdminRolePermissions)
 		mux.HandleFunc("GET /api/system-admin/conversations", integrationHandler.ListAdminConversations)
 		mux.HandleFunc("GET /api/system-admin/conversations/{conversation_id}", integrationHandler.GetAdminConversationDetail)
 		mux.HandleFunc("GET /api/system-admin/users", integrationHandler.ListUsers)

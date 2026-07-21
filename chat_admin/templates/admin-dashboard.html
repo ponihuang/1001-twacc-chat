@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-permissions-20260721a">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-permissions-detail-20260722a">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-permissions-20260721a"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-permissions-detail-20260722a"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
@@ -914,6 +914,52 @@
                 <button type="button" class="btn btn-compact" id="reset-edit-permission">重置</button>
               </div>
             </form>
+          </div>
+        </section>
+
+        <section data-view="permissionDetail" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="permissions" aria-label="返回權限管理">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="permissions">權限管理</button>
+              <span>/</span>
+              <span id="permission-detail-breadcrumb-title">權限詳細</span>
+            </nav>
+
+            <form class="admin-filter-panel permission-detail-filter-panel" id="permission-detail-filter-form" aria-label="權限詳細篩選">
+              <label class="permission-detail-role-field">
+                <span>角色</span>
+                <input type="text" id="permission-detail-role-name" readonly aria-readonly="true">
+              </label>
+              <label>
+                <span>搜尋</span>
+                <input type="search" id="permission-detail-keyword" placeholder="輸入關鍵字搜尋" autocomplete="off">
+              </label>
+              <div class="filter-actions admin-filter-actions permission-detail-actions">
+                <button type="button" class="btn" id="collapse-permission-groups">收起列表</button>
+                <button type="button" class="btn" id="expand-permission-groups">展開列表</button>
+                <button type="button" class="btn" id="disable-all-permissions">關閉所有權限</button>
+                <button type="button" class="btn" id="enable-all-permissions">給予所有權限</button>
+              </div>
+            </form>
+
+            <section class="permission-detail-card" aria-label="角色權限細項">
+              <div class="is-empty" id="permission-detail-loading" hidden>
+                <div class="loading"></div>
+                <p>載入中...</p>
+              </div>
+              <div class="is-empty" id="permission-detail-empty" hidden>
+                <p>找不到權限項目</p>
+              </div>
+              <div class="permission-groups" id="permission-detail-groups"></div>
+            </section>
+
+            <div class="user-create-actions permission-detail-save-actions">
+              <button type="button" class="btn btn-primary btn-compact" id="submit-permission-detail">儲存</button>
+              <button type="button" class="btn btn-compact" data-menu-item="permissions">返回</button>
+            </div>
           </div>
         </section>
       </main>

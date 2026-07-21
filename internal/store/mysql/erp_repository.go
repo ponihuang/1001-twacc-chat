@@ -1727,6 +1727,67 @@ func (r *IntegrationRepository) UpdateAdminRole(roleID int64, params erp.AdminRo
 	return r.FindAdminRoleByID(roleID)
 }
 
+// ListAdminRolePermissions loads all stored permission switches for a backend role.
+func (r *IntegrationRepository) ListAdminRolePermissions(roleID int64) (map[string]bool, error) {
+	rows, err := r.db.Query(
+		`SELECT permission_key, enabled
+		   FROM admin_role_permissions
+		  WHERE role_id = ?`,
+		roleID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list admin role permissions: %w", err)
+	}
+	defer rows.Close()
+
+	permissions := make(map[string]bool)
+	for rows.Next() {
+		var key string
+		var enabled bool
+		if err := rows.Scan(&key, &enabled); err != nil {
+			return nil, fmt.Errorf("scan admin role permission: %w", err)
+		}
+		permissions[key] = enabled
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate admin role permissions: %w", err)
+	}
+	return permissions, nil
+}
+
+// ReplaceAdminRolePermissions replaces all stored permission switches for a backend role.
+func (r *IntegrationRepository) ReplaceAdminRolePermissions(roleID int64, permissions map[string]bool) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin admin role permission transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM admin_role_permissions WHERE role_id = ?`, roleID); err != nil {
+		return fmt.Errorf("delete admin role permissions: %w", err)
+	}
+
+	stmt, err := tx.Prepare(
+		`INSERT INTO admin_role_permissions (role_id, permission_key, enabled)
+		 VALUES (?, ?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare admin role permissions insert: %w", err)
+	}
+	defer stmt.Close()
+
+	for key, enabled := range permissions {
+		if _, err := stmt.Exec(roleID, key, enabled); err != nil {
+			return fmt.Errorf("insert admin role permission: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit admin role permissions: %w", err)
+	}
+	return nil
+}
+
 type adminRoleScanner interface {
 	Scan(dest ...any) error
 }

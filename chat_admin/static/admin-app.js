@@ -29,7 +29,9 @@
   let permissionRolesPage = 1;
   let permissionRolesPerPage = 10;
   let editingPermissionRoleID = null;
+  let activePermissionRoleID = null;
   let originalEditablePermissionRole = null;
+  let currentPermissionDetail = null;
   let modalConfirmHandler = null;
 
   // Adjust each user-table column here. Use width for a fixed width or
@@ -59,7 +61,8 @@
     adminEdit: null,
     permissions: '/office/permissions',
     permissionCreate: '/office/permissions/create',
-    permissionEdit: null
+    permissionEdit: null,
+    permissionDetail: null
   };
 
   const ROUTE_VIEWS = Object.entries(VIEW_ROUTES).reduce((routes, [viewName, path]) => {
@@ -85,6 +88,11 @@
     if (permissionEditMatch) {
       editingPermissionRoleID = permissionEditMatch[1];
       return 'permissionEdit';
+    }
+    const permissionDetailMatch = window.location.pathname.match(/^\/office\/permissions\/(\d+)\/detail$/);
+    if (permissionDetailMatch) {
+      activePermissionRoleID = permissionDetailMatch[1];
+      return 'permissionDetail';
     }
     const conversationDetailMatch = window.location.pathname.match(/^\/office\/conversations\/([^/]+)$/);
     if (conversationDetailMatch) {
@@ -300,6 +308,18 @@
       editPermissionStatus: document.getElementById('edit-permission-status'),
       submitEditPermission: document.getElementById('submit-edit-permission'),
       resetEditPermission: document.getElementById('reset-edit-permission'),
+      permissionDetailFilterForm: document.getElementById('permission-detail-filter-form'),
+      permissionDetailRoleName: document.getElementById('permission-detail-role-name'),
+      permissionDetailKeyword: document.getElementById('permission-detail-keyword'),
+      permissionDetailBreadcrumbTitle: document.getElementById('permission-detail-breadcrumb-title'),
+      permissionDetailLoading: document.getElementById('permission-detail-loading'),
+      permissionDetailEmpty: document.getElementById('permission-detail-empty'),
+      permissionDetailGroups: document.getElementById('permission-detail-groups'),
+      collapsePermissionGroups: document.getElementById('collapse-permission-groups'),
+      expandPermissionGroups: document.getElementById('expand-permission-groups'),
+      disableAllPermissions: document.getElementById('disable-all-permissions'),
+      enableAllPermissions: document.getElementById('enable-all-permissions'),
+      submitPermissionDetail: document.getElementById('submit-permission-detail'),
       
       // Devices
       deviceUserId: document.getElementById('device-user-id'),
@@ -590,6 +610,27 @@
     if (elements.resetEditPermission) {
       elements.resetEditPermission.addEventListener('click', resetPermissionRoleEditForm);
     }
+    if (elements.permissionDetailFilterForm) {
+      elements.permissionDetailFilterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        loadPermissionRolePermissions();
+      });
+    }
+    if (elements.collapsePermissionGroups) {
+      elements.collapsePermissionGroups.addEventListener('click', () => setPermissionGroupsCollapsed(true));
+    }
+    if (elements.expandPermissionGroups) {
+      elements.expandPermissionGroups.addEventListener('click', () => setPermissionGroupsCollapsed(false));
+    }
+    if (elements.disableAllPermissions) {
+      elements.disableAllPermissions.addEventListener('click', () => setAllPermissionToggles(false));
+    }
+    if (elements.enableAllPermissions) {
+      elements.enableAllPermissions.addEventListener('click', () => setAllPermissionToggles(true));
+    }
+    if (elements.submitPermissionDetail) {
+      elements.submitPermissionDetail.addEventListener('click', savePermissionRolePermissions);
+    }
 
     // Devices management
     if (elements.searchDevicesBtn) {
@@ -792,12 +833,18 @@
       const match = editPath.match(/^\/office\/permissions\/(\d+)\/edit$/);
       editingPermissionRoleID = match ? match[1] : editingPermissionRoleID;
     }
+    if (viewName === 'permissionDetail') {
+      const detailPath = options.path || window.location.pathname;
+      const match = detailPath.match(/^\/office\/permissions\/(\d+)\/detail$/);
+      activePermissionRoleID = match ? match[1] : activePermissionRoleID;
+    }
 
     if (!options.skipHistory) {
       const nextPath = options.path || VIEW_ROUTES[viewName] || (
         viewName === 'userEdit' && editingUserID ? `/office/user/${editingUserID}/edit` :
         viewName === 'adminEdit' && editingAdminUserID ? `/office/admins/${editingAdminUserID}/edit` :
         viewName === 'permissionEdit' && editingPermissionRoleID ? `/office/permissions/${editingPermissionRoleID}/edit` :
+        viewName === 'permissionDetail' && activePermissionRoleID ? `/office/permissions/${activePermissionRoleID}/detail` :
         viewName === 'conversationDetail' ? window.location.pathname : ''
       );
       if (nextPath && window.location.pathname !== nextPath) {
@@ -811,7 +858,7 @@
       ? 'users'
       : viewName === 'adminCreate' || viewName === 'adminEdit'
         ? 'admins'
-        : viewName === 'permissionCreate' || viewName === 'permissionEdit'
+        : viewName === 'permissionCreate' || viewName === 'permissionEdit' || viewName === 'permissionDetail'
           ? 'permissions'
           : viewName === 'conversationDetail' ? 'conversations' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
@@ -872,6 +919,9 @@
         break;
       case 'permissionEdit':
         loadPermissionRoleForEdit();
+        break;
+      case 'permissionDetail':
+        loadPermissionRolePermissions();
         break;
       case 'devices':
         // Already handled by button
@@ -2344,6 +2394,14 @@
           cell.appendChild(status);
         } else if (index === 5) {
           cell.className = 'actions-cell';
+          const detailButton = document.createElement('button');
+          detailButton.type = 'button';
+          detailButton.className = 'table-action';
+          detailButton.textContent = '權限詳細';
+          detailButton.title = '查看權限詳細';
+          detailButton.addEventListener('click', () => openPermissionRoleDetail(role.id));
+          cell.appendChild(detailButton);
+
           const editButton = document.createElement('button');
           editButton.type = 'button';
           editButton.className = 'table-action';
@@ -2444,6 +2502,180 @@
   function openPermissionRoleEdit(roleID) {
     editingPermissionRoleID = String(roleID);
     switchView('permissionEdit', { path: `/office/permissions/${encodeURIComponent(editingPermissionRoleID)}/edit` });
+  }
+
+  function openPermissionRoleDetail(roleID) {
+    activePermissionRoleID = String(roleID);
+    switchView('permissionDetail', { path: `/office/permissions/${encodeURIComponent(activePermissionRoleID)}/detail` });
+  }
+
+  async function loadPermissionRolePermissions() {
+    if (!activePermissionRoleID) return;
+
+    if (elements.permissionDetailLoading) elements.permissionDetailLoading.hidden = false;
+    if (elements.permissionDetailEmpty) elements.permissionDetailEmpty.hidden = true;
+    if (elements.permissionDetailGroups) elements.permissionDetailGroups.replaceChildren();
+    if (elements.submitPermissionDetail) elements.submitPermissionDetail.disabled = true;
+
+    try {
+      const params = new URLSearchParams();
+      const keyword = elements.permissionDetailKeyword?.value?.trim();
+      if (keyword) params.set('keyword', keyword);
+
+      const url = `/api/system-admin/roles/${encodeURIComponent(activePermissionRoleID)}/permissions${params.toString() ? `?${params}` : ''}`;
+      const response = await makeAuthenticatedRequest(url);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入權限詳細失敗');
+      }
+
+      renderPermissionRolePermissions(data.data || {});
+    } catch (err) {
+      showError(err.message || '載入權限詳細失敗');
+      if (elements.permissionDetailEmpty) elements.permissionDetailEmpty.hidden = false;
+    } finally {
+      if (elements.permissionDetailLoading) elements.permissionDetailLoading.hidden = true;
+      if (elements.submitPermissionDetail) elements.submitPermissionDetail.disabled = false;
+    }
+  }
+
+  function renderPermissionRolePermissions(detail) {
+    currentPermissionDetail = detail;
+    const role = detail.role || {};
+    const roleName = role.name || role.code || `#${activePermissionRoleID}`;
+    const groups = Array.isArray(detail.groups) ? detail.groups : [];
+
+    if (elements.permissionDetailRoleName) {
+      elements.permissionDetailRoleName.value = roleName;
+    }
+    if (elements.permissionDetailBreadcrumbTitle) {
+      elements.permissionDetailBreadcrumbTitle.textContent = `${roleName} - 權限詳細`;
+    }
+    if (!elements.permissionDetailGroups) return;
+
+    elements.permissionDetailGroups.replaceChildren();
+    if (groups.length === 0) {
+      if (elements.permissionDetailEmpty) elements.permissionDetailEmpty.hidden = false;
+      return;
+    }
+    if (elements.permissionDetailEmpty) elements.permissionDetailEmpty.hidden = true;
+
+    groups.forEach((group) => {
+      const groupEl = document.createElement('section');
+      groupEl.className = 'permission-group';
+      groupEl.dataset.permissionGroup = group.key || '';
+
+      const header = document.createElement('button');
+      header.type = 'button';
+      header.className = 'permission-group-header';
+      header.setAttribute('aria-expanded', 'true');
+
+      const title = document.createElement('span');
+      title.textContent = group.name || group.key || '未命名分類';
+      const count = document.createElement('small');
+      const items = Array.isArray(group.items) ? group.items : [];
+      count.textContent = `${items.filter(item => item.enabled).length} / ${items.length}`;
+      header.append(title, count);
+
+      const itemsEl = document.createElement('div');
+      itemsEl.className = 'permission-group-items';
+
+      items.forEach((item) => {
+        const row = document.createElement('label');
+        row.className = 'permission-toggle-row';
+
+        const main = document.createElement('span');
+        main.className = 'permission-toggle-main';
+        const name = document.createElement('strong');
+        name.textContent = item.name || item.key || '未命名權限';
+        const key = document.createElement('small');
+        key.textContent = item.key || '';
+        main.append(name, key);
+
+        const toggle = document.createElement('input');
+        toggle.type = 'checkbox';
+        toggle.className = 'permission-toggle';
+        toggle.checked = Boolean(item.enabled);
+        toggle.dataset.permissionKey = item.key || '';
+        toggle.addEventListener('change', () => updatePermissionGroupCount(groupEl));
+
+        row.append(main, toggle);
+        itemsEl.appendChild(row);
+      });
+
+      header.addEventListener('click', () => {
+        const collapsed = groupEl.classList.toggle('is-collapsed');
+        header.setAttribute('aria-expanded', String(!collapsed));
+      });
+
+      groupEl.append(header, itemsEl);
+      elements.permissionDetailGroups.appendChild(groupEl);
+    });
+  }
+
+  function updatePermissionGroupCount(groupEl) {
+    if (!groupEl) return;
+    const count = groupEl.querySelector('.permission-group-header small');
+    const toggles = Array.from(groupEl.querySelectorAll('input[data-permission-key]'));
+    if (count) {
+      count.textContent = `${toggles.filter(toggle => toggle.checked).length} / ${toggles.length}`;
+    }
+  }
+
+  function setPermissionGroupsCollapsed(collapsed) {
+    document.querySelectorAll('.permission-group').forEach(groupEl => {
+      groupEl.classList.toggle('is-collapsed', collapsed);
+      groupEl.querySelector('.permission-group-header')?.setAttribute('aria-expanded', String(!collapsed));
+    });
+  }
+
+  function setAllPermissionToggles(enabled) {
+    document.querySelectorAll('#permission-detail-groups input[data-permission-key]').forEach(toggle => {
+      toggle.checked = enabled;
+    });
+    document.querySelectorAll('.permission-group').forEach(updatePermissionGroupCount);
+  }
+
+  function buildPermissionRolePermissionPayload() {
+    return Array.from(document.querySelectorAll('#permission-detail-groups input[data-permission-key]'))
+      .filter(toggle => toggle.dataset.permissionKey)
+      .map(toggle => ({
+        key: toggle.dataset.permissionKey,
+        enabled: toggle.checked
+      }));
+  }
+
+  async function savePermissionRolePermissions() {
+    if (!activePermissionRoleID) return;
+
+    const permissions = buildPermissionRolePermissionPayload();
+    if (permissions.length === 0 && currentPermissionDetail?.groups?.length) {
+      showError('目前沒有可儲存的權限項目');
+      return;
+    }
+
+    if (elements.submitPermissionDetail) elements.submitPermissionDetail.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/roles/${encodeURIComponent(activePermissionRoleID)}/permissions`, {
+        method: 'PATCH',
+        body: JSON.stringify({ permissions })
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '更新權限詳細失敗');
+      }
+
+      renderPermissionRolePermissions(data.data || {});
+      showSuccess('權限詳細已更新');
+    } catch (err) {
+      showError(err.message || '更新權限詳細失敗');
+    } finally {
+      if (elements.submitPermissionDetail) elements.submitPermissionDetail.disabled = false;
+    }
   }
 
   async function loadPermissionRoleForEdit() {
