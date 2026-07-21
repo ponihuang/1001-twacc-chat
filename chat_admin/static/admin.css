@@ -461,16 +461,16 @@ button:disabled {
 }
 
 .user-filter-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px 26px;
   align-items: end;
   padding: 0 0 10px;
 }
 
 .admin-conversation-filter-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px 26px;
   align-items: end;
   padding: 0 0 10px;
@@ -500,22 +500,69 @@ button:disabled {
   gap: 8px;
 }
 
-.user-filter-panel .filter-email {
-  grid-column: auto;
+.admin-conversation-filter-panel label {
+  flex: 0 0 190px;
 }
 
-.user-filter-panel .filter-start-time {
-  grid-column: 1;
+.admin-conversation-filter-panel .filter-start-time,
+.admin-conversation-filter-panel .filter-end-time {
+  flex-basis: 127px;
+}
+
+.admin-conversation-filter-panel .filter-wide {
+  flex-basis: 240px;
+}
+
+.admin-conversation-filter-panel .filter-mode {
+  flex-basis: 100px;
 }
 
 .invitation-filter-panel {
-  grid-template-columns: 280px 140px 170px auto;
   gap: 14px 18px;
-  max-width: 920px;
+  max-width: none;
+}
+
+.user-filter-panel label {
+  flex: 0 0 220px;
+}
+
+.user-filter-panel .filter-start-time,
+.user-filter-panel .filter-end-time {
+  flex-basis: 160px;
+}
+
+.user-filter-panel .filter-email {
+  flex-basis: 280px;
+}
+
+.user-filter-panel .filter-status,
+.user-filter-panel .filter-source {
+  flex-basis: 140px;
+}
+
+.user-filter-panel .filter-wide,
+.user-filter-panel .filter-sort {
+  flex-basis: 180px;
+}
+
+.invitation-filter-panel label {
+  flex-basis: 220px;
+}
+
+.invitation-filter-panel .filter-email {
+  flex-basis: 280px;
+}
+
+.invitation-filter-panel .filter-status {
+  flex-basis: 140px;
+}
+
+.invitation-filter-panel .filter-sort {
+  flex-basis: 170px;
 }
 
 .invitation-filter-panel .filter-actions {
-  grid-column: auto;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
@@ -530,16 +577,21 @@ button:disabled {
 }
 
 .admin-filter-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 220px));
+  display: flex;
+  flex-wrap: wrap;
   gap: 18px 24px;
   align-items: end;
-  max-width: 900px;
+  max-width: none;
 }
 
 .admin-filter-panel label {
   display: grid;
   gap: 5px;
+  flex: 0 0 220px;
+}
+
+.admin-filter-panel .filter-status {
+  flex-basis: 140px;
 }
 
 .admin-filter-panel label span,
@@ -549,7 +601,7 @@ button:disabled {
 .field label {
   color: var(--admin-text);
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .admin-filter-panel input,
@@ -582,6 +634,31 @@ button:disabled {
   color: #a6a19a;
   font-size: 12px;
   opacity: 1;
+}
+
+.date-field-empty {
+  position: relative;
+}
+
+.date-field-empty input[type="date"] {
+  color: transparent;
+}
+
+.date-field-empty input[type="date"]:focus {
+  color: transparent;
+}
+
+.date-field-empty::after {
+  content: "選擇日期";
+  position: absolute;
+  left: 11px;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  height: 34px;
+  color: #a6a19a;
+  font-size: 12px;
+  pointer-events: none;
 }
 
 .admin-filter-panel input:focus,
@@ -853,26 +930,43 @@ button:disabled {
 .btn {
   height: 38px;
   padding: 0 18px;
-  border: 1px solid var(--admin-line);
+  border: 1px solid var(--admin-panel);
   border-radius: 3px;
   background: var(--admin-panel);
   color: var(--admin-text);
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .btn:hover {
+  border-color: var(--admin-sidebar-hover);
   background: var(--admin-sidebar-hover);
+  color: var(--admin-text);
 }
 
 .btn-primary {
   border-color: var(--admin-accent);
   background: var(--admin-accent);
   color: var(--admin-panel);
+  font-weight: 600;
 }
 
 .btn-primary:hover {
   border-color: var(--admin-accent-strong);
   background: var(--admin-accent-strong);
+}
+
+.btn-success {
+  border-color: #edf7f0;
+  background: #edf7f0;
+  color: #2f6d48;
+  font-weight: 600;
+}
+
+.btn-success:hover {
+  border-color: #e1f0e6;
+  background: #e1f0e6;
+  color: #24563a;
 }
 
 .btn-compact {
@@ -1363,8 +1457,20 @@ button:disabled {
     gap: 12px;
   }
 
-  .user-filter-panel .filter-start-time {
-    grid-column: auto;
+  .user-filter-panel label,
+  .user-filter-panel .filter-start-time,
+  .user-filter-panel .filter-end-time,
+  .user-filter-panel .filter-email,
+  .user-filter-panel .filter-status,
+  .user-filter-panel .filter-source,
+  .user-filter-panel .filter-wide,
+  .user-filter-panel .filter-sort,
+  .admin-conversation-filter-panel label,
+  .admin-conversation-filter-panel .filter-start-time,
+  .admin-conversation-filter-panel .filter-end-time,
+  .admin-conversation-filter-panel .filter-wide,
+  .admin-conversation-filter-panel .filter-mode {
+    flex-basis: 100%;
   }
 
   .filter-actions {

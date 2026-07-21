@@ -94,6 +94,7 @@
     renderTableColumns(elements.usersTable, elements.usersColgroup, elements.usersThead, USER_COLUMNS);
     setupOverlayScrollbar(document.getElementById('users-table-scroll'));
     setupEventListeners();
+    setupDateInputPickers();
     switchView(resolveInitialView(), { replace: true });
     await loadInitialData();
   }
@@ -602,6 +603,36 @@
         logout();
       });
     }
+  }
+
+  function setupDateInputPickers() {
+    document.querySelectorAll('input[type="date"]').forEach((input) => {
+      if (input.dataset.pickerTriggerBound === 'true') {
+        return;
+      }
+      input.dataset.pickerTriggerBound = 'true';
+      updateDateInputPlaceholder(input);
+      input.addEventListener('input', () => updateDateInputPlaceholder(input));
+      input.addEventListener('change', () => updateDateInputPlaceholder(input));
+      input.addEventListener('click', () => {
+        if (typeof input.showPicker !== 'function') {
+          return;
+        }
+        try {
+          input.showPicker();
+        } catch (error) {
+          // Some browsers throw when the native picker is already open.
+        }
+      });
+    });
+  }
+
+  function updateDateInputPlaceholder(input) {
+    const field = input.closest('label');
+    if (!field) {
+      return;
+    }
+    field.classList.toggle('date-field-empty', !input.value);
   }
 
   function toggleAdminSidebar() {
