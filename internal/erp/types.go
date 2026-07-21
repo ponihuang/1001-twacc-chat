@@ -246,6 +246,114 @@ type SystemAdminPage struct {
 	TotalPages int                  `json:"total_pages"`
 }
 
+// AdminConversationFilter contains supported filters for the admin conversation list.
+type AdminConversationFilter struct {
+	Type             string
+	Keyword          string
+	LastActivityFrom *time.Time
+	LastActivityTo   *time.Time
+	Page             int
+	PerPage          int
+}
+
+// AdminConversationSummary is the API-facing conversation shape for the admin console.
+type AdminConversationSummary struct {
+	ID                     int64      `json:"id"`
+	Type                   string     `json:"type"`
+	Name                   string     `json:"name"`
+	MemberCount            int        `json:"member_count"`
+	LastMessage            string     `json:"last_message"`
+	LastMessageType        string     `json:"last_message_type"`
+	LastMessageAt          *time.Time `json:"last_message_at,omitempty"`
+	LastSenderID           int64      `json:"last_sender_id,omitempty"`
+	LastSenderAccount      string     `json:"last_sender_account,omitempty"`
+	LastSenderName         string     `json:"last_sender_name,omitempty"`
+	LastActivityAt         time.Time  `json:"last_activity_at"`
+	CreatedAt              time.Time  `json:"created_at"`
+	CreatedByID            int64      `json:"created_by_id,omitempty"`
+	CreatedByAccount       string     `json:"created_by_account,omitempty"`
+	CreatedByName          string     `json:"created_by_name,omitempty"`
+	LatestMessageAvailable bool       `json:"latest_message_available"`
+}
+
+// AdminConversationPage is the paginated response for the admin conversation list.
+type AdminConversationPage struct {
+	Items      []AdminConversationSummary `json:"items"`
+	Total      int                        `json:"total"`
+	Page       int                        `json:"page"`
+	PerPage    int                        `json:"per_page"`
+	TotalPages int                        `json:"total_pages"`
+}
+
+// AdminConversationMessageFilter contains supported filters for one admin read-only message page.
+type AdminConversationMessageFilter struct {
+	ConversationID int64
+	Keyword        string
+	SenderKeyword  string
+	MessageType    string
+	SentFrom       *time.Time
+	SentTo         *time.Time
+	MentionType    string
+	Page           int
+	PerPage        int
+}
+
+// AdminConversationParticipant is a read-only participant summary for admin conversation records.
+type AdminConversationParticipant struct {
+	UserID      int64  `json:"user_id"`
+	Account     string `json:"account"`
+	DisplayName string `json:"display_name"`
+}
+
+// AdminConversationAttachment is a read-only attachment summary for admin conversation records.
+type AdminConversationAttachment struct {
+	ID           int64  `json:"id"`
+	OriginalName string `json:"original_name"`
+	StoragePath  string `json:"storage_path"`
+	MIMEType     string `json:"mime_type"`
+	SizeBytes    int64  `json:"size_bytes"`
+	URL          string `json:"url"`
+}
+
+// AdminConversationMention is a read-only mention summary for admin conversation records.
+type AdminConversationMention struct {
+	UserID      int64  `json:"user_id"`
+	Account     string `json:"account"`
+	DisplayName string `json:"display_name"`
+	MentionType string `json:"mention_type"`
+}
+
+// AdminConversationMessage is one read-only message row for admin conversation records.
+type AdminConversationMessage struct {
+	ID            int64                         `json:"id"`
+	SentAt        time.Time                     `json:"sent_at"`
+	SenderID      int64                         `json:"sender_id"`
+	SenderAccount string                        `json:"sender_account"`
+	SenderName    string                        `json:"sender_name"`
+	MessageType   string                        `json:"message_type"`
+	Content       string                        `json:"content"`
+	Status        string                        `json:"status"`
+	IsRecalled    bool                          `json:"is_recalled"`
+	Attachments   []AdminConversationAttachment `json:"attachments"`
+	Mentions      []AdminConversationMention    `json:"mentions"`
+}
+
+// AdminConversationMessagePage is the paginated message result for admin conversation records.
+type AdminConversationMessagePage struct {
+	Items      []AdminConversationMessage `json:"items"`
+	Total      int                        `json:"total"`
+	Page       int                        `json:"page"`
+	PerPage    int                        `json:"per_page"`
+	TotalPages int                        `json:"total_pages"`
+}
+
+// AdminConversationDetail is the read-only admin detail payload for one conversation.
+type AdminConversationDetail struct {
+	Conversation AdminConversationSummary       `json:"conversation"`
+	Participants []AdminConversationParticipant `json:"participants"`
+	Messages     AdminConversationMessagePage   `json:"messages"`
+}
+
 // SystemAdminBootstrapResult describes an idempotent first-admin bootstrap run.
 type SystemAdminBootstrapResult struct {
 	Admin        SystemAdminSummary
@@ -490,6 +598,8 @@ type Repository interface {
 	MarkUserInvitationSent(invitationID int64, sentAt time.Time) error
 	AcceptUserInvitation(params AcceptUserInvitationParams) (User, error)
 	ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error)
+	ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error)
+	GetAdminConversationDetail(filter AdminConversationMessageFilter) (AdminConversationDetail, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)
 	FindSystemAdminByAccount(account string) (SystemAdminSummary, error)
 	CreateSystemAdmin(params SystemAdminCreateParams) (SystemAdminSummary, error)

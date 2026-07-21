@@ -983,6 +983,513 @@ func (r *IntegrationRepository) ListUsers(filter erp.AdminUserFilter) (erp.Admin
 	}, nil
 }
 
+// ListAdminConversations returns one read-only page of chat conversations for backend admins.
+func (r *IntegrationRepository) ListAdminConversations(filter erp.AdminConversationFilter) (erp.AdminConversationPage, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage < 1 {
+		perPage = 10
+	}
+
+	from := adminConversationsFromSQL()
+	activityExpr := "COALESCE(lm.created_at, c.created_at)"
+	var where strings.Builder
+	where.WriteString(" WHERE 1 = 1")
+	args := make([]any, 0, 6)
+	if value := strings.TrimSpace(filter.Type); value != "" {
+		where.WriteString(" AND c.type = ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(filter.Keyword); value != "" {
+		like := "%" + value + "%"
+		where.WriteString(` AND (
+			COALESCE(c.name, '') LIKE ?
+			OR EXISTS (
+				SELECT 1
+				  FROM conversation_members search_cm
+				  JOIN users search_u ON search_u.id = search_cm.user_id
+				 WHERE search_cm.conversation_id = c.id
+				   AND (search_u.external_user_id LIKE ? OR search_u.display_name LIKE ?)
+			)
+		)`)
+		args = append(args, like, like, like)
+	}
+	if filter.LastActivityFrom != nil {
+		where.WriteString(" AND " + activityExpr + " >= ?")
+		args = append(args, *filter.LastActivityFrom)
+	}
+	if filter.LastActivityTo != nil {
+		where.WriteString(" AND " + activityExpr + " <= ?")
+		args = append(args, *filter.LastActivityTo)
+	}
+
+	var total int
+	if err := r.db.QueryRow("SELECT COUNT(*) "+from+where.String(), args...).Scan(&total); err != nil {
+		return erp.AdminConversationPage{}, fmt.Errorf("count admin conversations: %w", err)
+	}
+
+	query := `SELECT c.id, c.type,
+	                 CASE
+	                   WHEN c.type = 'direct' THEN COALESCE(NULLIF(ms.member_names, ''), CONCAT('聊天室#', c.id))
+	                   ELSE COALESCE(NULLIF(c.name, ''), CONCAT('群組#', c.id))
+	                 END AS display_name,
+	                 CASE WHEN c.type = 'direct' THEN 2 ELSE COALESCE(ms.member_count, 0) END AS member_count,
+	                 lm.id AS last_message_id,
+	                 COALESCE(lm.message_type, '') AS last_message_type,
+	                 COALESCE(lm.content, '') AS last_message_content,
+	                 lm.created_at AS last_message_at,
+	                 last_sender.id AS last_sender_id,
+	                 COALESCE(last_sender.external_user_id, '') AS last_sender_account,
+	                 COALESCE(last_sender.display_name, '') AS last_sender_name,
+	                 ` + activityExpr + ` AS last_activity_at,
+	                 c.created_at
+	            ` + from + where.String() + `
+	        ORDER BY last_activity_at DESC, c.id DESC
+	           LIMIT ? OFFSET ?`
+	queryArgs := append(append([]any{}, args...), perPage, (page-1)*perPage)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return erp.AdminConversationPage{}, fmt.Errorf("list admin conversations: %w", err)
+	}
+	defer rows.Close()
+
+	conversations := make([]erp.AdminConversationSummary, 0)
+	for rows.Next() {
+		var item erp.AdminConversationSummary
+		var lastMessageID sql.NullInt64
+		var lastMessageAt sql.NullTime
+		var lastSenderID sql.NullInt64
+		var lastMessageContent string
+		if err := rows.Scan(
+			&item.ID,
+			&item.Type,
+			&item.Name,
+			&item.MemberCount,
+			&lastMessageID,
+			&item.LastMessageType,
+			&lastMessageContent,
+			&lastMessageAt,
+			&lastSenderID,
+			&item.LastSenderAccount,
+			&item.LastSenderName,
+			&item.LastActivityAt,
+			&item.CreatedAt,
+		); err != nil {
+			return erp.AdminConversationPage{}, fmt.Errorf("scan admin conversation list: %w", err)
+		}
+		if lastMessageID.Valid {
+			item.LatestMessageAvailable = true
+			item.LastMessage = adminLastMessagePreview(item.LastMessageType, lastMessageContent)
+		}
+		if lastMessageAt.Valid {
+			item.LastMessageAt = &lastMessageAt.Time
+		}
+		if lastSenderID.Valid {
+			item.LastSenderID = lastSenderID.Int64
+		}
+		conversations = append(conversations, item)
+	}
+	if err := rows.Err(); err != nil {
+		return erp.AdminConversationPage{}, fmt.Errorf("iterate admin conversation list: %w", err)
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+	return erp.AdminConversationPage{
+		Items:      conversations,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// GetAdminConversationDetail returns one read-only conversation record with one page of messages.
+func (r *IntegrationRepository) GetAdminConversationDetail(filter erp.AdminConversationMessageFilter) (erp.AdminConversationDetail, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage <= 0 {
+		perPage = 20
+	}
+
+	conversation, err := r.getAdminConversationSummary(filter.ConversationID)
+	if err != nil {
+		return erp.AdminConversationDetail{}, err
+	}
+
+	participants, err := r.listAdminConversationParticipants(filter.ConversationID)
+	if err != nil {
+		return erp.AdminConversationDetail{}, err
+	}
+
+	messageWhere, messageArgs := adminConversationMessageWhere(filter)
+	var total int
+	if err := r.db.QueryRow("SELECT COUNT(*) FROM messages m LEFT JOIN users sender ON sender.id = m.sender_id "+messageWhere, messageArgs...).Scan(&total); err != nil {
+		return erp.AdminConversationDetail{}, fmt.Errorf("count admin conversation messages: %w", err)
+	}
+
+	query := `SELECT m.id,
+	                 m.created_at,
+	                 m.sender_id,
+	                 COALESCE(sender.external_user_id, '') AS sender_account,
+	                 COALESCE(sender.display_name, '') AS sender_name,
+	                 m.message_type,
+	                 CASE WHEN m.is_recalled THEN '' ELSE m.content END AS content,
+	                 m.is_recalled
+	            FROM messages m
+	       LEFT JOIN users sender ON sender.id = m.sender_id
+	       ` + messageWhere + `
+	        ORDER BY m.created_at DESC, m.id DESC
+	           LIMIT ? OFFSET ?`
+	queryArgs := append(append([]any{}, messageArgs...), perPage, (page-1)*perPage)
+
+	rows, err := r.db.Query(query, queryArgs...)
+	if err != nil {
+		return erp.AdminConversationDetail{}, fmt.Errorf("list admin conversation messages: %w", err)
+	}
+	defer rows.Close()
+
+	messages := make([]erp.AdminConversationMessage, 0)
+	messageIDs := make([]int64, 0)
+	visibleAttachmentIDs := make([]int64, 0)
+	for rows.Next() {
+		var item erp.AdminConversationMessage
+		if err := rows.Scan(
+			&item.ID,
+			&item.SentAt,
+			&item.SenderID,
+			&item.SenderAccount,
+			&item.SenderName,
+			&item.MessageType,
+			&item.Content,
+			&item.IsRecalled,
+		); err != nil {
+			return erp.AdminConversationDetail{}, fmt.Errorf("scan admin conversation message: %w", err)
+		}
+		if item.IsRecalled {
+			item.Status = "recalled"
+		} else {
+			item.Status = "normal"
+			visibleAttachmentIDs = append(visibleAttachmentIDs, item.ID)
+		}
+		messages = append(messages, item)
+		messageIDs = append(messageIDs, item.ID)
+	}
+	if err := rows.Err(); err != nil {
+		return erp.AdminConversationDetail{}, fmt.Errorf("iterate admin conversation messages: %w", err)
+	}
+
+	if len(visibleAttachmentIDs) > 0 {
+		attachments, err := r.listAdminConversationAttachments(visibleAttachmentIDs)
+		if err != nil {
+			return erp.AdminConversationDetail{}, err
+		}
+		for index := range messages {
+			if values := attachments[messages[index].ID]; len(values) > 0 {
+				messages[index].Attachments = values
+			}
+		}
+	}
+	if len(messageIDs) > 0 {
+		mentions, err := r.listAdminConversationMentions(messageIDs)
+		if err != nil {
+			return erp.AdminConversationDetail{}, err
+		}
+		for index := range messages {
+			if values := mentions[messages[index].ID]; len(values) > 0 {
+				messages[index].Mentions = values
+			}
+		}
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+	return erp.AdminConversationDetail{
+		Conversation: conversation,
+		Participants: participants,
+		Messages: erp.AdminConversationMessagePage{
+			Items:      messages,
+			Total:      total,
+			Page:       page,
+			PerPage:    perPage,
+			TotalPages: totalPages,
+		},
+	}, nil
+}
+
+func (r *IntegrationRepository) getAdminConversationSummary(conversationID int64) (erp.AdminConversationSummary, error) {
+	activityExpr := "COALESCE(lm.created_at, c.created_at)"
+	query := `SELECT c.id, c.type,
+	                 CASE
+	                   WHEN c.type = 'direct' THEN COALESCE(NULLIF(ms.member_names, ''), CONCAT('聊天室#', c.id))
+	                   ELSE COALESCE(NULLIF(c.name, ''), CONCAT('群組#', c.id))
+	                 END AS display_name,
+	                 CASE WHEN c.type = 'direct' THEN 2 ELSE COALESCE(ms.member_count, 0) END AS member_count,
+	                 lm.id AS last_message_id,
+	                 COALESCE(lm.message_type, '') AS last_message_type,
+	                 COALESCE(lm.content, '') AS last_message_content,
+	                 lm.created_at AS last_message_at,
+	                 last_sender.id AS last_sender_id,
+	                 COALESCE(last_sender.external_user_id, '') AS last_sender_account,
+	                 COALESCE(last_sender.display_name, '') AS last_sender_name,
+	                 ` + activityExpr + ` AS last_activity_at,
+	                 c.created_at,
+	                 c.created_by,
+	                 COALESCE(creator.external_user_id, '') AS created_by_account,
+	                 COALESCE(creator.display_name, '') AS created_by_name
+	            ` + adminConversationsFromSQL() + `
+	       LEFT JOIN users creator ON creator.id = c.created_by
+	           WHERE c.id = ?`
+
+	var item erp.AdminConversationSummary
+	var lastMessageID sql.NullInt64
+	var lastMessageAt sql.NullTime
+	var lastSenderID sql.NullInt64
+	var lastMessageContent string
+	err := r.db.QueryRow(query, conversationID).Scan(
+		&item.ID,
+		&item.Type,
+		&item.Name,
+		&item.MemberCount,
+		&lastMessageID,
+		&item.LastMessageType,
+		&lastMessageContent,
+		&lastMessageAt,
+		&lastSenderID,
+		&item.LastSenderAccount,
+		&item.LastSenderName,
+		&item.LastActivityAt,
+		&item.CreatedAt,
+		&item.CreatedByID,
+		&item.CreatedByAccount,
+		&item.CreatedByName,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return erp.AdminConversationSummary{}, erp.ErrConversationNotFound
+		}
+		return erp.AdminConversationSummary{}, fmt.Errorf("get admin conversation summary: %w", err)
+	}
+	if lastMessageID.Valid {
+		item.LatestMessageAvailable = true
+		item.LastMessage = adminLastMessagePreview(item.LastMessageType, lastMessageContent)
+	}
+	if lastMessageAt.Valid {
+		item.LastMessageAt = &lastMessageAt.Time
+	}
+	if lastSenderID.Valid {
+		item.LastSenderID = lastSenderID.Int64
+	}
+	return item, nil
+}
+
+func (r *IntegrationRepository) listAdminConversationParticipants(conversationID int64) ([]erp.AdminConversationParticipant, error) {
+	rows, err := r.db.Query(`
+		SELECT cm.user_id,
+		       COALESCE(u.external_user_id, '') AS account,
+		       COALESCE(u.display_name, '') AS display_name
+		  FROM conversation_members cm
+		  LEFT JOIN users u ON u.id = cm.user_id
+		 WHERE cm.conversation_id = ?
+		 ORDER BY cm.user_id ASC`, conversationID)
+	if err != nil {
+		return nil, fmt.Errorf("list admin conversation participants: %w", err)
+	}
+	defer rows.Close()
+
+	participants := make([]erp.AdminConversationParticipant, 0)
+	for rows.Next() {
+		var item erp.AdminConversationParticipant
+		if err := rows.Scan(&item.UserID, &item.Account, &item.DisplayName); err != nil {
+			return nil, fmt.Errorf("scan admin conversation participant: %w", err)
+		}
+		participants = append(participants, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate admin conversation participants: %w", err)
+	}
+	return participants, nil
+}
+
+func adminConversationMessageWhere(filter erp.AdminConversationMessageFilter) (string, []any) {
+	var where strings.Builder
+	args := []any{filter.ConversationID}
+	where.WriteString("WHERE m.conversation_id = ?")
+
+	if filter.Keyword != "" {
+		where.WriteString(" AND m.is_recalled = FALSE AND m.content LIKE ?")
+		args = append(args, "%"+filter.Keyword+"%")
+	}
+	if filter.SenderKeyword != "" {
+		like := "%" + filter.SenderKeyword + "%"
+		where.WriteString(" AND (sender.external_user_id LIKE ? OR sender.display_name LIKE ?)")
+		args = append(args, like, like)
+	}
+	if filter.MessageType != "" {
+		where.WriteString(" AND m.message_type = ?")
+		args = append(args, filter.MessageType)
+	}
+	if filter.SentFrom != nil {
+		where.WriteString(" AND m.created_at >= ?")
+		args = append(args, *filter.SentFrom)
+	}
+	if filter.SentTo != nil {
+		where.WriteString(" AND m.created_at <= ?")
+		args = append(args, *filter.SentTo)
+	}
+	switch filter.MentionType {
+	case "user":
+		where.WriteString(" AND EXISTS (SELECT 1 FROM message_mentions mm WHERE mm.message_id = m.id AND mm.mention_type = 'user')")
+	case "all":
+		where.WriteString(" AND EXISTS (SELECT 1 FROM message_mentions mm WHERE mm.message_id = m.id AND mm.mention_type = 'all')")
+	case "none":
+		where.WriteString(" AND NOT EXISTS (SELECT 1 FROM message_mentions mm WHERE mm.message_id = m.id)")
+	}
+
+	return where.String(), args
+}
+
+func (r *IntegrationRepository) listAdminConversationAttachments(messageIDs []int64) (map[int64][]erp.AdminConversationAttachment, error) {
+	placeholders := queryPlaceholders(len(messageIDs))
+	args := make([]any, 0, len(messageIDs))
+	for _, id := range messageIDs {
+		args = append(args, id)
+	}
+	rows, err := r.db.Query(`
+		SELECT message_id, id, original_name, storage_path, mime_type, size_bytes
+		  FROM attachments
+		 WHERE message_id IN (`+placeholders+`)
+		 ORDER BY message_id DESC, id ASC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list admin conversation attachments: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[int64][]erp.AdminConversationAttachment)
+	for rows.Next() {
+		var messageID int64
+		var item erp.AdminConversationAttachment
+		if err := rows.Scan(&messageID, &item.ID, &item.OriginalName, &item.StoragePath, &item.MIMEType, &item.SizeBytes); err != nil {
+			return nil, fmt.Errorf("scan admin conversation attachment: %w", err)
+		}
+		if item.StoragePath != "" {
+			if strings.HasPrefix(item.StoragePath, "/uploads/") {
+				item.URL = item.StoragePath
+			} else {
+				item.URL = "/uploads/" + strings.TrimLeft(item.StoragePath, "/")
+			}
+		}
+		result[messageID] = append(result[messageID], item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate admin conversation attachments: %w", err)
+	}
+	return result, nil
+}
+
+func (r *IntegrationRepository) listAdminConversationMentions(messageIDs []int64) (map[int64][]erp.AdminConversationMention, error) {
+	placeholders := queryPlaceholders(len(messageIDs))
+	args := make([]any, 0, len(messageIDs))
+	for _, id := range messageIDs {
+		args = append(args, id)
+	}
+	rows, err := r.db.Query(`
+		SELECT mm.message_id,
+		       mm.mentioned_user_id,
+		       COALESCE(u.external_user_id, '') AS account,
+		       COALESCE(u.display_name, '') AS display_name,
+		       mm.mention_type
+		  FROM message_mentions mm
+		  LEFT JOIN users u ON u.id = mm.mentioned_user_id
+		 WHERE mm.message_id IN (`+placeholders+`)
+		 ORDER BY mm.message_id DESC, mm.id ASC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list admin conversation mentions: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[int64][]erp.AdminConversationMention)
+	for rows.Next() {
+		var messageID int64
+		var item erp.AdminConversationMention
+		if err := rows.Scan(&messageID, &item.UserID, &item.Account, &item.DisplayName, &item.MentionType); err != nil {
+			return nil, fmt.Errorf("scan admin conversation mention: %w", err)
+		}
+		result[messageID] = append(result[messageID], item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate admin conversation mentions: %w", err)
+	}
+	return result, nil
+}
+
+func adminConversationsFromSQL() string {
+	return `FROM conversations c
+	  LEFT JOIN (
+		SELECT cm.conversation_id,
+		       COUNT(*) AS member_count,
+		       GROUP_CONCAT(
+		         COALESCE(NULLIF(u.display_name, ''), NULLIF(u.external_user_id, ''), CONCAT('使用者#', cm.user_id))
+		         ORDER BY cm.user_id SEPARATOR ' ↔ '
+		       ) AS member_names
+		  FROM conversation_members cm
+		  LEFT JOIN users u ON u.id = cm.user_id
+		 GROUP BY cm.conversation_id
+	  ) ms ON ms.conversation_id = c.id
+	  LEFT JOIN (
+		SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content, m.created_at
+		  FROM messages m
+		  LEFT JOIN messages newer
+		    ON newer.conversation_id = m.conversation_id
+		   AND newer.is_recalled = FALSE
+		   AND (
+		     newer.created_at > m.created_at
+		     OR (newer.created_at = m.created_at AND newer.id > m.id)
+		   )
+		 WHERE m.is_recalled = FALSE
+		   AND newer.id IS NULL
+	  ) lm ON lm.conversation_id = c.id
+	  LEFT JOIN users last_sender ON last_sender.id = lm.sender_id`
+}
+
+func adminLastMessagePreview(messageType, content string) string {
+	switch strings.ToLower(strings.TrimSpace(messageType)) {
+	case "":
+		return ""
+	case "image":
+		return "[圖片]"
+	case "file":
+		return "[檔案]"
+	case "text":
+		return truncateRunes(strings.TrimSpace(content), 80)
+	default:
+		text := strings.TrimSpace(content)
+		if text == "" {
+			return "[" + messageType + "]"
+		}
+		return truncateRunes(text, 80)
+	}
+}
+
+func truncateRunes(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit]) + "..."
+}
+
 // ListSystemAdmins returns one page of backend admin accounts.
 func (r *IntegrationRepository) ListSystemAdmins(filter erp.SystemAdminFilter) (erp.SystemAdminPage, error) {
 	page := filter.Page

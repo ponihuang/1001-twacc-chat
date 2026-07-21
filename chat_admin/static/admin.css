@@ -204,6 +204,21 @@ button:disabled {
   place-items: center;
 }
 
+.menu-glyph {
+  width: 18px;
+  height: 18px;
+}
+
+.menu-glyph svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .menu-caret {
   font-size: 18px;
   line-height: 1;
@@ -262,13 +277,100 @@ button:disabled {
   gap: 12px;
 }
 
+.admin-account-menu {
+  position: relative;
+}
+
+.admin-account-trigger {
+  border: 0;
+  background: transparent;
+  color: var(--admin-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-account-trigger:hover {
+  background: transparent;
+}
+
 .admin-avatar {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #c9bcae;
-  color: var(--admin-panel);
-  font-size: 17px;
+  background: #c7c7c7;
+  color: #fff;
+}
+
+.admin-avatar svg {
+  width: 18px;
+  height: 18px;
+  stroke: #fff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.admin-avatar circle {
+  fill: none;
+  stroke: #fff;
+}
+
+.admin-avatar path {
+  fill: none;
+}
+
+.admin-account-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  min-width: 150px;
+  padding: 6px;
+  border: 1px solid var(--admin-line);
+  border-radius: 8px;
+  background: var(--admin-panel);
+  box-shadow: 0 12px 30px rgba(30, 20, 12, 0.16);
+}
+
+.admin-account-menu-item {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--admin-text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-account-menu-item:hover,
+.admin-account-menu-item:focus-visible {
+  background: var(--admin-sidebar-hover);
+  color: var(--admin-accent-strong);
+  outline: none;
+}
+
+.admin-account-menu-item svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .header-admin-name {
@@ -353,6 +455,22 @@ button:disabled {
   padding: 0 0 10px;
 }
 
+.admin-conversation-filter-panel {
+  display: grid;
+  grid-template-columns: 150px 320px 190px 190px auto;
+  gap: 14px 26px;
+  align-items: end;
+  padding: 0 0 10px;
+}
+
+.admin-conversation-message-filter-panel {
+  display: grid;
+  grid-template-columns: 170px 170px 220px 220px 130px 130px auto;
+  gap: 14px 18px;
+  align-items: end;
+  padding: 0 0 10px;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -361,6 +479,12 @@ button:disabled {
 .user-filter-panel label {
   display: grid;
   gap: 5px;
+}
+
+.admin-conversation-filter-panel label,
+.admin-conversation-message-filter-panel label {
+  display: grid;
+  gap: 8px;
 }
 
 .user-filter-panel .filter-email {
@@ -406,6 +530,8 @@ button:disabled {
 }
 
 .admin-filter-panel label span,
+.admin-conversation-filter-panel label span,
+.admin-conversation-message-filter-panel label span,
 .user-filter-panel label span,
 .field label {
   color: var(--admin-text);
@@ -415,6 +541,10 @@ button:disabled {
 
 .admin-filter-panel input,
 .admin-filter-panel select,
+.admin-conversation-filter-panel input,
+.admin-conversation-filter-panel select,
+.admin-conversation-message-filter-panel input,
+.admin-conversation-message-filter-panel select,
 .field input,
 .field select,
 .user-filter-panel input,
@@ -432,6 +562,8 @@ button:disabled {
 }
 
 .admin-filter-panel input::placeholder,
+.admin-conversation-filter-panel input::placeholder,
+.admin-conversation-message-filter-panel input::placeholder,
 .field input::placeholder,
 .user-filter-panel input::placeholder {
   color: #a6a19a;
@@ -441,6 +573,10 @@ button:disabled {
 
 .admin-filter-panel input:focus,
 .admin-filter-panel select:focus,
+.admin-conversation-filter-panel input:focus,
+.admin-conversation-filter-panel select:focus,
+.admin-conversation-message-filter-panel input:focus,
+.admin-conversation-message-filter-panel select:focus,
 .field input:focus,
 .field select:focus,
 .user-filter-panel input:focus,
@@ -457,12 +593,152 @@ button:disabled {
   min-width: 1100px;
 }
 
+.admin-conversation-table-card {
+  margin-top: 16px;
+}
+
+.admin-conversation-list-table {
+  min-width: 1240px;
+}
+
+.admin-conversation-message-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-conversation-detail-summary {
+  margin: 8px 0 18px;
+  padding: 18px;
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  background: var(--admin-panel);
+}
+
+.admin-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.admin-detail-header h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.admin-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 14px 18px;
+}
+
+.admin-detail-grid div {
+  display: grid;
+  gap: 5px;
+}
+
+.admin-detail-grid span {
+  color: var(--admin-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-detail-grid strong {
+  color: var(--admin-text);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.admin-conversation-members {
+  margin: -6px 0 18px;
+  padding: 14px 18px;
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  background: var(--admin-panel);
+}
+
+.admin-conversation-members-toggle {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--admin-text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-conversation-members-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.admin-conversation-member-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--admin-line);
+  border-radius: 999px;
+  background: #f8f3ed;
+  color: var(--admin-text);
+  font-size: 13px;
+}
+
+.admin-conversation-member-empty {
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+.admin-conversation-message-card {
+  margin-top: 16px;
+}
+
+.admin-conversation-message-table {
+  min-width: 1420px;
+}
+
+.admin-message-content-cell {
+  max-width: 360px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.admin-message-caption {
+  margin-bottom: 6px;
+}
+
+.admin-message-image-link {
+  display: inline-grid;
+  width: 64px;
+  height: 48px;
+  margin-right: 8px;
+  border: 1px solid var(--admin-line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f5f0ea;
+}
+
+.admin-message-image-link img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .filter-actions {
   display: flex;
   align-items: end;
   gap: 12px;
   grid-column: span 2;
   min-width: 180px;
+}
+
+.admin-conversation-message-filter-panel .filter-actions {
+  grid-column: auto;
+  min-width: 0;
 }
 
 .filter-actions .btn {

@@ -45,6 +45,7 @@ var (
 	ErrWhitelistRulesRequired      = errors.New("whitelist rules required")
 	ErrUserNotFound                = errors.New("user not found")
 	ErrDeviceNotFound              = errors.New("device not found")
+	ErrConversationNotFound        = errors.New("conversation not found")
 	ErrUserAlreadyExists           = errors.New("user already exists")
 	ErrSystemAdminCannotChat       = errors.New("system admin cannot chat")
 	ErrInsufficientRole            = errors.New("insufficient role")
@@ -568,6 +569,53 @@ func (s *Service) ListSystemAdmins(filter SystemAdminFilter, actor AdminSessionP
 		Code:    "SYSTEM_ADMINS_OK",
 		Message: "管理員列表讀取成功",
 		Data:    admins,
+	}, 200, nil
+}
+
+// ListAdminConversations returns read-only chat conversations for the admin console.
+func (s *Service) ListAdminConversations(filter AdminConversationFilter, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	conversations, err := s.repo.ListAdminConversations(filter)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_CONVERSATIONS_OK",
+		Message: "聊天紀錄列表讀取成功",
+		Data:    conversations,
+	}, 200, nil
+}
+
+// GetAdminConversationDetail returns one read-only conversation record page for the admin console.
+func (s *Service) GetAdminConversationDetail(filter AdminConversationMessageFilter, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	detail, err := s.repo.GetAdminConversationDetail(filter)
+	if err != nil {
+		if errors.Is(err, ErrConversationNotFound) {
+			return Response{}, 404, err
+		}
+		return Response{}, 500, err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_CONVERSATION_DETAIL_OK",
+		Message: "聊天紀錄明細讀取成功",
+		Data:    detail,
 	}, 200, nil
 }
 
@@ -1766,7 +1814,8 @@ func statusCode(err error) int {
 		return 403
 	case errors.Is(err, ErrUserNotFound),
 		errors.Is(err, ErrDeviceNotFound),
-		errors.Is(err, ErrUserInvitationNotFound):
+		errors.Is(err, ErrUserInvitationNotFound),
+		errors.Is(err, ErrConversationNotFound):
 		return 404
 	case errors.Is(err, ErrUserAlreadyExists):
 		return 409

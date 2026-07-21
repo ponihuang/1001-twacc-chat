@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=bulk-invite-20260714a">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-conversation-detail-20260721a">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=temporary-password-20260714a"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-conversation-detail-20260721a"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
@@ -19,18 +19,54 @@
 
         <div class="sidebar-group is-open" data-sidebar-group="users">
           <button type="button" class="sidebar-root is-group-open" data-sidebar-toggle>
-            <span class="menu-glyph" aria-hidden="true">◉</span>
+            <span class="menu-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </span>
             <span>用戶</span>
             <span class="menu-caret" aria-hidden="true">⌃</span>
           </button>
           <div class="sidebar-submenu">
             <button type="button" class="sidebar-subitem is-active" data-menu-item="users">
-              <span class="menu-glyph" aria-hidden="true">▣</span>
+              <span class="menu-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <circle cx="12" cy="8" r="5"></circle>
+                  <path d="M20 21a8 8 0 0 0-16 0"></path>
+                </svg>
+              </span>
               <span>用戶管理</span>
             </button>
             <button type="button" class="sidebar-subitem" data-menu-item="userInvitations">
               <span class="menu-glyph" aria-hidden="true">◇</span>
               <span>註冊邀請</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-group" data-sidebar-group="chat">
+          <button type="button" class="sidebar-root" data-sidebar-toggle>
+            <span class="menu-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+              </svg>
+            </span>
+            <span>聊天</span>
+            <span class="menu-caret" aria-hidden="true">⌄</span>
+          </button>
+          <div class="sidebar-submenu">
+            <button type="button" class="sidebar-subitem" data-menu-item="conversations">
+              <span class="menu-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+                  <path d="M8 9h8"></path>
+                  <path d="M8 13h5"></path>
+                </svg>
+              </span>
+              <span>聊天紀錄</span>
             </button>
           </div>
         </div>
@@ -43,7 +79,13 @@
           </button>
           <div class="sidebar-submenu">
             <button type="button" class="sidebar-subitem" data-menu-item="admins">
-              <span class="menu-glyph" aria-hidden="true">◉</span>
+              <span class="menu-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M3 21v-2a4 4 0 0 1 4-4h4"></path>
+                  <polygon points="17 13 18.2 15.5 21 15.9 19 17.9 19.5 20.7 17 19.3 14.5 20.7 15 17.9 13 15.9 15.8 15.5 17 13"></polygon>
+                </svg>
+              </span>
               <span>管理員帳號</span>
             </button>
           </div>
@@ -55,9 +97,34 @@
       <header class="admin-header">
         <button type="button" class="header-toggle" aria-label="切換選單">☰</button>
         <div class="admin-header-tools">
-          <span class="admin-avatar" aria-hidden="true">●</span>
-          <span class="admin-name" id="header-admin-name">admin</span>
-          <button type="button" class="btn btn-small" id="logout-button">登出</button>
+          <div class="admin-account-menu" data-admin-account-menu>
+            <button type="button" class="admin-account-trigger" id="admin-account-trigger" aria-haspopup="menu" aria-expanded="false">
+              <span class="admin-avatar" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <circle cx="12" cy="8" r="5"></circle>
+                  <path d="M20 21a8 8 0 0 0-16 0"></path>
+                </svg>
+              </span>
+              <span class="admin-name" id="header-admin-name">admin</span>
+            </button>
+            <div class="admin-account-dropdown" data-admin-account-dropdown role="menu" aria-labelledby="admin-account-trigger" hidden>
+              <button type="button" class="admin-account-menu-item" data-admin-profile-action role="menuitem">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="8" r="5"></circle>
+                  <path d="M20 21a8 8 0 0 0-16 0"></path>
+                </svg>
+                <span>個人資料</span>
+              </button>
+              <button type="button" class="admin-account-menu-item" id="logout-button" role="menuitem">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" x2="9" y1="12" y2="12"></line>
+                </svg>
+                <span>登出</span>
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -97,6 +164,199 @@
               <span>記憶體 <b id="health-memory">--</b></span>
               <span>連接 <b id="health-concurrent">--</b></span>
               <span>運行 <b id="health-uptime">--</b></span>
+            </div>
+          </div>
+        </section>
+
+        <section data-view="conversations" hidden>
+          <div class="admin-page-panel">
+            <p class="admin-breadcrumb">首頁 / 聊天紀錄</p>
+
+            <form class="admin-conversation-filter-panel" id="admin-conversation-filter-form" aria-label="聊天紀錄篩選">
+              <label>
+                <span>模式</span>
+                <select id="admin-conversation-type">
+                  <option value="">全部</option>
+                  <option value="direct">一對一</option>
+                  <option value="group">群組</option>
+                </select>
+              </label>
+              <label class="filter-wide">
+                <span>關鍵字</span>
+                <input type="search" id="admin-conversation-keyword" placeholder="搜尋群組名稱、帳號、名稱" autocomplete="off">
+              </label>
+              <label>
+                <span>最後活動開始時間</span>
+                <input type="date" id="admin-conversation-last-from" autocomplete="off">
+              </label>
+              <label>
+                <span>最後活動結束時間</span>
+                <input type="date" id="admin-conversation-last-to" autocomplete="off">
+              </label>
+              <div class="filter-actions">
+                <button type="submit" class="btn" id="refresh-admin-conversations-btn">搜尋</button>
+                <button type="button" class="btn" id="reset-admin-conversations-btn">重設</button>
+              </div>
+            </form>
+
+            <section class="user-table-card admin-conversation-table-card">
+              <div class="is-empty" id="admin-conversations-loading" hidden>
+                <div class="loading"></div>
+                <p>載入中...</p>
+              </div>
+              <div class="is-empty" id="admin-conversations-empty" hidden>
+                <p>找不到聊天紀錄</p>
+              </div>
+              <table class="data-table admin-conversation-list-table" id="admin-conversations-table">
+                <thead>
+                  <tr>
+                    <th>聊天室 ID</th>
+                    <th>模式</th>
+                    <th>名稱</th>
+                    <th>成員數</th>
+                    <th>最後訊息</th>
+                    <th>最後發言者</th>
+                    <th>最後活動時間</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-conversations-tbody"></tbody>
+              </table>
+            </section>
+            <div class="table-pagination" id="admin-conversations-pagination" hidden>
+              <span class="pagination-total">總筆數: <strong id="admin-conversations-total">0</strong></span>
+              <nav class="pagination-pages" id="admin-conversations-pages" aria-label="聊天紀錄列表分頁"></nav>
+              <label class="pagination-size">
+                <span class="sr-only">每頁筆數</span>
+                <select id="admin-conversations-per-page">
+                  <option value="10" selected>10 / 頁</option>
+                  <option value="20">20 / 頁</option>
+                  <option value="50">50 / 頁</option>
+                  <option value="100">100 / 頁</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section data-view="conversationDetail" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="conversations" aria-label="返回聊天紀錄">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="conversations">聊天紀錄</button>
+              <span>/</span>
+              <span>聊天室明細</span>
+              <span>/</span>
+              <span id="admin-conversation-breadcrumb-current">ID:-- - --</span>
+            </nav>
+
+            <div class="is-empty" id="admin-conversation-detail-loading" hidden>
+              <div class="loading"></div>
+              <p>載入中...</p>
+            </div>
+
+            <section class="admin-conversation-detail-summary" id="admin-conversation-detail-summary" hidden>
+              <div class="admin-detail-grid">
+                <div id="admin-conversation-direct-users">
+                  <span>雙方使用者</span>
+                  <strong id="admin-conversation-detail-participants">--</strong>
+                </div>
+                <div id="admin-conversation-group-name" hidden>
+                  <span>群組名稱</span>
+                  <strong id="admin-conversation-detail-group-name">--</strong>
+                </div>
+                <div id="admin-conversation-group-creator" hidden>
+                  <span>建立者</span>
+                  <strong id="admin-conversation-detail-creator">--</strong>
+                </div>
+                <div>
+                  <span>建立時間</span>
+                  <strong id="admin-conversation-detail-created-at">--</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="admin-conversation-members" id="admin-conversation-members" hidden>
+              <button type="button" class="admin-conversation-members-toggle" id="admin-conversation-members-toggle" aria-expanded="true">
+                群組人員（0）
+              </button>
+              <div class="admin-conversation-members-list" id="admin-conversation-members-list"></div>
+            </section>
+
+            <form class="admin-conversation-message-filter-panel" id="admin-conversation-message-filter-form" aria-label="聊天訊息篩選">
+              <label>
+                <span>開始時間</span>
+                <input type="date" id="admin-conversation-message-from" autocomplete="off">
+              </label>
+              <label>
+                <span>結束時間</span>
+                <input type="date" id="admin-conversation-message-to" autocomplete="off">
+              </label>
+              <label>
+                <span>關鍵字</span>
+                <input type="search" id="admin-conversation-message-keyword" placeholder="搜尋訊息內容" autocomplete="off">
+              </label>
+              <label>
+                <span>發送者</span>
+                <input type="search" id="admin-conversation-message-sender" placeholder="搜尋帳號或名稱" autocomplete="off">
+              </label>
+              <label>
+                <span>訊息類型</span>
+                <select id="admin-conversation-message-type">
+                  <option value="">全部</option>
+                  <option value="text">文字</option>
+                  <option value="image">圖片</option>
+                  <option value="file">檔案</option>
+                </select>
+              </label>
+              <label>
+                <span>標註類型</span>
+                <select id="admin-conversation-message-mention">
+                  <option value="">全部</option>
+                  <option value="user">@使用者</option>
+                  <option value="all">@ALL</option>
+                  <option value="none">無標註</option>
+                </select>
+              </label>
+              <div class="filter-actions">
+                <button type="submit" class="btn" id="refresh-admin-conversation-messages-btn">搜尋</button>
+              </div>
+            </form>
+
+            <section class="user-table-card admin-conversation-message-card">
+              <div class="is-empty" id="admin-conversation-messages-empty" hidden>
+                <p>找不到聊天訊息</p>
+              </div>
+              <table class="data-table admin-conversation-message-table" id="admin-conversation-messages-table">
+                <thead>
+                  <tr>
+                    <th>訊息 ID</th>
+                    <th>發送時間</th>
+                    <th>發送者帳號</th>
+                    <th>發送者名稱</th>
+                    <th>訊息類型</th>
+                    <th>訊息內容</th>
+                    <th>標註資訊</th>
+                    <th>訊息狀態</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-conversation-messages-tbody"></tbody>
+              </table>
+            </section>
+            <div class="table-pagination" id="admin-conversation-messages-pagination" hidden>
+              <span class="pagination-total">總筆數: <strong id="admin-conversation-messages-total">0</strong></span>
+              <nav class="pagination-pages" id="admin-conversation-messages-pages" aria-label="聊天訊息分頁"></nav>
+              <label class="pagination-size">
+                <span class="sr-only">每頁筆數</span>
+                <select id="admin-conversation-messages-per-page">
+                  <option value="10">10 / 頁</option>
+                  <option value="20" selected>20 / 頁</option>
+                  <option value="50">50 / 頁</option>
+                  <option value="100">100 / 頁</option>
+                </select>
+              </label>
             </div>
           </div>
         </section>

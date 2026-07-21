@@ -19,6 +19,11 @@
   let userInvitationsPage = 1;
   let userInvitationsPerPage = 10;
   let bulkInvitePrecheck = null;
+  let adminConversationsPage = 1;
+  let adminConversationsPerPage = 10;
+  let activeAdminConversationID = null;
+  let adminConversationMessagesPage = 1;
+  let adminConversationMessagesPerPage = 20;
   let adminsPage = 1;
   let adminsPerPage = 10;
   let modalConfirmHandler = null;
@@ -43,6 +48,8 @@
     userCreate: '/office/user/create',
     userInvitations: '/office/user/invitations',
     userEdit: null,
+    conversations: '/office/conversations',
+    conversationDetail: null,
     admins: '/office/admins',
     adminCreate: '/office/admins/create',
     adminEdit: null
@@ -66,6 +73,11 @@
     if (adminEditMatch) {
       editingAdminUserID = adminEditMatch[1];
       return 'adminEdit';
+    }
+    const conversationDetailMatch = window.location.pathname.match(/^\/office\/conversations\/([^/]+)$/);
+    if (conversationDetailMatch) {
+      activeAdminConversationID = decodeURIComponent(conversationDetailMatch[1]);
+      return 'conversationDetail';
     }
     return ROUTE_VIEWS[window.location.pathname] || 'dashboard';
   }
@@ -168,6 +180,59 @@
       submitEditUser: document.getElementById('submit-edit-user'),
       resetEditUser: document.getElementById('reset-edit-user'),
 
+      // Conversations
+      adminConversationFilterForm: document.getElementById('admin-conversation-filter-form'),
+      adminConversationType: document.getElementById('admin-conversation-type'),
+      adminConversationKeyword: document.getElementById('admin-conversation-keyword'),
+      adminConversationLastFrom: document.getElementById('admin-conversation-last-from'),
+      adminConversationLastTo: document.getElementById('admin-conversation-last-to'),
+      adminConversationsTable: document.getElementById('admin-conversations-table'),
+      adminConversationsTbody: document.getElementById('admin-conversations-tbody'),
+      adminConversationsLoading: document.getElementById('admin-conversations-loading'),
+      adminConversationsEmpty: document.getElementById('admin-conversations-empty'),
+      adminConversationsPagination: document.getElementById('admin-conversations-pagination'),
+      adminConversationsTotal: document.getElementById('admin-conversations-total'),
+      adminConversationsPages: document.getElementById('admin-conversations-pages'),
+      adminConversationsPerPage: document.getElementById('admin-conversations-per-page'),
+      refreshAdminConversationsBtn: document.getElementById('refresh-admin-conversations-btn'),
+      resetAdminConversationsBtn: document.getElementById('reset-admin-conversations-btn'),
+      adminConversationBreadcrumbCurrent: document.getElementById('admin-conversation-breadcrumb-current'),
+      adminConversationDetailLoading: document.getElementById('admin-conversation-detail-loading'),
+      adminConversationDetailSummary: document.getElementById('admin-conversation-detail-summary'),
+      adminConversationDetailTitle: document.getElementById('admin-conversation-detail-title'),
+      adminConversationDetailType: document.getElementById('admin-conversation-detail-type'),
+      adminConversationDetailID: document.getElementById('admin-conversation-detail-id'),
+      adminConversationDetailName: document.getElementById('admin-conversation-detail-name'),
+      adminConversationDetailCreatedAt: document.getElementById('admin-conversation-detail-created-at'),
+      adminConversationDetailLastAt: document.getElementById('admin-conversation-detail-last-at'),
+      adminConversationDirectUsers: document.getElementById('admin-conversation-direct-users'),
+      adminConversationDetailParticipants: document.getElementById('admin-conversation-detail-participants'),
+      adminConversationGroupName: document.getElementById('admin-conversation-group-name'),
+      adminConversationDetailGroupName: document.getElementById('admin-conversation-detail-group-name'),
+      adminConversationGroupCreator: document.getElementById('admin-conversation-group-creator'),
+      adminConversationDetailCreator: document.getElementById('admin-conversation-detail-creator'),
+      adminConversationGroupMembers: document.getElementById('admin-conversation-group-members'),
+      adminConversationDetailMemberCount: document.getElementById('admin-conversation-detail-member-count'),
+      adminConversationMembers: document.getElementById('admin-conversation-members'),
+      adminConversationMembersToggle: document.getElementById('admin-conversation-members-toggle'),
+      adminConversationMembersList: document.getElementById('admin-conversation-members-list'),
+      adminConversationMessageFilterForm: document.getElementById('admin-conversation-message-filter-form'),
+      adminConversationMessageKeyword: document.getElementById('admin-conversation-message-keyword'),
+      adminConversationMessageSender: document.getElementById('admin-conversation-message-sender'),
+      adminConversationMessageType: document.getElementById('admin-conversation-message-type'),
+      adminConversationMessageMention: document.getElementById('admin-conversation-message-mention'),
+      adminConversationMessageFrom: document.getElementById('admin-conversation-message-from'),
+      adminConversationMessageTo: document.getElementById('admin-conversation-message-to'),
+      adminConversationMessagesTable: document.getElementById('admin-conversation-messages-table'),
+      adminConversationMessagesTbody: document.getElementById('admin-conversation-messages-tbody'),
+      adminConversationMessagesEmpty: document.getElementById('admin-conversation-messages-empty'),
+      adminConversationMessagesPagination: document.getElementById('admin-conversation-messages-pagination'),
+      adminConversationMessagesTotal: document.getElementById('admin-conversation-messages-total'),
+      adminConversationMessagesPages: document.getElementById('admin-conversation-messages-pages'),
+      adminConversationMessagesPerPage: document.getElementById('admin-conversation-messages-per-page'),
+      refreshAdminConversationMessagesBtn: document.getElementById('refresh-admin-conversation-messages-btn'),
+      resetAdminConversationMessagesBtn: document.getElementById('reset-admin-conversation-messages-btn'),
+
       // Admins
       adminFilterForm: document.getElementById('admin-filter-form'),
       adminSearch: document.getElementById('admin-search'),
@@ -239,6 +304,12 @@
       modalBody: document.getElementById('modal-body'),
       modalConfirmBtn: document.getElementById('modal-confirm-btn'),
       modalCancelBtn: document.getElementById('modal-cancel-btn'),
+
+      // Header account menu
+      adminAccountMenu: document.querySelector('[data-admin-account-menu]'),
+      adminAccountTrigger: document.getElementById('admin-account-trigger'),
+      adminAccountDropdown: document.querySelector('[data-admin-account-dropdown]'),
+      adminProfileAction: document.querySelector('[data-admin-profile-action]'),
       
       // Logout
       logoutButton: document.getElementById('logout-button')
@@ -279,6 +350,33 @@
 
     window.addEventListener('popstate', () => {
       switchView(resolveInitialView(), { skipHistory: true });
+    });
+
+    if (elements.adminAccountTrigger) {
+      elements.adminAccountTrigger.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleAdminAccountMenu();
+      });
+    }
+
+    if (elements.adminProfileAction) {
+      elements.adminProfileAction.addEventListener('click', () => {
+        closeAdminAccountMenu();
+        openCurrentAdminEdit();
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!elements.adminAccountMenu || elements.adminAccountMenu.contains(e.target)) {
+        return;
+      }
+      closeAdminAccountMenu();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeAdminAccountMenu();
+      }
     });
 
     // User management
@@ -355,6 +453,45 @@
     }
     if (elements.resetEditUser) {
       elements.resetEditUser.addEventListener('click', resetUserEditForm);
+    }
+
+    // Conversation records
+    if (elements.adminConversationFilterForm) {
+      elements.adminConversationFilterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        adminConversationsPage = 1;
+        loadAdminConversations();
+      });
+    }
+    if (elements.adminConversationsPerPage) {
+      elements.adminConversationsPerPage.addEventListener('change', () => {
+        adminConversationsPerPage = Number(elements.adminConversationsPerPage.value) || 10;
+        adminConversationsPage = 1;
+        loadAdminConversations();
+      });
+    }
+    if (elements.resetAdminConversationsBtn) {
+      elements.resetAdminConversationsBtn.addEventListener('click', resetAdminConversationFilters);
+    }
+    if (elements.adminConversationMessageFilterForm) {
+      elements.adminConversationMessageFilterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        adminConversationMessagesPage = 1;
+        loadAdminConversationDetail();
+      });
+    }
+    if (elements.adminConversationMessagesPerPage) {
+      elements.adminConversationMessagesPerPage.addEventListener('change', () => {
+        adminConversationMessagesPerPage = Number(elements.adminConversationMessagesPerPage.value) || 20;
+        adminConversationMessagesPage = 1;
+        loadAdminConversationDetail();
+      });
+    }
+    if (elements.resetAdminConversationMessagesBtn) {
+      elements.resetAdminConversationMessagesBtn.addEventListener('click', resetAdminConversationMessageFilters);
+    }
+    if (elements.adminConversationMembersToggle) {
+      elements.adminConversationMembersToggle.addEventListener('click', toggleAdminConversationMembers);
     }
 
     // Admin management
@@ -454,6 +591,34 @@
     }
   }
 
+  function toggleAdminAccountMenu() {
+    if (!elements.adminAccountTrigger || !elements.adminAccountDropdown) return;
+
+    const isOpen = elements.adminAccountTrigger.getAttribute('aria-expanded') === 'true';
+    setAdminAccountMenuOpen(!isOpen);
+  }
+
+  function closeAdminAccountMenu() {
+    setAdminAccountMenuOpen(false);
+  }
+
+  function setAdminAccountMenuOpen(isOpen) {
+    if (!elements.adminAccountTrigger || !elements.adminAccountDropdown) return;
+
+    elements.adminAccountTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    elements.adminAccountDropdown.hidden = !isOpen;
+  }
+
+  function openCurrentAdminEdit() {
+    const currentAdminID = getUserId();
+    if (!currentAdminID) {
+      showError('找不到目前登入管理員');
+      return;
+    }
+
+    openAdminEdit(currentAdminID);
+  }
+
   function openUserInviteModal() {
     if (!elements.userInviteModal) return;
     elements.userInviteModal.hidden = false;
@@ -495,11 +660,17 @@
     if (!Object.prototype.hasOwnProperty.call(VIEW_ROUTES, viewName)) {
       viewName = 'dashboard';
     }
+    if (viewName === 'conversationDetail') {
+      const detailPath = options.path || window.location.pathname;
+      const match = detailPath.match(/^\/office\/conversations\/([^/]+)$/);
+      activeAdminConversationID = match ? decodeURIComponent(match[1]) : activeAdminConversationID;
+    }
 
     if (!options.skipHistory) {
       const nextPath = options.path || VIEW_ROUTES[viewName] || (
         viewName === 'userEdit' && editingUserID ? `/office/user/${editingUserID}/edit` :
-        viewName === 'adminEdit' && editingAdminUserID ? `/office/admins/${editingAdminUserID}/edit` : ''
+        viewName === 'adminEdit' && editingAdminUserID ? `/office/admins/${editingAdminUserID}/edit` :
+        viewName === 'conversationDetail' ? window.location.pathname : ''
       );
       if (nextPath && window.location.pathname !== nextPath) {
         const method = options.replace ? 'replaceState' : 'pushState';
@@ -510,7 +681,9 @@
     // Update menu items
     const activeMenuItem = viewName === 'userCreate' || viewName === 'userEdit'
       ? 'users'
-      : viewName === 'adminCreate' || viewName === 'adminEdit' ? 'admins' : viewName;
+      : viewName === 'adminCreate' || viewName === 'adminEdit'
+        ? 'admins'
+        : viewName === 'conversationDetail' ? 'conversations' : viewName;
     document.querySelectorAll('[data-menu-item]').forEach(item => {
       item.classList.toggle('is-active', item.getAttribute('data-menu-item') === activeMenuItem);
     });
@@ -543,6 +716,12 @@
         break;
       case 'userEdit':
         loadUserForEdit();
+        break;
+      case 'conversations':
+        loadAdminConversations();
+        break;
+      case 'conversationDetail':
+        loadAdminConversationDetail();
         break;
       case 'admins':
         loadAdmins();
@@ -1155,6 +1334,496 @@
     if (elements.userInvitationsLoading) elements.userInvitationsLoading.hidden = true;
     if (elements.userInvitationsEmpty) elements.userInvitationsEmpty.hidden = false;
     if (elements.userInvitationsTable) elements.userInvitationsTable.hidden = true;
+  }
+
+  async function loadAdminConversations() {
+    if (elements.adminConversationsLoading) elements.adminConversationsLoading.hidden = false;
+    if (elements.adminConversationsEmpty) elements.adminConversationsEmpty.hidden = true;
+    if (elements.adminConversationsTable) elements.adminConversationsTable.hidden = true;
+    if (elements.adminConversationsPagination) elements.adminConversationsPagination.hidden = true;
+
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/conversations?${buildAdminConversationQuery().toString()}`);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入聊天紀錄失敗');
+      }
+
+      const pageData = data.data || {};
+      const conversations = Array.isArray(pageData.items) ? pageData.items : [];
+      const total = Number(pageData.total) || 0;
+      const totalPages = Number(pageData.total_pages) || 0;
+      adminConversationsPage = Number(pageData.page) || adminConversationsPage;
+      adminConversationsPerPage = Number(pageData.per_page) || adminConversationsPerPage;
+
+      if (conversations.length === 0) {
+        showAdminConversationsEmpty();
+        renderAdminConversationsPagination(total, totalPages);
+        return;
+      }
+
+      populateAdminConversationsTable(conversations);
+      if (elements.adminConversationsTable) elements.adminConversationsTable.hidden = false;
+      renderAdminConversationsPagination(total, totalPages);
+    } catch (err) {
+      showError('載入聊天紀錄失敗: ' + err.message);
+      showAdminConversationsEmpty();
+    } finally {
+      if (elements.adminConversationsLoading) elements.adminConversationsLoading.hidden = true;
+    }
+  }
+
+  function buildAdminConversationQuery() {
+    const params = new URLSearchParams();
+    const type = elements.adminConversationType?.value?.trim();
+    const keyword = elements.adminConversationKeyword?.value?.trim();
+    const lastFrom = elements.adminConversationLastFrom?.value?.trim();
+    const lastTo = elements.adminConversationLastTo?.value?.trim();
+    if (type) params.set('type', type);
+    if (keyword) params.set('keyword', keyword);
+    if (lastFrom) params.set('last_activity_from', lastFrom);
+    if (lastTo) params.set('last_activity_to', lastTo);
+    params.set('page', String(adminConversationsPage));
+    params.set('per_page', String(adminConversationsPerPage));
+    return params;
+  }
+
+  function populateAdminConversationsTable(conversations) {
+    if (!elements.adminConversationsTbody) return;
+
+    elements.adminConversationsTbody.replaceChildren();
+    conversations.forEach(conversation => {
+      const row = document.createElement('tr');
+      [
+        String(conversation.id || ''),
+        conversationTypeLabel(conversation.type),
+        conversation.name || '--',
+        String(conversation.member_count || 0),
+        conversation.latest_message_available ? (conversation.last_message || '--') : '--',
+        conversationLastSender(conversation),
+        formatDate(conversation.last_activity_at),
+        null
+      ].forEach((value, index) => {
+        const cell = document.createElement('td');
+        if (index === 0) {
+          const id = document.createElement('span');
+          id.className = 'account-link';
+          id.textContent = value;
+          cell.appendChild(id);
+        } else if (index === 1) {
+          const badge = document.createElement('span');
+          badge.className = 'status-badge';
+          badge.textContent = value;
+          cell.appendChild(badge);
+        } else if (index === 4) {
+          cell.className = 'admin-conversation-message-cell';
+          cell.textContent = value;
+        } else if (index === 7) {
+          const viewButton = document.createElement('button');
+          viewButton.type = 'button';
+          viewButton.className = 'btn invitation-action-btn';
+          viewButton.textContent = '查看';
+          viewButton.addEventListener('click', () => {
+            switchView('conversationDetail', { path: `/office/conversations/${encodeURIComponent(conversation.id)}` });
+          });
+          cell.appendChild(viewButton);
+        } else {
+          cell.textContent = value;
+        }
+        row.appendChild(cell);
+      });
+      elements.adminConversationsTbody.appendChild(row);
+    });
+  }
+
+  function conversationTypeLabel(type) {
+    switch (type) {
+      case 'direct':
+        return '一對一';
+      case 'group':
+        return '群組';
+      default:
+        return type || '--';
+    }
+  }
+
+  function conversationLastSender(conversation) {
+    if (!conversation || !conversation.latest_message_available) {
+      return '--';
+    }
+    return conversation.last_sender_name || conversation.last_sender_account || (
+      conversation.last_sender_id ? `使用者#${conversation.last_sender_id}` : '--'
+    );
+  }
+
+  function renderAdminConversationsPagination(total, totalPages) {
+    if (!elements.adminConversationsPagination || !elements.adminConversationsPages) return;
+
+    if (elements.adminConversationsTotal) elements.adminConversationsTotal.textContent = String(total);
+    if (elements.adminConversationsPerPage) elements.adminConversationsPerPage.value = String(adminConversationsPerPage);
+    elements.adminConversationsPages.replaceChildren();
+
+    const addButton = (label, page, options = {}) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pagination-button';
+      button.textContent = label;
+      button.disabled = Boolean(options.disabled);
+      if (options.current) {
+        button.classList.add('is-current');
+        button.setAttribute('aria-current', 'page');
+      } else if (!options.disabled) {
+        button.addEventListener('click', () => {
+          adminConversationsPage = page;
+          loadAdminConversations();
+        });
+      }
+      elements.adminConversationsPages.appendChild(button);
+    };
+
+    addButton('‹', adminConversationsPage - 1, { disabled: adminConversationsPage <= 1 });
+    paginationSequence(adminConversationsPage, totalPages).forEach(page => {
+      if (page === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '…';
+        elements.adminConversationsPages.appendChild(ellipsis);
+        return;
+      }
+      addButton(String(page), page, { current: page === adminConversationsPage });
+    });
+    addButton('›', adminConversationsPage + 1, { disabled: adminConversationsPage >= totalPages || totalPages === 0 });
+    elements.adminConversationsPagination.hidden = false;
+  }
+
+  function showAdminConversationsEmpty() {
+    if (elements.adminConversationsLoading) elements.adminConversationsLoading.hidden = true;
+    if (elements.adminConversationsEmpty) elements.adminConversationsEmpty.hidden = false;
+    if (elements.adminConversationsTable) elements.adminConversationsTable.hidden = true;
+  }
+
+  function resetAdminConversationFilters() {
+    if (elements.adminConversationFilterForm) elements.adminConversationFilterForm.reset();
+    adminConversationsPage = 1;
+    loadAdminConversations();
+  }
+
+  async function loadAdminConversationDetail() {
+    if (!activeAdminConversationID) {
+      showError('缺少聊天室 ID');
+      return;
+    }
+
+    if (elements.adminConversationDetailLoading) elements.adminConversationDetailLoading.hidden = false;
+    if (elements.adminConversationDetailSummary) elements.adminConversationDetailSummary.hidden = true;
+    if (elements.adminConversationMessagesEmpty) elements.adminConversationMessagesEmpty.hidden = true;
+    if (elements.adminConversationMessagesTable) elements.adminConversationMessagesTable.hidden = true;
+    if (elements.adminConversationMessagesPagination) elements.adminConversationMessagesPagination.hidden = true;
+
+    try {
+      const response = await makeAuthenticatedRequest(`/api/system-admin/conversations/${encodeURIComponent(activeAdminConversationID)}?${buildAdminConversationMessageQuery().toString()}`);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入聊天室明細失敗');
+      }
+
+      const detail = data.data || {};
+      populateAdminConversationSummary(detail.conversation || {}, detail.participants || []);
+
+      const pageData = detail.messages || {};
+      const messages = Array.isArray(pageData.items) ? pageData.items : [];
+      const total = Number(pageData.total) || 0;
+      const totalPages = Number(pageData.total_pages) || 0;
+      adminConversationMessagesPage = Number(pageData.page) || adminConversationMessagesPage;
+      adminConversationMessagesPerPage = Number(pageData.per_page) || adminConversationMessagesPerPage;
+
+      if (messages.length === 0) {
+        showAdminConversationMessagesEmpty();
+        renderAdminConversationMessagesPagination(total, totalPages);
+        return;
+      }
+
+      populateAdminConversationMessagesTable(messages);
+      if (elements.adminConversationMessagesTable) elements.adminConversationMessagesTable.hidden = false;
+      renderAdminConversationMessagesPagination(total, totalPages);
+    } catch (err) {
+      showError('載入聊天室明細失敗: ' + err.message);
+      showAdminConversationMessagesEmpty();
+    } finally {
+      if (elements.adminConversationDetailLoading) elements.adminConversationDetailLoading.hidden = true;
+    }
+  }
+
+  function buildAdminConversationMessageQuery() {
+    const params = new URLSearchParams();
+    const keyword = elements.adminConversationMessageKeyword?.value?.trim();
+    const sender = elements.adminConversationMessageSender?.value?.trim();
+    const type = elements.adminConversationMessageType?.value?.trim();
+    const mention = elements.adminConversationMessageMention?.value?.trim();
+    const sentFrom = elements.adminConversationMessageFrom?.value?.trim();
+    const sentTo = elements.adminConversationMessageTo?.value?.trim();
+    if (keyword) params.set('keyword', keyword);
+    if (sender) params.set('sender', sender);
+    if (type) params.set('message_type', type);
+    if (mention) params.set('mention_type', mention);
+    if (sentFrom) params.set('sent_from', sentFrom);
+    if (sentTo) params.set('sent_to', sentTo);
+    params.set('page', String(adminConversationMessagesPage));
+    params.set('per_page', String(adminConversationMessagesPerPage));
+    return params;
+  }
+
+  function populateAdminConversationSummary(conversation, participants) {
+    const participantLabels = (Array.isArray(participants) ? participants : []).map(adminConversationUserLabel);
+    const creatorLabel = conversation.created_by_name || conversation.created_by_account || (
+      conversation.created_by_id ? `使用者#${conversation.created_by_id}` : '--'
+    );
+    const conversationID = String(conversation.id || activeAdminConversationID || '--');
+    const conversationName = conversation.name || participantLabels.join(' ↔ ') || '--';
+
+    if (elements.adminConversationDetailTitle) elements.adminConversationDetailTitle.textContent = conversation.name || '聊天室明細';
+    if (elements.adminConversationDetailType) elements.adminConversationDetailType.textContent = conversationTypeLabel(conversation.type);
+    if (elements.adminConversationBreadcrumbCurrent) elements.adminConversationBreadcrumbCurrent.textContent = `ID:${conversationID} - ${conversationName}`;
+    if (elements.adminConversationDetailID) elements.adminConversationDetailID.textContent = conversationID;
+    if (elements.adminConversationDetailName) elements.adminConversationDetailName.textContent = conversationName;
+    if (elements.adminConversationDetailCreatedAt) elements.adminConversationDetailCreatedAt.textContent = formatDate(conversation.created_at);
+    if (elements.adminConversationDetailLastAt) elements.adminConversationDetailLastAt.textContent = formatDate(conversation.last_activity_at);
+    if (elements.adminConversationDetailParticipants) elements.adminConversationDetailParticipants.textContent = participantLabels.join(' ↔ ') || '--';
+    if (elements.adminConversationDetailGroupName) elements.adminConversationDetailGroupName.textContent = conversation.name || '--';
+    if (elements.adminConversationDetailCreator) elements.adminConversationDetailCreator.textContent = creatorLabel;
+    if (elements.adminConversationDetailMemberCount) elements.adminConversationDetailMemberCount.textContent = String(conversation.member_count || participants.length || 0);
+
+    const isGroup = conversation.type === 'group';
+    if (elements.adminConversationDirectUsers) elements.adminConversationDirectUsers.hidden = isGroup;
+    if (elements.adminConversationGroupName) elements.adminConversationGroupName.hidden = !isGroup;
+    if (elements.adminConversationGroupCreator) elements.adminConversationGroupCreator.hidden = !isGroup;
+    if (elements.adminConversationGroupMembers) elements.adminConversationGroupMembers.hidden = !isGroup;
+    renderAdminConversationMembers(isGroup, participants);
+    if (elements.adminConversationDetailSummary) elements.adminConversationDetailSummary.hidden = false;
+  }
+
+  function renderAdminConversationMembers(isGroup, participants) {
+    if (!elements.adminConversationMembers || !elements.adminConversationMembersList || !elements.adminConversationMembersToggle) return;
+
+    const members = Array.isArray(participants) ? participants : [];
+    elements.adminConversationMembers.hidden = !isGroup;
+    elements.adminConversationMembersList.replaceChildren();
+    elements.adminConversationMembersToggle.textContent = `群組人員（${members.length}）`;
+    elements.adminConversationMembersToggle.setAttribute('aria-expanded', 'true');
+    elements.adminConversationMembersList.hidden = false;
+
+    if (!isGroup) return;
+
+    if (members.length === 0) {
+      const empty = document.createElement('span');
+      empty.className = 'admin-conversation-member-empty';
+      empty.textContent = '尚無成員資料';
+      elements.adminConversationMembersList.appendChild(empty);
+      return;
+    }
+
+    members.forEach(member => {
+      const chip = document.createElement('span');
+      chip.className = 'admin-conversation-member-chip';
+      chip.textContent = adminConversationUserLabel(member);
+      elements.adminConversationMembersList.appendChild(chip);
+    });
+  }
+
+  function toggleAdminConversationMembers() {
+    if (!elements.adminConversationMembersToggle || !elements.adminConversationMembersList) return;
+
+    const isExpanded = elements.adminConversationMembersToggle.getAttribute('aria-expanded') === 'true';
+    elements.adminConversationMembersToggle.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+    elements.adminConversationMembersList.hidden = isExpanded;
+  }
+
+  function populateAdminConversationMessagesTable(messages) {
+    if (!elements.adminConversationMessagesTbody) return;
+
+    elements.adminConversationMessagesTbody.replaceChildren();
+    messages.forEach(message => {
+      const row = document.createElement('tr');
+      [
+        String(message.id || ''),
+        formatDate(message.sent_at),
+        message.sender_account || (message.sender_id ? `使用者#${message.sender_id}` : '--'),
+        message.sender_name || '--',
+        messageTypeLabel(message.message_type),
+        null,
+        mentionSummary(message.mentions),
+        messageStatusLabel(message)
+      ].forEach((value, index) => {
+        const cell = document.createElement('td');
+        if (index === 0) {
+          const id = document.createElement('span');
+          id.className = 'account-link';
+          id.textContent = value;
+          cell.appendChild(id);
+        } else if (index === 4 || index === 7) {
+          const badge = document.createElement('span');
+          badge.className = 'status-badge';
+          badge.textContent = value;
+          cell.appendChild(badge);
+        } else if (index === 5) {
+          cell.className = 'admin-message-content-cell';
+          renderAdminMessageContent(cell, message);
+        } else {
+          cell.textContent = value;
+        }
+        row.appendChild(cell);
+      });
+      elements.adminConversationMessagesTbody.appendChild(row);
+    });
+  }
+
+  function renderAdminMessageContent(cell, message) {
+    if (message?.is_recalled || message?.status === 'recalled') {
+      cell.textContent = '已收回';
+      return;
+    }
+    const type = String(message?.message_type || '').toLowerCase();
+    if (type === 'image') {
+      const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+      appendAdminMessageText(cell, message?.content);
+      if (attachments.length === 0) {
+        if (!cell.textContent) cell.textContent = '[圖片]';
+        return;
+      }
+      attachments.forEach(attachment => {
+        const link = document.createElement('a');
+        link.className = 'admin-message-image-link';
+        link.href = attachment.url || '#';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        const image = document.createElement('img');
+        image.src = attachment.url || '';
+        image.alt = attachment.original_name || '圖片';
+        image.loading = 'lazy';
+        link.appendChild(image);
+        cell.appendChild(link);
+      });
+      return;
+    }
+    if (type === 'file') {
+      const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+      appendAdminMessageText(cell, message?.content);
+      if (attachments.length === 0) {
+        if (!cell.textContent) cell.textContent = '[檔案]';
+        return;
+      }
+      attachments.forEach((attachment, index) => {
+        if (index > 0) cell.appendChild(document.createTextNode('、'));
+        const link = document.createElement('a');
+        link.href = attachment.url || '#';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = attachment.original_name || '[檔案]';
+        cell.appendChild(link);
+      });
+      return;
+    }
+    cell.textContent = message?.content || '--';
+  }
+
+  function appendAdminMessageText(cell, content) {
+    const text = String(content || '').trim();
+    if (!text) return;
+
+    const textElement = document.createElement('div');
+    textElement.className = 'admin-message-caption';
+    textElement.textContent = text;
+    cell.appendChild(textElement);
+  }
+
+  function messageTypeLabel(type) {
+    switch (type) {
+      case 'text':
+        return '文字';
+      case 'image':
+        return '圖片';
+      case 'file':
+        return '檔案';
+      default:
+        return type || '--';
+    }
+  }
+
+  function mentionSummary(mentions) {
+    if (!Array.isArray(mentions) || mentions.length === 0) {
+      return '無標註';
+    }
+    if (mentions.some(mention => mention.mention_type === 'all')) {
+      return '@ALL';
+    }
+    return mentions.map(mention => '@' + adminConversationUserLabel(mention)).join('、');
+  }
+
+  function messageStatusLabel(message) {
+    if (message?.is_recalled || message?.status === 'recalled') {
+      return '已收回';
+    }
+    return '正常';
+  }
+
+  function adminConversationUserLabel(user) {
+    if (!user) return '已刪除使用者';
+    return user.display_name || user.account || (user.user_id ? `使用者#${user.user_id}` : '已刪除使用者');
+  }
+
+  function renderAdminConversationMessagesPagination(total, totalPages) {
+    if (!elements.adminConversationMessagesPagination || !elements.adminConversationMessagesPages) return;
+
+    if (elements.adminConversationMessagesTotal) elements.adminConversationMessagesTotal.textContent = String(total);
+    if (elements.adminConversationMessagesPerPage) elements.adminConversationMessagesPerPage.value = String(adminConversationMessagesPerPage);
+    elements.adminConversationMessagesPages.replaceChildren();
+
+    const addButton = (label, page, options = {}) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pagination-button';
+      button.textContent = label;
+      button.disabled = Boolean(options.disabled);
+      if (options.current) {
+        button.classList.add('is-current');
+        button.setAttribute('aria-current', 'page');
+      } else if (!options.disabled) {
+        button.addEventListener('click', () => {
+          adminConversationMessagesPage = page;
+          loadAdminConversationDetail();
+        });
+      }
+      elements.adminConversationMessagesPages.appendChild(button);
+    };
+
+    addButton('‹', adminConversationMessagesPage - 1, { disabled: adminConversationMessagesPage <= 1 });
+    paginationSequence(adminConversationMessagesPage, totalPages).forEach(page => {
+      if (page === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '…';
+        elements.adminConversationMessagesPages.appendChild(ellipsis);
+        return;
+      }
+      addButton(String(page), page, { current: page === adminConversationMessagesPage });
+    });
+    addButton('›', adminConversationMessagesPage + 1, { disabled: adminConversationMessagesPage >= totalPages || totalPages === 0 });
+    elements.adminConversationMessagesPagination.hidden = false;
+  }
+
+  function showAdminConversationMessagesEmpty() {
+    if (elements.adminConversationMessagesEmpty) elements.adminConversationMessagesEmpty.hidden = false;
+    if (elements.adminConversationMessagesTable) elements.adminConversationMessagesTable.hidden = true;
+  }
+
+  function resetAdminConversationMessageFilters() {
+    if (elements.adminConversationMessageFilterForm) elements.adminConversationMessageFilterForm.reset();
+    adminConversationMessagesPage = 1;
+    loadAdminConversationDetail();
   }
 
   function paginationSequence(current, totalPages) {
