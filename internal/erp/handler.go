@@ -381,6 +381,33 @@ func (h *Handler) ListAdminConversations(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, status, resp)
 }
 
+// GetAdminConversationDetail handles GET /api/system-admin/conversations/{conversation_id}.
+func (h *Handler) GetAdminConversationDetail(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil || h.adminSessions == nil {
+		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
+		return
+	}
+
+	principal, ok := h.requireAdminSession(w, r)
+	if !ok {
+		return
+	}
+
+	filter, err := parseAdminConversationMessageFilter(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, Response{Success: false, Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	resp, status, err := h.service.GetAdminConversationDetail(filter, principal)
+	if err != nil {
+		writeJSON(w, status, errorResponse(err))
+		return
+	}
+
+	writeJSON(w, status, resp)
+}
+
 // CreateUser handles POST /api/system-admin/users.
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
@@ -1057,6 +1084,64 @@ func parseAdminConversationFilter(r *http.Request) (AdminConversationFilter, err
 	return filter, nil
 }
 
+func parseAdminConversationMessageFilter(r *http.Request) (AdminConversationMessageFilter, error) {
+	conversationID, err := strconv.ParseInt(strings.TrimSpace(r.PathValue("conversation_id")), 10, 64)
+	if err != nil || conversationID <= 0 {
+		return AdminConversationMessageFilter{}, fmt.Errorf("聊天室 ID 格式錯誤")
+	}
+
+	query := r.URL.Query()
+	filter := AdminConversationMessageFilter{
+		ConversationID: conversationID,
+		Keyword:        strings.TrimSpace(query.Get("keyword")),
+		SenderKeyword:  strings.TrimSpace(query.Get("sender")),
+		MessageType:    strings.TrimSpace(query.Get("message_type")),
+		MentionType:    strings.TrimSpace(query.Get("mention_type")),
+		Page:           1,
+		PerPage:        20,
+	}
+	switch filter.MessageType {
+	case "", "text", "image", "file":
+	default:
+		return AdminConversationMessageFilter{}, fmt.Errorf("訊息類型格式錯誤")
+	}
+	switch filter.MentionType {
+	case "", "user", "all", "none":
+	default:
+		return AdminConversationMessageFilter{}, fmt.Errorf("標註類型格式錯誤")
+	}
+
+	if value := strings.TrimSpace(query.Get("page")); value != "" {
+		filter.Page, err = strconv.Atoi(value)
+		if err != nil || filter.Page < 1 {
+			return AdminConversationMessageFilter{}, fmt.Errorf("頁碼格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("per_page")); value != "" {
+		filter.PerPage, err = strconv.Atoi(value)
+		if err != nil || !validAdminPerPage(filter.PerPage) {
+			return AdminConversationMessageFilter{}, fmt.Errorf("每頁筆數格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("sent_from")); value != "" {
+		filter.SentFrom, err = parseAdminDate(value, false)
+		if err != nil {
+			return AdminConversationMessageFilter{}, fmt.Errorf("發送開始時間格式錯誤")
+		}
+	}
+	if value := strings.TrimSpace(query.Get("sent_to")); value != "" {
+		filter.SentTo, err = parseAdminDate(value, true)
+		if err != nil {
+			return AdminConversationMessageFilter{}, fmt.Errorf("發送結束時間格式錯誤")
+		}
+	}
+	if filter.SentFrom != nil && filter.SentTo != nil && filter.SentFrom.After(*filter.SentTo) {
+		return AdminConversationMessageFilter{}, fmt.Errorf("發送開始時間不可晚於結束時間")
+	}
+
+	return filter, nil
+}
+
 func validAdminPerPage(value int) bool {
 	return value == 10 || value == 20 || value == 50 || value == 100
 }
@@ -1133,6 +1218,8 @@ func errorResponse(err error) Response {
 		return Response{Success: false, Code: "USER_INVITATION_COMPLETED", Message: "該註冊邀請已完成"}
 	case errors.Is(err, ErrUserInvitationNotFound):
 		return Response{Success: false, Code: "USER_INVITATION_NOT_FOUND", Message: "查無有效邀請"}
+	case errors.Is(err, ErrConversationNotFound):
+		return Response{Success: false, Code: "CONVERSATION_NOT_FOUND", Message: "查無聊天室"}
 	case errors.Is(err, ErrInvitationMailerUnavailable):
 		return Response{Success: false, Code: "MAILER_UNAVAILABLE", Message: "寄信服務尚未設定"}
 	case errors.Is(err, ErrTemporaryPasswordMailFailed):

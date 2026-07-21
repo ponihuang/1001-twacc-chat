@@ -94,6 +94,10 @@ func (s *stubIntegrationRepository) ListAdminConversations(filter AdminConversat
 	return AdminConversationPage{Items: []AdminConversationSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
 
+func (s *stubIntegrationRepository) GetAdminConversationDetail(filter AdminConversationMessageFilter) (AdminConversationDetail, error) {
+	return AdminConversationDetail{Messages: AdminConversationMessagePage{Items: []AdminConversationMessage{}, Page: filter.Page, PerPage: filter.PerPage}}, nil
+}
+
 func (s *stubIntegrationRepository) FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error) {
 	return SystemAdminSummary{ID: adminUserID, UserID: adminUserID, AdminUserID: adminUserID, ExternalUserID: "admin", DisplayName: "Admin", Role: "system_admin", RoleName: "系統管理員", Status: "active"}, nil
 }

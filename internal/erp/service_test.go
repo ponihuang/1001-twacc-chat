@@ -341,6 +341,18 @@ func (m *mockRepository) ListAdminConversations(filter AdminConversationFilter) 
 	}, nil
 }
 
+func (m *mockRepository) GetAdminConversationDetail(filter AdminConversationMessageFilter) (AdminConversationDetail, error) {
+	return AdminConversationDetail{
+		Messages: AdminConversationMessagePage{
+			Items:      []AdminConversationMessage{},
+			Total:      0,
+			Page:       filter.Page,
+			PerPage:    filter.PerPage,
+			TotalPages: 0,
+		},
+	}, nil
+}
+
 func (m *mockRepository) FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error) {
 	if admin, ok := m.adminsByID[adminUserID]; ok {
 		return admin, nil

@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-conversations-20260717a">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-conversation-detail-20260721a">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-conversations-20260717a"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-conversation-detail-20260721a"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
@@ -248,10 +248,115 @@
               <button type="button" class="breadcrumb-link" data-menu-item="conversations">聊天紀錄</button>
               <span>/</span>
               <span>聊天室明細</span>
+              <span>/</span>
+              <span id="admin-conversation-breadcrumb-current">ID:-- - --</span>
             </nav>
-            <div class="placeholder-panel">
-              <h2>聊天室明細</h2>
-              <p>聊天室明細尚未完成</p>
+
+            <div class="is-empty" id="admin-conversation-detail-loading" hidden>
+              <div class="loading"></div>
+              <p>載入中...</p>
+            </div>
+
+            <section class="admin-conversation-detail-summary" id="admin-conversation-detail-summary" hidden>
+              <div class="admin-detail-grid">
+                <div id="admin-conversation-direct-users">
+                  <span>雙方使用者</span>
+                  <strong id="admin-conversation-detail-participants">--</strong>
+                </div>
+                <div id="admin-conversation-group-name" hidden>
+                  <span>群組名稱</span>
+                  <strong id="admin-conversation-detail-group-name">--</strong>
+                </div>
+                <div id="admin-conversation-group-creator" hidden>
+                  <span>建立者</span>
+                  <strong id="admin-conversation-detail-creator">--</strong>
+                </div>
+                <div>
+                  <span>建立時間</span>
+                  <strong id="admin-conversation-detail-created-at">--</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="admin-conversation-members" id="admin-conversation-members" hidden>
+              <button type="button" class="admin-conversation-members-toggle" id="admin-conversation-members-toggle" aria-expanded="true">
+                群組人員（0）
+              </button>
+              <div class="admin-conversation-members-list" id="admin-conversation-members-list"></div>
+            </section>
+
+            <form class="admin-conversation-message-filter-panel" id="admin-conversation-message-filter-form" aria-label="聊天訊息篩選">
+              <label>
+                <span>開始時間</span>
+                <input type="date" id="admin-conversation-message-from" autocomplete="off">
+              </label>
+              <label>
+                <span>結束時間</span>
+                <input type="date" id="admin-conversation-message-to" autocomplete="off">
+              </label>
+              <label>
+                <span>關鍵字</span>
+                <input type="search" id="admin-conversation-message-keyword" placeholder="搜尋訊息內容" autocomplete="off">
+              </label>
+              <label>
+                <span>發送者</span>
+                <input type="search" id="admin-conversation-message-sender" placeholder="搜尋帳號或名稱" autocomplete="off">
+              </label>
+              <label>
+                <span>訊息類型</span>
+                <select id="admin-conversation-message-type">
+                  <option value="">全部</option>
+                  <option value="text">文字</option>
+                  <option value="image">圖片</option>
+                  <option value="file">檔案</option>
+                </select>
+              </label>
+              <label>
+                <span>標註類型</span>
+                <select id="admin-conversation-message-mention">
+                  <option value="">全部</option>
+                  <option value="user">@使用者</option>
+                  <option value="all">@ALL</option>
+                  <option value="none">無標註</option>
+                </select>
+              </label>
+              <div class="filter-actions">
+                <button type="submit" class="btn" id="refresh-admin-conversation-messages-btn">搜尋</button>
+              </div>
+            </form>
+
+            <section class="user-table-card admin-conversation-message-card">
+              <div class="is-empty" id="admin-conversation-messages-empty" hidden>
+                <p>找不到聊天訊息</p>
+              </div>
+              <table class="data-table admin-conversation-message-table" id="admin-conversation-messages-table">
+                <thead>
+                  <tr>
+                    <th>訊息 ID</th>
+                    <th>發送時間</th>
+                    <th>發送者帳號</th>
+                    <th>發送者名稱</th>
+                    <th>訊息類型</th>
+                    <th>訊息內容</th>
+                    <th>標註資訊</th>
+                    <th>訊息狀態</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-conversation-messages-tbody"></tbody>
+              </table>
+            </section>
+            <div class="table-pagination" id="admin-conversation-messages-pagination" hidden>
+              <span class="pagination-total">總筆數: <strong id="admin-conversation-messages-total">0</strong></span>
+              <nav class="pagination-pages" id="admin-conversation-messages-pages" aria-label="聊天訊息分頁"></nav>
+              <label class="pagination-size">
+                <span class="sr-only">每頁筆數</span>
+                <select id="admin-conversation-messages-per-page">
+                  <option value="10">10 / 頁</option>
+                  <option value="20" selected>20 / 頁</option>
+                  <option value="50">50 / 頁</option>
+                  <option value="100">100 / 頁</option>
+                </select>
+              </label>
             </div>
           </div>
         </section>
