@@ -1851,7 +1851,7 @@ button:disabled {
   color: var(--admin-muted);
 }
 
-@media (max-width: 1200px) {
+@media (min-width: 901px) and (max-width: 1200px) {
   .admin-shell {
     grid-template-columns: 190px minmax(0, 1fr);
   }

@@ -33,6 +33,32 @@
   let originalEditablePermissionRole = null;
   let currentPermissionDetail = null;
   let modalConfirmHandler = null;
+  const state = {
+    permissions: new Set()
+  };
+  const SIDEBAR_MENU_PERMISSION_KEYS = {
+    users: 'office.user.index',
+    userInvitations: 'office.user.invitation.index',
+    conversations: 'office.conversations.index',
+    admins: 'office.admin.index',
+    permissions: 'office.permission.index'
+  };
+
+  const VIEW_PERMISSION_KEYS = {
+    users: 'office.user.index',
+    userCreate: 'office.user.create',
+    userInvitations: 'office.user.invitation.index',
+    userEdit: 'office.user.edit',
+    conversations: 'office.conversations.index',
+    conversationDetail: 'office.conversations.detail',
+    admins: 'office.admin.index',
+    adminCreate: 'office.admin.create',
+    adminEdit: 'office.admin.edit',
+    permissions: 'office.permission.index',
+    permissionCreate: 'office.permission.create',
+    permissionEdit: 'office.permission.edit',
+    permissionDetail: 'office.permission.detail'
+  };
 
   // Adjust each user-table column here. Use width for a fixed width or
   // minWidth when the column may grow with the available table width.
@@ -102,6 +128,128 @@
     return ROUTE_VIEWS[window.location.pathname] || 'dashboard';
   }
 
+  function getPermissionKeysFromResponse(data) {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.permissions)) return data.permissions;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.data?.permissions)) return data.data.permissions;
+    return [];
+  }
+
+  function can(permissionKey) {
+    if (!permissionKey) {
+      return false;
+    }
+    return state.permissions.has(permissionKey);
+  }
+
+  async function loadCurrentAdminPermissions() {
+    state.permissions = new Set();
+
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/me/permissions');
+      if (!response) {
+        return;
+      }
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.message || '載入權限失敗');
+      }
+
+      const permissionKeys = getPermissionKeysFromResponse(data)
+        .filter(key => typeof key === 'string' && key.trim())
+        .map(key => key.trim());
+      state.permissions = new Set(permissionKeys);
+    } catch (err) {
+      state.permissions = new Set();
+      showError(`載入權限失敗: ${err.message}`);
+    }
+  }
+
+  function checkShow(item) {
+    if (!item) {
+      return false;
+    }
+    const menuItem = item.getAttribute('data-menu-item');
+    const permissionKey = SIDEBAR_MENU_PERMISSION_KEYS[menuItem];
+    if (!permissionKey) {
+      return true;
+    }
+    return can(permissionKey);
+  }
+
+  function applySidebarPermissionVisibility() {
+    if (!elements.menu) {
+      return;
+    }
+
+    elements.menu.querySelectorAll('[data-menu-item]').forEach(item => {
+      if (!checkShow(item)) {
+        item.remove();
+      }
+    });
+
+    elements.menu.querySelectorAll('[data-sidebar-group]').forEach(group => {
+      if (!group.querySelector('[data-menu-item]')) {
+        group.remove();
+      }
+    });
+  }
+
+  function canAccessView(viewName) {
+    const permissionKey = VIEW_PERMISSION_KEYS[viewName];
+    if (!permissionKey) {
+      return true;
+    }
+    return can(permissionKey);
+  }
+
+  function getSidebarMenuItemForView(viewName) {
+    if (viewName === 'userCreate' || viewName === 'userEdit') {
+      return 'users';
+    }
+    if (viewName === 'adminCreate' || viewName === 'adminEdit') {
+      return 'admins';
+    }
+    if (viewName === 'permissionCreate' || viewName === 'permissionEdit' || viewName === 'permissionDetail') {
+      return 'permissions';
+    }
+    if (viewName === 'conversationDetail') {
+      return 'conversations';
+    }
+    return viewName;
+  }
+
+  function isSidebarMenuVisibleForView(viewName) {
+    const menuItem = getSidebarMenuItemForView(viewName);
+    if (!menuItem || !elements.menu) {
+      return false;
+    }
+    return Boolean(elements.menu.querySelector(`[data-menu-item="${menuItem}"]`));
+  }
+
+  function getFirstVisibleMenuView() {
+    const menuItem = elements.menu ? elements.menu.querySelector('[data-menu-item]') : null;
+    return menuItem ? menuItem.getAttribute('data-menu-item') : '';
+  }
+
+  function resolvePermittedInitialView() {
+    const initialView = resolveInitialView();
+    if (canAccessView(initialView) && isSidebarMenuVisibleForView(initialView)) {
+      return initialView;
+    }
+
+    const fallbackView = getFirstVisibleMenuView();
+    if (fallbackView && canAccessView(fallbackView)) {
+      showError('目前角色無權限開啟此頁面');
+      return fallbackView;
+    }
+
+    showError('目前角色沒有可用的功能權限');
+    return 'dashboard';
+  }
+
   /**
    * Initialize the app
    */
@@ -115,7 +263,9 @@
     setupOverlayScrollbar(document.getElementById('users-table-scroll'));
     setupEventListeners();
     setupDateInputPickers();
-    switchView(resolveInitialView(), { replace: true });
+    await loadCurrentAdminPermissions();
+    applySidebarPermissionVisibility();
+    switchView(resolvePermittedInitialView(), { replace: true });
     await loadInitialData();
   }
 
@@ -282,6 +432,7 @@
       editAdminAccount: document.getElementById('edit-admin-account'),
       editAdminPassword: document.getElementById('edit-admin-password'),
       editAdminDisplayName: document.getElementById('edit-admin-display-name'),
+      editAdminRole: document.getElementById('edit-admin-role'),
       editAdminStatus: document.getElementById('edit-admin-status'),
       submitEditAdmin: document.getElementById('submit-edit-admin'),
       resetEditAdmin: document.getElementById('reset-edit-admin'),
@@ -416,7 +567,7 @@
     }
 
     window.addEventListener('popstate', () => {
-      switchView(resolveInitialView(), { skipHistory: true });
+      switchView(resolvePermittedInitialView(), { skipHistory: true });
       closeAdminSidebar();
     });
 
@@ -2248,6 +2399,7 @@
         role: admin.role || 'system_admin',
         status: admin.status || 'active'
       };
+      await populateAdminRoleSelect(originalEditableAdmin.role);
       resetAdminEditForm();
       elements.editAdminDisplayName.focus();
     } catch (err) {
@@ -2264,6 +2416,7 @@
     const editableFields = [
       [elements.editAdminPassword, originalEditableAdmin.password],
       [elements.editAdminDisplayName, originalEditableAdmin.displayName],
+      [elements.editAdminRole, originalEditableAdmin.role],
       [elements.editAdminStatus, originalEditableAdmin.status]
     ];
     editableFields.forEach(([field, originalValue]) => {
@@ -2271,6 +2424,54 @@
         field.value = originalValue;
       }
     });
+  }
+
+  async function populateAdminRoleSelect(selectedRole = 'system_admin') {
+    const select = elements.editAdminRole;
+    if (!select) return;
+
+    const currentRole = selectedRole || 'system_admin';
+    select.disabled = true;
+    try {
+      const params = new URLSearchParams({ page: '1', per_page: '100' });
+      const response = await makeAuthenticatedRequest(`/api/system-admin/roles?${params.toString()}`);
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入角色失敗');
+      }
+
+      const roles = Array.isArray(data.data?.items) ? data.data.items : [];
+      select.replaceChildren();
+      let hasSelectedRole = false;
+      roles.forEach((role) => {
+        if (!role.code) return;
+        const option = document.createElement('option');
+        option.value = role.code;
+        option.textContent = role.name || role.code;
+        select.appendChild(option);
+        if (role.code === currentRole) hasSelectedRole = true;
+      });
+
+      if (!hasSelectedRole) {
+        const option = document.createElement('option');
+        option.value = currentRole;
+        option.textContent = currentRole === 'system_admin' ? '系統管理員' : currentRole;
+        select.appendChild(option);
+      }
+      select.value = currentRole;
+    } catch (err) {
+      select.replaceChildren();
+      const option = document.createElement('option');
+      option.value = currentRole;
+      option.textContent = currentRole === 'system_admin' ? '系統管理員' : currentRole;
+      select.appendChild(option);
+      select.value = currentRole;
+      console.error('load admin role options failed', err);
+    } finally {
+      select.disabled = false;
+    }
   }
 
   async function updateAdmin(event) {
@@ -2287,8 +2488,7 @@
     const payload = {
       password,
       display_name: elements.editAdminDisplayName?.value?.trim() || '',
-      role: originalEditableAdmin.role || 'system_admin',
-      email: originalEditableAdmin.email,
+      role: elements.editAdminRole?.value || originalEditableAdmin.role || 'system_admin',
       status: elements.editAdminStatus?.value || 'active'
     };
     if (!payload.display_name) {
@@ -3645,6 +3845,7 @@
   // Expose functions to global scope
   window.adminApp = {
     switchView,
+    can,
     approveDeviceFromTable: () => showError('功能開發中'),
     closeModal
   };

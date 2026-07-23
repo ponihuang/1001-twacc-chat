@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1442,6 +1443,44 @@ func (s *Service) UpdateAdminRole(roleID int64, req AdminRoleCreateRequest, acto
 		Code:    "ADMIN_ROLE_UPDATED",
 		Message: "角色已更新",
 		Data:    role,
+	}, 200, nil
+}
+
+// GetCurrentAdminPermissions returns enabled route permission keys for the current admin.
+func (s *Service) GetCurrentAdminPermissions(actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+
+	admin, err := s.repo.FindSystemAdminByID(actor.AdminUserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	role, err := s.repo.FindAdminRoleByCode(admin.Role)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	stored, err := s.repo.ListAdminRolePermissions(role.ID)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	state := buildAdminPermissionState(role, stored)
+	permissions := make([]string, 0, len(state))
+	for key, enabled := range state {
+		if enabled {
+			permissions = append(permissions, key)
+		}
+	}
+	sort.Strings(permissions)
+
+	return Response{
+		Success: true,
+		Code:    "CURRENT_ADMIN_PERMISSIONS_OK",
+		Message: "目前管理員權限讀取成功",
+		Data: CurrentAdminPermissionResponse{
+			Permissions: permissions,
+		},
 	}, 200, nil
 }
 

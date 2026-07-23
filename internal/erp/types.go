@@ -294,6 +294,11 @@ type AdminRolePermissionDetail struct {
 	Groups []AdminPermissionGroup `json:"groups"`
 }
 
+// CurrentAdminPermissionResponse contains the current admin's enabled route permission keys.
+type CurrentAdminPermissionResponse struct {
+	Permissions []string `json:"permissions"`
+}
+
 // AdminConversationFilter contains supported filters for the admin conversation list.
 type AdminConversationFilter struct {
 	Type             string
