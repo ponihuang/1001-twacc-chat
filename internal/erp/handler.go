@@ -770,7 +770,7 @@ func (h *Handler) UpdateSystemAdmin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
-// GetCurrentAdminPermissions handles GET /api/system-admin/me/permissions.
+// ...existing code...
 func (h *Handler) GetCurrentAdminPermissions(w http.ResponseWriter, r *http.Request) {
 	if h.service == nil || h.adminSessions == nil {
 		writeJSON(w, http.StatusServiceUnavailable, Response{Success: false, Code: "SERVICE_UNAVAILABLE", Message: "服务尚未完成初始化"})
@@ -787,8 +787,11 @@ func (h *Handler) GetCurrentAdminPermissions(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, status, errorResponse(err))
 		return
 	}
+
 	writeJSON(w, status, resp)
 }
+
+// ...existing code...
 
 // GetAdminRole handles GET /api/system-admin/roles/{role_id}.
 func (h *Handler) GetAdminRole(w http.ResponseWriter, r *http.Request) {
@@ -895,6 +898,14 @@ func (h *Handler) UpdateAdminRolePermissions(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, status, errorResponse(err))
 		return
 	}
+
+	// 變更 role 權限後，使相關 admin session 失效（若 adminSessions 支援）
+	if h.adminSessions != nil {
+		if inv, ok := h.adminSessions.(interface{ InvalidateByRole(int64) error }); ok {
+			_ = inv.InvalidateByRole(roleID)
+		}
+	}
+
 	writeJSON(w, status, resp)
 }
 

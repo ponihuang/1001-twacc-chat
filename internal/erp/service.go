@@ -390,14 +390,57 @@ func (s *Service) UpdatePassword(actor SessionPrincipal, req PasswordUpdateReque
 
 	return Response{Success: true, Code: "PASSWORD_UPDATED", Message: "密碼已更新", Data: data}, 200, nil
 }
+func (s *Service) adminPrincipalHasPermission(actor AdminSessionPrincipal, key string) bool {
+	if s == nil || s.repo == nil || actor.AdminUserID <= 0 {
+		return false
+	}
+
+	admin, err := s.repo.FindSystemAdminByID(actor.AdminUserID)
+	if err != nil {
+		return false
+	}
+
+	role, err := s.repo.FindAdminRoleByCode(admin.Role)
+	if err != nil {
+		return false
+	}
+	if role.Code == "system_admin" {
+		return true
+	}
+
+	permissions, err := s.repo.ListAdminRolePermissions(role.ID)
+	if err != nil {
+		return false
+	}
+
+	if permissions[key] {
+		return true
+	}
+
+	// 有任何 user 分類權限就允許列表顯示
+	if strings.HasPrefix(key, "office.user.") {
+		for perm, enabled := range permissions {
+			if enabled && strings.HasPrefix(perm, "office.user.") {
+				return true
+			}
+		}
+	}
+
+	return false
+}
 
 // ListUsers returns users for the admin console. Only system_admin is allowed.
 func (s *Service) ListUsers(filter AdminUserFilter, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
-	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
-		return Response{}, statusCode(err), err
+
+	if !(s.adminPrincipalHasPermission(actor, "office.user.index") ||
+		s.adminPrincipalHasPermission(actor, "office.user.*") ||
+		s.adminPrincipalHasPermission(actor, "office.*")) {
+		if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+			return Response{}, statusCode(err), err
+		}
 	}
 
 	users, err := s.repo.ListUsers(filter)
