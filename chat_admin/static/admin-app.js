@@ -1354,6 +1354,14 @@
         break;
       case 'options': {
         cell.className = 'actions-cell';
+        const editButton = document.createElement('button');
+        editButton.type = 'button';
+        editButton.className = 'table-action';
+        editButton.textContent = '編輯';
+        editButton.title = '編輯用戶';
+        editButton.addEventListener('click', () => openUserEdit(user.id));
+        cell.appendChild(editButton);
+
         const muteButton = document.createElement('button');
         muteButton.type = 'button';
         muteButton.className = user.is_chat_muted ? 'table-icon-action table-icon-action-danger' : 'table-icon-action';
@@ -1373,14 +1381,6 @@
           temporaryPasswordButton.addEventListener('click', () => confirmSendTemporaryPassword(user));
         }
         cell.appendChild(temporaryPasswordButton);
-
-        const editButton = document.createElement('button');
-        editButton.type = 'button';
-        editButton.className = 'table-action';
-        editButton.textContent = '編輯';
-        editButton.title = '編輯用戶';
-        editButton.addEventListener('click', () => openUserEdit(user.id));
-        cell.appendChild(editButton);
         break;
       }
       default:
@@ -2594,14 +2594,6 @@
           cell.appendChild(status);
         } else if (index === 5) {
           cell.className = 'actions-cell';
-          const detailButton = document.createElement('button');
-          detailButton.type = 'button';
-          detailButton.className = 'table-action';
-          detailButton.textContent = '權限詳細';
-          detailButton.title = '查看權限詳細';
-          detailButton.addEventListener('click', () => openPermissionRoleDetail(role.id));
-          cell.appendChild(detailButton);
-
           const editButton = document.createElement('button');
           editButton.type = 'button';
           editButton.className = 'table-action';
@@ -2609,6 +2601,14 @@
           editButton.title = '編輯權限';
           editButton.addEventListener('click', () => openPermissionRoleEdit(role.id));
           cell.appendChild(editButton);
+
+          const detailButton = document.createElement('button');
+          detailButton.type = 'button';
+          detailButton.className = 'table-action';
+          detailButton.textContent = '權限';
+          detailButton.title = '查看權限詳細';
+          detailButton.addEventListener('click', () => openPermissionRoleDetail(role.id));
+          cell.appendChild(detailButton);
         } else {
           cell.textContent = value;
         }
