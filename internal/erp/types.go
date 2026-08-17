@@ -246,6 +246,59 @@ type SystemAdminPage struct {
 	TotalPages int                  `json:"total_pages"`
 }
 
+// AdminRoleFilter contains supported filters for backend admin roles.
+type AdminRoleFilter struct {
+	Role    string
+	Page    int
+	PerPage int
+}
+
+// AdminRoleSummary is the API-facing backend admin role shape.
+type AdminRoleSummary struct {
+	ID         int64      `json:"id"`
+	Code       string     `json:"code"`
+	Name       string     `json:"name"`
+	AdminCount int        `json:"admin_count"`
+	Status     string     `json:"status"`
+	CreatedAt  *time.Time `json:"created_at,omitempty"`
+	UpdatedAt  *time.Time `json:"updated_at,omitempty"`
+}
+
+// AdminRolePage is the paginated response for backend admin roles.
+type AdminRolePage struct {
+	Items      []AdminRoleSummary `json:"items"`
+	Total      int                `json:"total"`
+	Page       int                `json:"page"`
+	PerPage    int                `json:"per_page"`
+	TotalPages int                `json:"total_pages"`
+}
+
+// AdminPermissionItem is one editable permission switch for a backend role.
+type AdminPermissionItem struct {
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	Enabled  bool   `json:"enabled"`
+}
+
+// AdminPermissionGroup groups permissions by the admin sidebar category.
+type AdminPermissionGroup struct {
+	Key   string                `json:"key"`
+	Name  string                `json:"name"`
+	Items []AdminPermissionItem `json:"items"`
+}
+
+// AdminRolePermissionDetail is the API-facing permission detail shape.
+type AdminRolePermissionDetail struct {
+	Role   AdminRoleSummary       `json:"role"`
+	Groups []AdminPermissionGroup `json:"groups"`
+}
+
+// CurrentAdminPermissionResponse contains the current admin's enabled route permission keys.
+type CurrentAdminPermissionResponse struct {
+	Permissions []string `json:"permissions"`
+}
+
 // AdminConversationFilter contains supported filters for the admin conversation list.
 type AdminConversationFilter struct {
 	Type             string
@@ -445,6 +498,24 @@ type SystemAdminCreateRequest struct {
 	Status         string `json:"status"`
 }
 
+// AdminRoleCreateRequest is the payload for creating or updating a backend admin role.
+type AdminRoleCreateRequest struct {
+	Code   string `json:"code"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// AdminRolePermissionSetting is one role permission setting submitted by the admin UI.
+type AdminRolePermissionSetting struct {
+	Key     string `json:"key"`
+	Enabled bool   `json:"enabled"`
+}
+
+// AdminRolePermissionUpdateRequest is the payload for replacing role permissions.
+type AdminRolePermissionUpdateRequest struct {
+	Permissions []AdminRolePermissionSetting `json:"permissions"`
+}
+
 // AdminUpdateUserRequest is the system-admin payload for updating a user.
 type AdminUpdateUserRequest struct {
 	Password    string `json:"password"`
@@ -483,6 +554,7 @@ type AdminLoginRequest struct {
 // ProfileUpdateRequest is the current-user profile update payload.
 type ProfileUpdateRequest struct {
 	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
 }
 
 // IPWhitelistUpdateRequest is the system-admin whitelist payload.
@@ -530,6 +602,20 @@ type SystemAdminUpdateParams struct {
 	DisplayName  string
 	Role         string
 	Status       string
+}
+
+// AdminRoleCreateParams carries validated backend admin role fields into storage.
+type AdminRoleCreateParams struct {
+	Code      string
+	Name      string
+	Status    string
+	CreatedBy int64
+}
+
+// AdminRoleUpdateParams carries mutable backend admin role fields into storage.
+type AdminRoleUpdateParams struct {
+	Name   string
+	Status string
 }
 
 // AdminUpdateUserParams carries validated admin edits into storage.
@@ -597,6 +683,13 @@ type Repository interface {
 	MarkUserInvitationSent(invitationID int64, sentAt time.Time) error
 	AcceptUserInvitation(params AcceptUserInvitationParams) (User, error)
 	ListSystemAdmins(filter SystemAdminFilter) (SystemAdminPage, error)
+	ListAdminRoles(filter AdminRoleFilter) (AdminRolePage, error)
+	FindAdminRoleByID(roleID int64) (AdminRoleSummary, error)
+	FindAdminRoleByCode(code string) (AdminRoleSummary, error)
+	CreateAdminRole(params AdminRoleCreateParams) (AdminRoleSummary, error)
+	UpdateAdminRole(roleID int64, params AdminRoleUpdateParams) (AdminRoleSummary, error)
+	ListAdminRolePermissions(roleID int64) (map[string]bool, error)
+	ReplaceAdminRolePermissions(roleID int64, permissions map[string]bool) error
 	ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error)
 	GetAdminConversationDetail(filter AdminConversationMessageFilter) (AdminConversationDetail, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)
@@ -608,7 +701,7 @@ type Repository interface {
 	UpdateUserChatMute(userID int64, params AdminUpdateUserChatMuteParams) (User, error)
 	UpdateUserTemporaryPassword(userID int64, params TemporaryPasswordParams) (User, error)
 	UpdateUserPassword(userID int64, passwordHash string) (User, error)
-	UpdateUserProfile(userID int64, displayName string) (User, error)
+	UpdateUserProfile(userID int64, displayName string, email string) (User, error)
 	IsSystemAdmin(userID int64) (bool, error)
 	GetUserSecuritySettings(userID int64) (UserSecuritySettings, error)
 	ListActiveIPWhitelistRules(userID int64) ([]string, error)

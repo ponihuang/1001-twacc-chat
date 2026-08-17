@@ -331,6 +331,40 @@ func (m *mockRepository) ListSystemAdmins(filter SystemAdminFilter) (SystemAdmin
 	}, nil
 }
 
+func (m *mockRepository) ListAdminRoles(filter AdminRoleFilter) (AdminRolePage, error) {
+	return AdminRolePage{
+		Items:      []AdminRoleSummary{},
+		Total:      0,
+		Page:       filter.Page,
+		PerPage:    filter.PerPage,
+		TotalPages: 0,
+	}, nil
+}
+
+func (m *mockRepository) FindAdminRoleByID(roleID int64) (AdminRoleSummary, error) {
+	return AdminRoleSummary{}, ErrUserNotFound
+}
+
+func (m *mockRepository) FindAdminRoleByCode(code string) (AdminRoleSummary, error) {
+	return AdminRoleSummary{}, ErrUserNotFound
+}
+
+func (m *mockRepository) CreateAdminRole(params AdminRoleCreateParams) (AdminRoleSummary, error) {
+	return AdminRoleSummary{ID: 1, Code: params.Code, Name: params.Name, Status: params.Status}, nil
+}
+
+func (m *mockRepository) UpdateAdminRole(roleID int64, params AdminRoleUpdateParams) (AdminRoleSummary, error) {
+	return AdminRoleSummary{ID: roleID, Code: "system_admin", Name: params.Name, Status: params.Status}, nil
+}
+
+func (m *mockRepository) ListAdminRolePermissions(roleID int64) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (m *mockRepository) ReplaceAdminRolePermissions(roleID int64, permissions map[string]bool) error {
+	return nil
+}
+
 func (m *mockRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{
 		Items:      []AdminConversationSummary{},
@@ -479,12 +513,13 @@ func (m *mockRepository) UpdateUserPassword(userID int64, passwordHash string) (
 	return user, nil
 }
 
-func (m *mockRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
+func (m *mockRepository) UpdateUserProfile(userID int64, displayName string, email string) (User, error) {
 	user, ok := m.usersByID[userID]
 	if !ok {
 		return User{}, ErrUserNotFound
 	}
 	user.DisplayName = displayName
+	user.Email = email
 	m.usersByID[userID] = user
 	m.usersByExternal[user.SourceSystem+":"+user.ExternalUserID] = user
 	return user, nil
@@ -681,12 +716,12 @@ func TestLoginRejectsUnknownUserWithoutCreatingAccount(t *testing.T) {
 
 func TestUpdateProfileUpdatesDisplayName(t *testing.T) {
 	repo := &mockRepository{
-		usersByID:       map[int64]User{1: {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "Old Name"}},
-		usersByExternal: map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "Old Name"}},
+		usersByID:       map[int64]User{1: {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "Old Name", Email: "old@example.com"}},
+		usersByExternal: map[string]User{"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "Old Name", Email: "old@example.com"}},
 	}
 	service := NewService(repo, &mockSessions{})
 
-	resp, status, err := service.UpdateProfile(SessionPrincipal{UserID: 1, DeviceID: "device-1"}, ProfileUpdateRequest{DisplayName: "New Name"})
+	resp, status, err := service.UpdateProfile(SessionPrincipal{UserID: 1, DeviceID: "device-1"}, ProfileUpdateRequest{DisplayName: "New Name", Email: "New@Example.com"})
 	if err != nil {
 		t.Fatalf("UpdateProfile returned error: %v", err)
 	}
@@ -696,12 +731,40 @@ func TestUpdateProfileUpdatesDisplayName(t *testing.T) {
 	if repo.usersByID[1].DisplayName != "New Name" {
 		t.Fatalf("stored display name = %q, want New Name", repo.usersByID[1].DisplayName)
 	}
+	if repo.usersByID[1].Email != "new@example.com" {
+		t.Fatalf("stored email = %q, want new@example.com", repo.usersByID[1].Email)
+	}
 	data, ok := resp.Data.(map[string]any)
 	if !ok {
 		t.Fatalf("response data type = %T, want map", resp.Data)
 	}
 	if data["display_name"] != "New Name" {
 		t.Fatalf("display_name = %v, want New Name", data["display_name"])
+	}
+	if data["email"] != "new@example.com" {
+		t.Fatalf("email = %v, want new@example.com", data["email"])
+	}
+}
+
+func TestUpdateProfileRejectsDuplicateEmail(t *testing.T) {
+	repo := &mockRepository{
+		usersByID: map[int64]User{
+			1: {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "User One", Email: "user1@example.com"},
+			2: {ID: 2, SourceSystem: "erp", ExternalUserID: "user-2", DisplayName: "User Two", Email: "taken@example.com"},
+		},
+		usersByExternal: map[string]User{
+			"erp:user-1": {ID: 1, SourceSystem: "erp", ExternalUserID: "user-1", DisplayName: "User One", Email: "user1@example.com"},
+			"erp:user-2": {ID: 2, SourceSystem: "erp", ExternalUserID: "user-2", DisplayName: "User Two", Email: "taken@example.com"},
+		},
+	}
+	service := NewService(repo, &mockSessions{})
+
+	_, status, err := service.UpdateProfile(SessionPrincipal{UserID: 1, DeviceID: "device-1"}, ProfileUpdateRequest{DisplayName: "User One", Email: "taken@example.com"})
+	if !errors.Is(err, ErrEmailAlreadyExists) {
+		t.Fatalf("expected ErrEmailAlreadyExists, got %v", err)
+	}
+	if status != 409 {
+		t.Fatalf("status = %d, want 409", status)
 	}
 }
 
