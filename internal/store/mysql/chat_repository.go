@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,6 +78,7 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 			c.id,
 			c.type,
 			cm.is_notification_muted,
+			c.auto_delete_days,
 			CASE
 				WHEN c.type = 'direct' THEN COALESCE(
 					(
@@ -199,6 +201,7 @@ func (r *ChatRepository) ListConversations(userID int64) ([]chat.ConversationSum
 			&item.ConversationID,
 			&item.Type,
 			&item.NotificationMuted,
+			&item.AutoDeleteDays,
 			&item.Title,
 			&item.DirectSourceSystem,
 			&item.DirectExternalID,
@@ -672,6 +675,7 @@ func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (c
 			c.id,
 			c.type,
 			cm.is_notification_muted,
+			c.auto_delete_days,
 			CASE
 				WHEN c.type = 'direct' THEN COALESCE(
 					(
@@ -693,7 +697,7 @@ func (r *ChatRepository) GetConversationForUser(userID, conversationID int64) (c
 		 WHERE cm.user_id = ?
 		   AND c.id = ?
 		 LIMIT 1`, userID, userID, conversationID)
-	if err := row.Scan(&conversation.ID, &conversation.Type, &conversation.NotificationMuted, &conversation.Title, &conversation.Description); err != nil {
+	if err := row.Scan(&conversation.ID, &conversation.Type, &conversation.NotificationMuted, &conversation.AutoDeleteDays, &conversation.Title, &conversation.Description); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return chat.Conversation{}, chat.ErrConversationNotFound
 		}
@@ -747,6 +751,157 @@ func (r *ChatRepository) UpdateConversationNotificationMute(userID, conversation
 	}
 
 	return r.GetConversationForUser(userID, conversationID)
+}
+
+// MaxConversationAutoDeleteDays returns the system-configured frontend maximum auto-delete days.
+func (r *ChatRepository) MaxConversationAutoDeleteDays() (int, error) {
+	var value string
+	row := r.db.QueryRow(`SELECT setting_value FROM app_settings WHERE setting_key = 'chat_auto_delete_max_days' LIMIT 1`)
+	if err := row.Scan(&value); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 30, nil
+		}
+		return 0, fmt.Errorf("get max conversation auto-delete days: %w", err)
+	}
+	days, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || days <= 0 {
+		return 30, nil
+	}
+	if days > 30 {
+		return 30, nil
+	}
+	return days, nil
+}
+
+// UpdateConversationAutoDelete stores the conversation auto-delete retention days.
+func (r *ChatRepository) UpdateConversationAutoDelete(userID, conversationID int64, days int) (chat.Conversation, error) {
+	result, err := r.db.Exec(`
+		UPDATE conversations c
+		   JOIN conversation_members cm ON cm.conversation_id = c.id AND cm.user_id = ?
+		   SET c.auto_delete_days = ?, c.auto_delete_updated_by = ?, c.auto_delete_updated_at = NOW()
+		 WHERE c.id = ?`, userID, days, userID, conversationID)
+	if err != nil {
+		return chat.Conversation{}, fmt.Errorf("update conversation auto-delete: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return chat.Conversation{}, fmt.Errorf("update conversation auto-delete rows: %w", err)
+	}
+	if affected == 0 {
+		return chat.Conversation{}, chat.ErrConversationNotFound
+	}
+	return r.GetConversationForUser(userID, conversationID)
+}
+
+// PurgeExpiredConversationMessages deletes messages older than the conversation auto-delete setting.
+func (r *ChatRepository) PurgeExpiredConversationMessages(conversationID int64, now time.Time) (int64, error) {
+	var days int
+	if err := r.db.QueryRow(`SELECT auto_delete_days FROM conversations WHERE id = ? LIMIT 1`, conversationID).Scan(&days); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, chat.ErrConversationNotFound
+		}
+		return 0, fmt.Errorf("load conversation auto-delete days: %w", err)
+	}
+	if days <= 0 {
+		return 0, nil
+	}
+	return r.purgeMessagesWhere(`conversation_id = ? AND created_at < ?`, conversationID, now.AddDate(0, 0, -days))
+}
+
+// PurgeExpiredMessages deletes expired messages for every auto-delete-enabled conversation.
+func (r *ChatRepository) PurgeExpiredMessages(now time.Time) (int64, error) {
+	rows, err := r.db.Query(`SELECT id, auto_delete_days FROM conversations WHERE auto_delete_days > 0`)
+	if err != nil {
+		return 0, fmt.Errorf("list auto-delete conversations: %w", err)
+	}
+	defer rows.Close()
+
+	var total int64
+	for rows.Next() {
+		var conversationID int64
+		var days int
+		if err := rows.Scan(&conversationID, &days); err != nil {
+			return total, fmt.Errorf("scan auto-delete conversation: %w", err)
+		}
+		deleted, err := r.purgeMessagesWhere(`conversation_id = ? AND created_at < ?`, conversationID, now.AddDate(0, 0, -days))
+		if err != nil {
+			return total, err
+		}
+		total += deleted
+	}
+	return total, rows.Err()
+}
+
+func (r *ChatRepository) purgeMessagesWhere(where string, args ...any) (int64, error) {
+	query := `SELECT id FROM messages WHERE ` + where
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("select expired messages: %w", err)
+	}
+	defer rows.Close()
+
+	messageIDs := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return 0, fmt.Errorf("scan expired message: %w", err)
+		}
+		messageIDs = append(messageIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate expired messages: %w", err)
+	}
+	if len(messageIDs) == 0 {
+		return 0, nil
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("begin purge messages: %w", err)
+	}
+	defer tx.Rollback()
+
+	placeholders := int64Placeholders(len(messageIDs))
+	idArgs := make([]any, 0, len(messageIDs))
+	for _, id := range messageIDs {
+		idArgs = append(idArgs, id)
+	}
+
+	if _, err := tx.Exec(`DELETE FROM chat_email_notifications WHERE first_message_id IN (`+placeholders+`) OR latest_message_id IN (`+placeholders+`)`, append(idArgs, idArgs...)...); err != nil {
+		return 0, fmt.Errorf("delete expired message notifications: %w", err)
+	}
+	if _, err := tx.Exec(`UPDATE conversation_reads SET last_read_message_id = NULL WHERE last_read_message_id IN (`+placeholders+`)`, idArgs...); err != nil {
+		return 0, fmt.Errorf("clear expired message read pointers: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM attachments WHERE message_id IN (`+placeholders+`)`, idArgs...); err != nil {
+		return 0, fmt.Errorf("delete expired message attachments: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM message_mentions WHERE message_id IN (`+placeholders+`)`, idArgs...); err != nil {
+		return 0, fmt.Errorf("delete expired message mentions: %w", err)
+	}
+	result, err := tx.Exec(`DELETE FROM messages WHERE id IN (`+placeholders+`)`, idArgs...)
+	if err != nil {
+		return 0, fmt.Errorf("delete expired messages: %w", err)
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read expired message delete rows: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit purge messages: %w", err)
+	}
+	return deleted, nil
+}
+
+func int64Placeholders(count int) string {
+	if count <= 0 {
+		return ""
+	}
+	values := make([]string, count)
+	for i := range values {
+		values[i] = "?"
+	}
+	return strings.Join(values, ",")
 }
 
 // ListMessages returns recent messages for a conversation ordered from old to new.

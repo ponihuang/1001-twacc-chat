@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1786,6 +1787,86 @@ func (r *IntegrationRepository) ReplaceAdminRolePermissions(roleID int64, permis
 		return fmt.Errorf("commit admin role permissions: %w", err)
 	}
 	return nil
+}
+
+// GetSystemSettings returns chat-related backend settings.
+func (r *IntegrationRepository) GetSystemSettings() (erp.SystemSettings, error) {
+	rows, err := r.db.Query(`
+		SELECT setting_key, setting_value, updated_at
+		  FROM app_settings
+		 WHERE setting_key IN ('chat_auto_delete_max_days', 'admin_chat_history_retention_days')`)
+	if err != nil {
+		return erp.SystemSettings{}, fmt.Errorf("get system settings: %w", err)
+	}
+	defer rows.Close()
+
+	settings := erp.SystemSettings{
+		ChatAutoDeleteMaxDays:         30,
+		AdminChatHistoryRetentionDays: 90,
+	}
+	var newest time.Time
+	for rows.Next() {
+		var key, value string
+		var updatedAt time.Time
+		if err := rows.Scan(&key, &value, &updatedAt); err != nil {
+			return erp.SystemSettings{}, fmt.Errorf("scan system settings: %w", err)
+		}
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil {
+			parsed = 0
+		}
+		switch key {
+		case "chat_auto_delete_max_days":
+			settings.ChatAutoDeleteMaxDays = parsed
+		case "admin_chat_history_retention_days":
+			settings.AdminChatHistoryRetentionDays = parsed
+		}
+		if updatedAt.After(newest) {
+			newest = updatedAt
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return erp.SystemSettings{}, fmt.Errorf("iterate system settings: %w", err)
+	}
+	if !newest.IsZero() {
+		settings.UpdatedAt = &newest
+	}
+	return settings, nil
+}
+
+// UpdateSystemSettings updates chat-related backend settings.
+func (r *IntegrationRepository) UpdateSystemSettings(settings erp.SystemSettings, adminUserID int64) (erp.SystemSettings, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return erp.SystemSettings{}, fmt.Errorf("begin update system settings: %w", err)
+	}
+	defer tx.Rollback()
+
+	values := []struct {
+		key   string
+		name  string
+		value int
+	}{
+		{"chat_auto_delete_max_days", "聊天自動刪除可選最大天數", settings.ChatAutoDeleteMaxDays},
+		{"admin_chat_history_retention_days", "後台聊天紀錄可查詢天數", settings.AdminChatHistoryRetentionDays},
+	}
+	for _, item := range values {
+		if _, err := tx.Exec(`
+			INSERT INTO app_settings (setting_key, setting_name, value_type, setting_value, updated_by_admin_id)
+			VALUES (?, ?, 'number', ?, ?)
+			ON DUPLICATE KEY UPDATE
+				setting_name = VALUES(setting_name),
+				value_type = VALUES(value_type),
+				setting_value = VALUES(setting_value),
+				updated_by_admin_id = VALUES(updated_by_admin_id)`,
+			item.key, item.name, strconv.Itoa(item.value), nullableInt64(adminUserID)); err != nil {
+			return erp.SystemSettings{}, fmt.Errorf("update system setting %s: %w", item.key, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return erp.SystemSettings{}, fmt.Errorf("commit update system settings: %w", err)
+	}
+	return r.GetSystemSettings()
 }
 
 type adminRoleScanner interface {

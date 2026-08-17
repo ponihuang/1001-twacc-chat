@@ -19,6 +19,8 @@ const (
 	fileMessageType        = "file"
 )
 
+var conversationAutoDeleteChoices = []int{1, 3, 7, 30}
+
 var (
 	ErrConversationNotFound      = errors.New("conversation not found")
 	ErrInsufficientRole          = errors.New("insufficient role")
@@ -185,6 +187,7 @@ func (s *Service) ListConversations(actor SessionPrincipal) (Response, int, erro
 			UnreadCount:        conversation.UnreadCount,
 			HasUnreadMention:   conversation.HasUnreadMention,
 			NotificationMuted:  conversation.NotificationMuted,
+			AutoDeleteDays:     conversation.AutoDeleteDays,
 		}
 		if !conversation.LastMessageAt.IsZero() {
 			item.LastMessageAt = conversation.LastMessageAt.Format(time.RFC3339)
@@ -313,6 +316,63 @@ func (s *Service) UpdateConversationNotificationMute(actor SessionPrincipal, con
 		Data: ConversationNotificationMuteData{
 			ConversationID:    conversation.ID,
 			NotificationMuted: conversation.NotificationMuted,
+		},
+	}, 200, nil
+}
+
+// UpdateConversationAutoDelete updates auto-delete days for a conversation. Any member may change it.
+func (s *Service) UpdateConversationAutoDelete(actor SessionPrincipal, conversationID int64, req UpdateConversationAutoDeleteRequest) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("chat service unavailable")
+	}
+	if err := s.requireChatUser(actor.UserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if conversationID <= 0 {
+		return Response{}, statusCode(ErrConversationNotFound), ErrConversationNotFound
+	}
+
+	maxDays, err := s.repo.MaxConversationAutoDeleteDays()
+	if err != nil {
+		return Response{}, 500, err
+	}
+	options := allowedAutoDeleteOptions(maxDays)
+	if !validAutoDeleteDays(req.Days, options) {
+		return Response{}, 400, fmt.Errorf("auto_delete_days must be 0 or one of available options")
+	}
+
+	conversation, err := s.repo.UpdateConversationAutoDelete(actor.UserID, conversationID, req.Days)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	if _, err := s.repo.PurgeExpiredConversationMessages(conversationID, time.Now().UTC()); err != nil {
+		return Response{}, 500, err
+	}
+
+	if s.broker != nil {
+		if memberIDs, err := s.repo.ListConversationMemberIDs(conversationID); err == nil {
+			s.broker.PublishToUsers(memberIDs, RealtimeEvent{
+				EventType:      "conversation.auto_delete.updated",
+				ConversationID: conversationID,
+				AutoDelete: &ConversationAutoDeleteData{
+					ConversationID:    conversationID,
+					AutoDeleteDays:    conversation.AutoDeleteDays,
+					AutoDeleteOptions: options,
+					MaxAutoDeleteDays: maxDays,
+				},
+			})
+		}
+	}
+
+	return Response{
+		Success: true,
+		Code:    "CONVERSATION_AUTO_DELETE_UPDATED",
+		Message: "自動刪除設定已更新",
+		Data: ConversationAutoDeleteData{
+			ConversationID:    conversation.ID,
+			AutoDeleteDays:    conversation.AutoDeleteDays,
+			AutoDeleteOptions: options,
+			MaxAutoDeleteDays: maxDays,
 		},
 	}, 200, nil
 }
@@ -472,6 +532,7 @@ func (s *Service) CreateDirectConversation(actor SessionPrincipal, req CreateDir
 		ConversationID: conversation.ID,
 		Type:           conversation.Type,
 		Title:          conversation.Title,
+		AutoDeleteDays: conversation.AutoDeleteDays,
 	}
 
 	if s.broker != nil {
@@ -510,6 +571,9 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
+	if _, err := s.repo.PurgeExpiredConversationMessages(conversationID, time.Now().UTC()); err != nil {
+		return Response{}, 500, err
+	}
 
 	messages, err := s.repo.ListMessages(conversationID, messageListLimit)
 	if err != nil {
@@ -519,6 +583,11 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 	if err != nil {
 		return Response{}, 500, err
 	}
+	maxAutoDeleteDays, err := s.repo.MaxConversationAutoDeleteDays()
+	if err != nil {
+		return Response{}, 500, err
+	}
+	autoDeleteOptions := allowedAutoDeleteOptions(maxAutoDeleteDays)
 
 	items := make([]MessageItem, 0, len(messages))
 	for _, message := range messages {
@@ -543,6 +612,9 @@ func (s *Service) ListMessages(conversationID int64, actor SessionPrincipal) (Re
 			Type:                 conversation.Type,
 			Title:                conversation.Title,
 			NotificationMuted:    conversation.NotificationMuted,
+			AutoDeleteDays:       conversation.AutoDeleteDays,
+			AutoDeleteOptions:    autoDeleteOptions,
+			MaxAutoDeleteDays:    maxAutoDeleteDays,
 			FirstUnreadMessageID: firstUnreadMessageID,
 			Messages:             items,
 		},
@@ -918,6 +990,34 @@ func statusCode(err error) int {
 	default:
 		return 500
 	}
+}
+
+func allowedAutoDeleteOptions(maxDays int) []int {
+	if maxDays <= 0 {
+		return nil
+	}
+	if maxDays > 30 {
+		maxDays = 30
+	}
+	options := make([]int, 0, len(conversationAutoDeleteChoices))
+	for _, days := range conversationAutoDeleteChoices {
+		if days <= maxDays {
+			options = append(options, days)
+		}
+	}
+	return options
+}
+
+func validAutoDeleteDays(days int, options []int) bool {
+	if days == 0 {
+		return true
+	}
+	for _, option := range options {
+		if days == option {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizedAttachmentInputs(req CreateMessageRequest) []AttachmentInput {
