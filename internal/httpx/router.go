@@ -9,6 +9,7 @@ import (
 
 	"1001-twacc-chat/internal/chat"
 	"1001-twacc-chat/internal/erp"
+	"1001-twacc-chat/internal/telegram"
 )
 
 type UIConfig struct {
@@ -16,14 +17,14 @@ type UIConfig struct {
 }
 
 // NewRouter builds the HTTP routes used by the chat MVP scaffold.
-func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, uiConfig UIConfig) http.Handler {
+func NewRouter(integrationHandler *erp.Handler, chatHandler *chat.Handler, telegramHandler *telegram.Handler, uiConfig UIConfig) http.Handler {
 	mux := http.NewServeMux()
 	pages := pageData{
 		IntegrationSharedToken: strings.TrimSpace(uiConfig.IntegrationSharedToken),
 	}
 
 	// register routes split between chat (frontend/API) and admin
-	registerChatRoutes(mux, integrationHandler, chatHandler, pages)
+	registerChatRoutes(mux, integrationHandler, chatHandler, telegramHandler, pages)
 	registerAdminRoutes(mux, integrationHandler, pages)
 
 	return mux

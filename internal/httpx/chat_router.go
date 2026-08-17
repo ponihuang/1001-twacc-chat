@@ -6,6 +6,7 @@ import (
 
 	"1001-twacc-chat/internal/chat"
 	"1001-twacc-chat/internal/erp"
+	"1001-twacc-chat/internal/telegram"
 )
 
 type methodRouter struct {
@@ -31,7 +32,7 @@ func handleFunc(mux *http.ServeMux, registry map[string]*methodRouter, method, p
 }
 
 // registerChatRoutes registers public (frontend) routes and API endpoints for chat.
-func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, chatHandler *chat.Handler, pages pageData) {
+func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, chatHandler *chat.Handler, telegramHandler *telegram.Handler, pages pageData) {
 	routeRegistry := make(map[string]*methodRouter)
 
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
@@ -45,6 +46,10 @@ func registerChatRoutes(mux *http.ServeMux, integrationHandler *erp.Handler, cha
 	handleFunc(mux, routeRegistry, "GET", "/m/chat", func(w http.ResponseWriter, r *http.Request) { mobileHandler(w, r, pages) })
 	handleFunc(mux, routeRegistry, "GET", "/embed/chat", func(w http.ResponseWriter, r *http.Request) { embedHandler(w, r, pages) })
 	handleFunc(mux, routeRegistry, "GET", "/healthz", healthHandler)
+
+	if telegramHandler != nil {
+		handleFunc(mux, routeRegistry, "POST", "/api/telegram/webhook", telegramHandler.Webhook)
+	}
 
 	if integrationHandler != nil {
 		handleFunc(mux, routeRegistry, "GET", "/api/user-invitations/{token}", integrationHandler.GetPublicUserInvitation)

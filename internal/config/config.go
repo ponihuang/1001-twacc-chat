@@ -39,6 +39,7 @@ type Config struct {
 	AppURL                        string
 	UserInvitationTTL             time.Duration
 	Mail                          MailConfig
+	Telegram                      TelegramConfig
 }
 
 // ServerConfig groups HTTP server settings.
@@ -72,6 +73,11 @@ type MailConfig struct {
 	Password    string
 	FromAddress string
 	FromName    string
+}
+
+// TelegramConfig groups Telegram Bot API settings.
+type TelegramConfig struct {
+	BotToken string
 }
 
 // Load reads runtime configuration from environment variables.
@@ -117,6 +123,9 @@ func Load() Config {
 			Password:    os.Getenv("MAIL_SMTP_PASSWORD"),
 			FromAddress: strings.TrimSpace(os.Getenv("MAIL_FROM_ADDRESS")),
 			FromName:    envOrDefault("MAIL_FROM_NAME", "TWACC 聊天系統"),
+		},
+		Telegram: TelegramConfig{
+			BotToken: strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
 		},
 	}
 }

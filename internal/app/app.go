@@ -15,6 +15,7 @@ import (
 	"1001-twacc-chat/internal/httpx"
 	"1001-twacc-chat/internal/mailer"
 	storemysql "1001-twacc-chat/internal/store/mysql"
+	"1001-twacc-chat/internal/telegram"
 )
 
 // Run starts the HTTP server for the chat system scaffold.
@@ -23,6 +24,7 @@ func Run() error {
 
 	var integrationHandler *erp.Handler
 	var chatHandler *chat.Handler
+	telegramHandler := telegram.NewHandler(telegram.NewClient(cfg.Telegram.BotToken))
 	realtimeHub := chat.NewHub()
 	appCtx, stopApp := context.WithCancel(context.Background())
 	defer stopApp()
@@ -92,7 +94,7 @@ func Run() error {
 
 	server := &http.Server{
 		Addr: cfg.ListenHost + ":" + cfg.Port,
-		Handler: httpx.NewRouter(integrationHandler, chatHandler, httpx.UIConfig{
+		Handler: httpx.NewRouter(integrationHandler, chatHandler, telegramHandler, httpx.UIConfig{
 			IntegrationSharedToken: cfg.IntegrationSharedToken,
 		}),
 		ReadTimeout:  cfg.Server.ReadTimeout,
