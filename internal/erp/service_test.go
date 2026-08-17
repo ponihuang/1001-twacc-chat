@@ -373,6 +373,10 @@ func (m *mockRepository) UpdateSystemSettings(settings SystemSettings, adminUser
 	return settings, nil
 }
 
+func (m *mockRepository) PurgeExpiredAdminChatMessages(now time.Time) (int64, error) {
+	return 0, nil
+}
+
 func (m *mockRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{
 		Items:      []AdminConversationSummary{},

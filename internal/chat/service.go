@@ -338,14 +338,14 @@ func (s *Service) UpdateConversationAutoDelete(actor SessionPrincipal, conversat
 	}
 	options := allowedAutoDeleteOptions(maxDays)
 	if !validAutoDeleteDays(req.Days, options) {
-		return Response{}, 400, fmt.Errorf("auto_delete_days must be 0 or one of available options")
+		return Response{}, 400, fmt.Errorf("auto_delete_days must be one of available options")
 	}
 
 	conversation, err := s.repo.UpdateConversationAutoDelete(actor.UserID, conversationID, req.Days)
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
-	if _, err := s.repo.PurgeExpiredConversationMessages(conversationID, time.Now().UTC()); err != nil {
+	if _, err := s.repo.PurgeExpiredMessages(time.Now().UTC()); err != nil {
 		return Response{}, 500, err
 	}
 
@@ -1005,13 +1005,13 @@ func allowedAutoDeleteOptions(maxDays int) []int {
 			options = append(options, days)
 		}
 	}
+	if len(options) == 0 || options[len(options)-1] != maxDays {
+		options = append(options, maxDays)
+	}
 	return options
 }
 
 func validAutoDeleteDays(days int, options []int) bool {
-	if days == 0 {
-		return true
-	}
 	for _, option := range options {
 		if days == option {
 			return true

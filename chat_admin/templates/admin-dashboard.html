@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-permissions-detail-20260722a">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-system-settings-table-20260817a">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-permissions-detail-20260722a"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-system-settings-table-20260817a"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
@@ -982,23 +982,36 @@
           <div class="admin-page-panel">
             <p class="admin-breadcrumb">首頁 / 系統設定</p>
 
-            <form class="user-create-form" id="system-settings-form">
-              <div class="user-create-fields">
-                <label class="user-create-field">
-                  <span>前台自動刪除最大天數</span>
-                  <input type="number" id="setting-chat-auto-delete-max-days" min="1" max="30" step="1" autocomplete="off" required>
-                </label>
-                <label class="user-create-field">
-                  <span>後台聊天紀錄可查詢天數</span>
-                  <input type="number" id="setting-admin-chat-history-retention-days" min="1" step="1" autocomplete="off" required>
-                </label>
+            <section class="system-setting-group" aria-label="聊天紀錄選項">
+              <div class="system-setting-group-header">
+                <h2>聊天紀錄</h2>
+                <button type="button" class="btn btn-compact" id="refresh-system-settings">重整</button>
               </div>
 
-              <div class="user-create-actions">
-                <button type="submit" class="btn btn-primary btn-compact" id="submit-system-settings">儲存</button>
-                <button type="button" class="btn btn-compact" id="reset-system-settings">重置</button>
+              <div class="user-table-card system-setting-table-card">
+                <div class="is-empty" id="system-settings-loading" hidden>
+                  <div class="loading"></div>
+                  <p>載入中...</p>
+                </div>
+                <div class="is-empty" id="system-settings-empty" hidden>
+                  <p>尚無系統設定</p>
+                </div>
+                <table class="data-table system-setting-table" id="system-settings-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>名稱</th>
+                      <th>屬性</th>
+                      <th>資料型態</th>
+                      <th>數值</th>
+                      <th>上次更新時間</th>
+                      <th>選項</th>
+                    </tr>
+                  </thead>
+                  <tbody id="system-settings-tbody"></tbody>
+                </table>
               </div>
-            </form>
+            </section>
           </div>
         </section>
       </main>
