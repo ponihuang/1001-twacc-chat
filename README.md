@@ -251,10 +251,15 @@ REQUIRE_TRUSTED_DEVICE=false
 第一次部署時可用 CLI 建立第一個後台管理員帳號：
 
 ```bash
-go run . seed-admin --account admin01 --password Admin123! --name 系統管理員
+go run . seed-admin --account admin --password admin123 --name admin
 ```
 
 此指令會讀取 `.env` 的 MySQL 設定，先套用 migration，再建立 `admin_users` 後台管理員帳號。指令可重複執行；若帳號已存在，不會覆蓋既有密碼，只會確認管理員帳號存在。
+若需將既有測試帳號密碼重設為指定值，可加上 `--reset-password`：
+
+```bash
+go run . seed-admin --account admin --password admin123 --name admin --reset-password
+```
 
 目前 `/office/user` 會從 `users` 資料表載入使用者，並以 `auth_sessions.last_used_at` 顯示最近在線時間。詳細說明請見 [`chat_admin/README.md`](chat_admin/README.md)。
 
