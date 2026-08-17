@@ -365,6 +365,14 @@ func (m *mockRepository) ReplaceAdminRolePermissions(roleID int64, permissions m
 	return nil
 }
 
+func (m *mockRepository) GetSystemSettings() (SystemSettings, error) {
+	return SystemSettings{ChatAutoDeleteMaxDays: 30, AdminChatHistoryRetentionDays: 90}, nil
+}
+
+func (m *mockRepository) UpdateSystemSettings(settings SystemSettings, adminUserID int64) (SystemSettings, error) {
+	return settings, nil
+}
+
 func (m *mockRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{
 		Items:      []AdminConversationSummary{},

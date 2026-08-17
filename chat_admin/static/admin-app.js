@@ -41,7 +41,8 @@
     userInvitations: 'office.user.invitation.index',
     conversations: 'office.conversations.index',
     admins: 'office.admin.index',
-    permissions: 'office.permission.index'
+    permissions: 'office.permission.index',
+    systemSettings: 'office.system-settings.index'
   };
 
   const VIEW_PERMISSION_KEYS = {
@@ -57,7 +58,8 @@
     permissions: 'office.permission.index',
     permissionCreate: 'office.permission.create',
     permissionEdit: 'office.permission.edit',
-    permissionDetail: 'office.permission.detail'
+    permissionDetail: 'office.permission.detail',
+    systemSettings: 'office.system-settings.index'
   };
 
   // Adjust each user-table column here. Use width for a fixed width or
@@ -88,7 +90,8 @@
     permissions: '/office/permissions',
     permissionCreate: '/office/permissions/create',
     permissionEdit: null,
-    permissionDetail: null
+    permissionDetail: null,
+    systemSettings: '/office/system-settings'
   };
 
   const ROUTE_VIEWS = Object.entries(VIEW_ROUTES).reduce((routes, [viewName, path]) => {
@@ -471,6 +474,13 @@
       disableAllPermissions: document.getElementById('disable-all-permissions'),
       enableAllPermissions: document.getElementById('enable-all-permissions'),
       submitPermissionDetail: document.getElementById('submit-permission-detail'),
+
+      // System settings
+      systemSettingsForm: document.getElementById('system-settings-form'),
+      settingChatAutoDeleteMaxDays: document.getElementById('setting-chat-auto-delete-max-days'),
+      settingAdminChatHistoryRetentionDays: document.getElementById('setting-admin-chat-history-retention-days'),
+      submitSystemSettings: document.getElementById('submit-system-settings'),
+      resetSystemSettings: document.getElementById('reset-system-settings'),
       
       // Devices
       deviceUserId: document.getElementById('device-user-id'),
@@ -782,6 +792,12 @@
     if (elements.submitPermissionDetail) {
       elements.submitPermissionDetail.addEventListener('click', savePermissionRolePermissions);
     }
+    if (elements.systemSettingsForm) {
+      elements.systemSettingsForm.addEventListener('submit', saveSystemSettings);
+    }
+    if (elements.resetSystemSettings) {
+      elements.resetSystemSettings.addEventListener('click', loadSystemSettings);
+    }
 
     // Devices management
     if (elements.searchDevicesBtn) {
@@ -1073,6 +1089,9 @@
         break;
       case 'permissionDetail':
         loadPermissionRolePermissions();
+        break;
+      case 'systemSettings':
+        loadSystemSettings();
         break;
       case 'devices':
         // Already handled by button
@@ -2949,6 +2968,71 @@
       showError(err.message || '更新權限失敗');
     } finally {
       if (elements.submitEditPermission) elements.submitEditPermission.disabled = false;
+    }
+  }
+
+  async function loadSystemSettings() {
+    if (elements.submitSystemSettings) elements.submitSystemSettings.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/settings');
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '載入系統設定失敗');
+      }
+
+      const settings = data.data || {};
+      if (elements.settingChatAutoDeleteMaxDays) {
+        elements.settingChatAutoDeleteMaxDays.value = String(settings.chat_auto_delete_max_days || 30);
+      }
+      if (elements.settingAdminChatHistoryRetentionDays) {
+        elements.settingAdminChatHistoryRetentionDays.value = String(settings.admin_chat_history_retention_days || 90);
+      }
+    } catch (err) {
+      showError(err.message || '載入系統設定失敗');
+    } finally {
+      if (elements.submitSystemSettings) elements.submitSystemSettings.disabled = false;
+    }
+  }
+
+  async function saveSystemSettings(event) {
+    event.preventDefault();
+
+    const chatAutoDeleteMaxDays = Number(elements.settingChatAutoDeleteMaxDays?.value || 0);
+    const adminChatHistoryRetentionDays = Number(elements.settingAdminChatHistoryRetentionDays?.value || 0);
+    if (!Number.isInteger(chatAutoDeleteMaxDays) || chatAutoDeleteMaxDays < 1 || chatAutoDeleteMaxDays > 30) {
+      showError('前台自動刪除最大天數需為 1 到 30 的整數');
+      elements.settingChatAutoDeleteMaxDays?.focus();
+      return;
+    }
+    if (!Number.isInteger(adminChatHistoryRetentionDays) || adminChatHistoryRetentionDays < 1) {
+      showError('後台聊天紀錄可查詢天數需為大於 0 的整數');
+      elements.settingAdminChatHistoryRetentionDays?.focus();
+      return;
+    }
+
+    if (elements.submitSystemSettings) elements.submitSystemSettings.disabled = true;
+    try {
+      const response = await makeAuthenticatedRequest('/api/system-admin/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          chat_auto_delete_max_days: chatAutoDeleteMaxDays,
+          admin_chat_history_retention_days: adminChatHistoryRetentionDays
+        })
+      });
+      if (!response) return;
+
+      const data = await readJSONResponse(response);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '儲存系統設定失敗');
+      }
+      showSuccess('系統設定已更新');
+      await loadSystemSettings();
+    } catch (err) {
+      showError(err.message || '儲存系統設定失敗');
+    } finally {
+      if (elements.submitSystemSettings) elements.submitSystemSettings.disabled = false;
     }
   }
 

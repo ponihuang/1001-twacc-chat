@@ -299,6 +299,19 @@ type CurrentAdminPermissionResponse struct {
 	Permissions []string `json:"permissions"`
 }
 
+// SystemSettings is the admin-facing chat system settings payload.
+type SystemSettings struct {
+	ChatAutoDeleteMaxDays         int        `json:"chat_auto_delete_max_days"`
+	AdminChatHistoryRetentionDays int        `json:"admin_chat_history_retention_days"`
+	UpdatedAt                     *time.Time `json:"updated_at,omitempty"`
+}
+
+// SystemSettingsUpdateRequest is the payload for updating admin system settings.
+type SystemSettingsUpdateRequest struct {
+	ChatAutoDeleteMaxDays         int `json:"chat_auto_delete_max_days"`
+	AdminChatHistoryRetentionDays int `json:"admin_chat_history_retention_days"`
+}
+
 // AdminConversationFilter contains supported filters for the admin conversation list.
 type AdminConversationFilter struct {
 	Type             string
@@ -690,6 +703,8 @@ type Repository interface {
 	UpdateAdminRole(roleID int64, params AdminRoleUpdateParams) (AdminRoleSummary, error)
 	ListAdminRolePermissions(roleID int64) (map[string]bool, error)
 	ReplaceAdminRolePermissions(roleID int64, permissions map[string]bool) error
+	GetSystemSettings() (SystemSettings, error)
+	UpdateSystemSettings(settings SystemSettings, adminUserID int64) (SystemSettings, error)
 	ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error)
 	GetAdminConversationDetail(filter AdminConversationMessageFilter) (AdminConversationDetail, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)

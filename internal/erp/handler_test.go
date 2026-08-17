@@ -118,6 +118,14 @@ func (s *stubIntegrationRepository) ReplaceAdminRolePermissions(roleID int64, pe
 	return nil
 }
 
+func (s *stubIntegrationRepository) GetSystemSettings() (SystemSettings, error) {
+	return SystemSettings{ChatAutoDeleteMaxDays: 30, AdminChatHistoryRetentionDays: 90}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateSystemSettings(settings SystemSettings, adminUserID int64) (SystemSettings, error) {
+	return settings, nil
+}
+
 func (s *stubIntegrationRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{Items: []AdminConversationSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
