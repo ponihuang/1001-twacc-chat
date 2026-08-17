@@ -495,6 +495,86 @@
     renderConversationList(conversations);
   }
 
+  function autoDeleteLabel(days) {
+    switch (Number(days || 0)) {
+      case 0:
+        return "永久";
+      case 1:
+        return "1 天";
+      case 3:
+        return "3 天";
+      case 7:
+        return "7 天";
+      case 30:
+        return "30 天";
+      default:
+        return Number(days) + " 天";
+    }
+  }
+
+  function setConversationAutoDeleteState(conversationIDValue, days, options, maxDays) {
+    const conversationID = Number(conversationIDValue || 0);
+    if (!conversationID) {
+      return;
+    }
+    conversations = conversations.map(function (item) {
+      if (Number(item.conversation_id || 0) !== conversationID) {
+        return item;
+      }
+      const next = Object.assign({}, item, { auto_delete_days: Number(days || 0) });
+      if (Array.isArray(options)) {
+        next.auto_delete_options = options.map(Number).filter(Boolean);
+      }
+      if (Number(maxDays || 0) > 0) {
+        next.max_auto_delete_days = Number(maxDays);
+      }
+      return next;
+    });
+    renderContactMenu();
+    renderConversationList(conversations);
+  }
+
+  function activeAutoDeleteOptions(active) {
+    const options = Array.isArray(active && active.auto_delete_options)
+      ? active.auto_delete_options.map(Number).filter(Boolean)
+      : [1, 3, 7, 30];
+    const maxDays = Number(active && active.max_auto_delete_days ? active.max_auto_delete_days : 30);
+    return options.filter(function (days) {
+      return days > 0 && days <= Math.min(maxDays || 30, 30);
+    });
+  }
+
+  function renderContactMenu() {
+    if (!contactMenu) {
+      return;
+    }
+    const active = activeConversation();
+    if (!active || !active.conversation_id) {
+      contactMenu.innerHTML = "";
+      return;
+    }
+    const peer = activeDirectPeer();
+    const canAddContact = Boolean(peer) && !isContactPeer(peer);
+    const currentDays = Number(active.auto_delete_days || 0);
+    const options = [0].concat(activeAutoDeleteOptions(active));
+    const autoDeleteItems = options.map(function (days) {
+      const checked = Number(days) === currentDays;
+      return [
+        '<button type="button" class="chat-contact-menu-option' + (checked ? " is-active" : "") + '" data-contact-action="auto-delete" data-auto-delete-days="' + days + '">',
+        "<span>" + escapeHTML(autoDeleteLabel(days)) + "</span>",
+        checked ? "<b>✓</b>" : "",
+        "</button>"
+      ].join("");
+    }).join("");
+    contactMenu.innerHTML = [
+      canAddContact ? '<button type="button" data-contact-action="add">加入聯絡人</button>' : "",
+      '<div class="chat-contact-menu-group">',
+      '<div class="chat-contact-menu-title">自動刪除</div>',
+      autoDeleteItems,
+      "</div>"
+    ].join("");
+  }
+
   function updateNotificationMuteControl() {
     if (!notificationMuteToggle) {
       return;
@@ -528,6 +608,32 @@
     const data = result.data || {};
     const muted = Boolean(data.notification_muted);
     setConversationNotificationMuted(conversationID, muted);
+    return data;
+  }
+
+  async function updateConversationAutoDelete(conversationIDValue, daysValue) {
+    const headers = authHeaders();
+    const conversationID = Number(conversationIDValue || 0);
+    const days = Number(daysValue || 0);
+    if (!conversationID || !headers) {
+      return null;
+    }
+    const response = await fetch("/api/conversations/" + conversationID + "/auto-delete", {
+      method: "PATCH",
+      headers: Object.assign({ "Content-Type": "application/json" }, headers),
+      body: JSON.stringify({ days: days })
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || "自動刪除設定更新失敗。");
+    }
+    const data = result.data || {};
+    setConversationAutoDeleteState(
+      conversationID,
+      Number(data.auto_delete_days || 0),
+      data.auto_delete_options,
+      data.max_auto_delete_days
+    );
     return data;
   }
 
@@ -861,18 +967,20 @@
     if (!contactMenuToggle) {
       return;
     }
+    const active = activeConversation();
+    const hasConversation = Boolean(active && active.conversation_id);
     const peer = activeDirectPeer();
     if (peer && !contactsLoaded) {
-      contactMenuToggle.hidden = true;
+      contactMenuToggle.hidden = !hasConversation;
       ensureContactsLoaded();
       return;
     }
-    const canAddContact = Boolean(peer) && !isContactPeer(peer);
-    contactMenuToggle.hidden = !canAddContact;
-    if (!canAddContact) {
+    contactMenuToggle.hidden = !hasConversation;
+    if (!hasConversation) {
       setContactMenuOpen(false);
       setContactPanelOpen(false);
     }
+    renderContactMenu();
   }
 
   function fillContactPanel(peer) {
@@ -1816,7 +1924,20 @@
   }
 
   function renderConversationList(items) {
-    conversations = items;
+    const previousByID = new Map((conversations || []).map(function (item) {
+      return [Number(item.conversation_id || 0), item];
+    }));
+    conversations = (items || []).map(function (item) {
+      const previous = previousByID.get(Number(item.conversation_id || 0));
+      if (!previous) {
+        return item;
+      }
+      return Object.assign({}, previous, item, {
+        auto_delete_options: Array.isArray(item.auto_delete_options) ? item.auto_delete_options : previous.auto_delete_options,
+        max_auto_delete_days: item.max_auto_delete_days || previous.max_auto_delete_days
+      });
+    });
+    items = conversations;
     (items || []).forEach(function (item) {
       const conversationID = Number(item && item.conversation_id ? item.conversation_id : 0);
       if (conversationID) {
@@ -4721,6 +4842,14 @@
     if (typeof data.notification_muted === "boolean") {
       setActiveConversationNotificationMuted(data.notification_muted);
     }
+    if (typeof data.auto_delete_days === "number") {
+      setConversationAutoDeleteState(
+        activeConversationID,
+        data.auto_delete_days,
+        data.auto_delete_options,
+        data.max_auto_delete_days
+      );
+    }
     setConversationTitle(data.title || activeConversationTitle() || "目前對話");
     renderMessages(data, {
       forceBottom: Boolean(options.forceBottom),
@@ -4793,6 +4922,20 @@
 
     if (event.event_type === "conversation.members.updated") {
       handleConversationMembersUpdated(event.conversation_id);
+      return;
+    }
+
+    if (event.event_type === "conversation.auto_delete.updated") {
+      const autoDelete = event.auto_delete || {};
+      setConversationAutoDeleteState(
+        realtimeEventConversationID(event),
+        autoDelete.auto_delete_days,
+        autoDelete.auto_delete_options,
+        autoDelete.max_auto_delete_days
+      );
+      if (realtimeEventConversationID(event) === Number(activeConversationID || 0)) {
+        loadMessages(activeConversationID, false, { preserveScroll: true });
+      }
       return;
     }
 
@@ -5206,6 +5349,7 @@
         setContactMenuOpen(false);
         return;
       }
+      renderContactMenu();
       setContactMenuOpen(contactMenu ? contactMenu.hidden : true);
     });
   }
@@ -5377,8 +5521,9 @@
         return;
       }
       const peer = activeDirectPeer();
+      const action = actionButton.dataset.contactAction || "";
       setContactMenuOpen(false);
-      if (actionButton.dataset.contactAction === "add" && peer) {
+      if (action === "add" && peer) {
         fillContactPanel(peer);
         setGroupInfoPanelOpen(false);
         setContactPanelOpen(true);
@@ -5388,6 +5533,23 @@
             contactAliasName.select();
           });
         }
+        return;
+      }
+      if (action === "auto-delete") {
+        const active = activeConversation();
+        if (!active || !active.conversation_id) {
+          return;
+        }
+        const days = Number(actionButton.dataset.autoDeleteDays || 0);
+        setMessageStatus("更新自動刪除設定中...", false);
+        updateConversationAutoDelete(active.conversation_id, days).then(function (data) {
+          if (!data) {
+            return;
+          }
+          setMessageStatus("自動刪除已設定為「" + autoDeleteLabel(data.auto_delete_days) + "」。", false);
+        }).catch(function (err) {
+          setMessageStatus(err.message || "自動刪除設定更新失敗。", true);
+        });
       }
     });
   }
