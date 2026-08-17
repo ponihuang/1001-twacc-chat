@@ -98,6 +98,15 @@
               </span>
               <span>權限管理</span>
             </button>
+            <button type="button" class="sidebar-subitem" data-menu-item="systemSettings">
+              <span class="menu-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 1 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1A1.7 1.7 0 0 0 10 3V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1A1.7 1.7 0 0 0 21 10h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1z"></path>
+                </svg>
+              </span>
+              <span>系統設定</span>
+            </button>
           </div>
         </div>
       </nav>
@@ -966,6 +975,30 @@
               <button type="button" class="btn btn-primary btn-compact" id="submit-permission-detail">儲存</button>
               <button type="button" class="btn btn-compact" data-menu-item="permissions">返回</button>
             </div>
+          </div>
+        </section>
+
+        <section data-view="systemSettings" hidden>
+          <div class="admin-page-panel">
+            <p class="admin-breadcrumb">首頁 / 系統設定</p>
+
+            <form class="user-create-form" id="system-settings-form">
+              <div class="user-create-fields">
+                <label class="user-create-field">
+                  <span>前台自動刪除最大天數</span>
+                  <input type="number" id="setting-chat-auto-delete-max-days" min="1" max="30" step="1" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>後台聊天紀錄可查詢天數</span>
+                  <input type="number" id="setting-admin-chat-history-retention-days" min="1" step="1" autocomplete="off" required>
+                </label>
+              </div>
+
+              <div class="user-create-actions">
+                <button type="submit" class="btn btn-primary btn-compact" id="submit-system-settings">儲存</button>
+                <button type="button" class="btn btn-compact" id="reset-system-settings">重置</button>
+              </div>
+            </form>
           </div>
         </section>
       </main>

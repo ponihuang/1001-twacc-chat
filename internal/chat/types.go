@@ -28,6 +28,7 @@ type ConversationSummary struct {
 	UnreadCount        int
 	HasUnreadMention   bool
 	NotificationMuted  bool
+	AutoDeleteDays     int
 }
 
 // Conversation stores the minimal metadata needed by the message list response.
@@ -37,6 +38,7 @@ type Conversation struct {
 	Title             string
 	Description       string
 	NotificationMuted bool
+	AutoDeleteDays    int
 }
 
 // Message stores the chat message payload returned from persistence.
@@ -100,6 +102,7 @@ type ConversationItem struct {
 	UnreadCount        int    `json:"unread_count"`
 	HasUnreadMention   bool   `json:"has_unread_mention"`
 	NotificationMuted  bool   `json:"notification_muted"`
+	AutoDeleteDays     int    `json:"auto_delete_days"`
 }
 
 // DirectConversationData is the API-facing payload for a direct conversation create/load request.
@@ -107,6 +110,7 @@ type DirectConversationData struct {
 	ConversationID int64  `json:"conversation_id"`
 	Type           string `json:"type"`
 	Title          string `json:"title"`
+	AutoDeleteDays int    `json:"auto_delete_days"`
 }
 
 // GroupMemberRequest identifies a user to include in a new group conversation.
@@ -137,11 +141,12 @@ type UserSearchData struct {
 
 // RealtimeEvent is the WebSocket payload pushed to chat clients.
 type RealtimeEvent struct {
-	EventType      string                  `json:"event_type"`
-	ConversationID int64                   `json:"conversation_id,omitempty"`
-	Conversation   *DirectConversationData `json:"conversation,omitempty"`
-	Message        MessageItem             `json:"message,omitempty"`
-	MessageID      int64                   `json:"message_id,omitempty"`
+	EventType      string                      `json:"event_type"`
+	ConversationID int64                       `json:"conversation_id,omitempty"`
+	Conversation   *DirectConversationData     `json:"conversation,omitempty"`
+	Message        MessageItem                 `json:"message,omitempty"`
+	MessageID      int64                       `json:"message_id,omitempty"`
+	AutoDelete     *ConversationAutoDeleteData `json:"auto_delete,omitempty"`
 }
 
 // MessageItem is the API-facing message item.
@@ -170,6 +175,9 @@ type MessageListData struct {
 	Type                 string        `json:"type"`
 	Title                string        `json:"title"`
 	NotificationMuted    bool          `json:"notification_muted"`
+	AutoDeleteDays       int           `json:"auto_delete_days"`
+	AutoDeleteOptions    []int         `json:"auto_delete_options"`
+	MaxAutoDeleteDays    int           `json:"max_auto_delete_days"`
 	FirstUnreadMessageID int64         `json:"first_unread_message_id,omitempty"`
 	Messages             []MessageItem `json:"messages"`
 }
@@ -228,10 +236,23 @@ type UpdateConversationNotificationMuteRequest struct {
 	NotificationMuted bool `json:"notification_muted"`
 }
 
+// UpdateConversationAutoDeleteRequest is the payload for per-conversation auto-delete days.
+type UpdateConversationAutoDeleteRequest struct {
+	Days int `json:"days"`
+}
+
 // ConversationNotificationMuteData is the API-facing payload for the current user's conversation mute state.
 type ConversationNotificationMuteData struct {
 	ConversationID    int64 `json:"conversation_id"`
 	NotificationMuted bool  `json:"notification_muted"`
+}
+
+// ConversationAutoDeleteData is the API-facing per-conversation auto-delete state.
+type ConversationAutoDeleteData struct {
+	ConversationID    int64 `json:"conversation_id"`
+	AutoDeleteDays    int   `json:"auto_delete_days"`
+	AutoDeleteOptions []int `json:"auto_delete_options"`
+	MaxAutoDeleteDays int   `json:"max_auto_delete_days"`
 }
 
 // AddConversationMembersRequest is the HTTP payload for adding members to a group.
@@ -370,6 +391,10 @@ type Repository interface {
 	ListConversationMembers(conversationID int64) ([]ConversationMember, error)
 	GetConversationForUser(userID, conversationID int64) (Conversation, error)
 	UpdateConversationNotificationMute(userID, conversationID int64, muted bool) (Conversation, error)
+	MaxConversationAutoDeleteDays() (int, error)
+	UpdateConversationAutoDelete(userID, conversationID int64, days int) (Conversation, error)
+	PurgeExpiredConversationMessages(conversationID int64, now time.Time) (int64, error)
+	PurgeExpiredMessages(now time.Time) (int64, error)
 	ListMessages(conversationID int64, limit int) ([]Message, error)
 	FirstUnreadMessageID(userID, conversationID int64) (int64, error)
 	SearchMessages(userID int64, query string, limit int) ([]Message, error)

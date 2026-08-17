@@ -159,6 +159,29 @@ func (m *mockRepository) UpdateConversationNotificationMute(userID, conversation
 	return conversation, nil
 }
 
+func (m *mockRepository) MaxConversationAutoDeleteDays() (int, error) {
+	return 30, nil
+}
+
+func (m *mockRepository) UpdateConversationAutoDelete(userID, conversationID int64, days int) (Conversation, error) {
+	key := conversationKey(userID, conversationID)
+	conversation, ok := m.headers[key]
+	if !ok {
+		return Conversation{}, ErrConversationNotFound
+	}
+	conversation.AutoDeleteDays = days
+	m.headers[key] = conversation
+	return conversation, nil
+}
+
+func (m *mockRepository) PurgeExpiredConversationMessages(conversationID int64, now time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockRepository) PurgeExpiredMessages(now time.Time) (int64, error) {
+	return 0, nil
+}
+
 func (m *mockRepository) ListMessages(conversationID int64, limit int) ([]Message, error) {
 	messages := append([]Message(nil), m.messages[conversationID]...)
 	if len(messages) > limit {

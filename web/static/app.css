@@ -2951,6 +2951,32 @@ body.is-password-change-required {
   background: rgba(51, 144, 236, 0.1);
 }
 
+.chat-contact-menu-group {
+  display: grid;
+  gap: 2px;
+  padding-top: 6px;
+  margin-top: 6px;
+  border-top: 1px solid rgba(92, 75, 57, 0.1);
+}
+
+.chat-contact-menu-title {
+  padding: 4px 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.chat-contact-menu-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chat-contact-menu-option.is-active {
+  color: var(--accent);
+}
+
 .desktop-shell:not(.is-conversation-active) .chat-topbar,
 .desktop-shell:not(.is-conversation-active) .composer {
   display: none;

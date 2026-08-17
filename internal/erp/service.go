@@ -60,6 +60,8 @@ var adminPermissionCatalog = []AdminPermissionGroup{
 			{Key: "office.permission.create", Name: "權限新增", Category: "system"},
 			{Key: "office.permission.edit", Name: "權限編輯", Category: "system"},
 			{Key: "office.permission.detail", Name: "權限詳細", Category: "system"},
+			{Key: "office.system-settings.index", Name: "系統設定", Category: "system"},
+			{Key: "office.system-settings.edit", Name: "系統設定編輯", Category: "system"},
 		},
 	},
 }
@@ -688,6 +690,9 @@ func (s *Service) ListAdminConversations(filter AdminConversationFilter, actor A
 	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
 	}
+	if err := s.applyAdminChatHistoryRetention(&filter); err != nil {
+		return Response{}, 500, err
+	}
 
 	conversations, err := s.repo.ListAdminConversations(filter)
 	if err != nil {
@@ -709,6 +714,9 @@ func (s *Service) GetAdminConversationDetail(filter AdminConversationMessageFilt
 	}
 	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
 		return Response{}, statusCode(err), err
+	}
+	if err := s.applyAdminChatMessageRetention(&filter); err != nil {
+		return Response{}, 500, err
 	}
 
 	detail, err := s.repo.GetAdminConversationDetail(filter)
@@ -1604,6 +1612,57 @@ func (s *Service) UpdateAdminRolePermissions(roleID int64, req AdminRolePermissi
 	}, 200, nil
 }
 
+// GetSystemSettings returns editable backend system settings.
+func (s *Service) GetSystemSettings(actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if !s.adminPrincipalHasPermission(actor, "office.system-settings.index") {
+		if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+			return Response{}, statusCode(err), err
+		}
+	}
+
+	settings, err := s.repo.GetSystemSettings()
+	if err != nil {
+		return Response{}, 500, err
+	}
+	normalized := normalizeSystemSettings(settings)
+	return Response{
+		Success: true,
+		Code:    "SYSTEM_SETTINGS_OK",
+		Message: "系統設定讀取成功",
+		Data:    normalized,
+	}, 200, nil
+}
+
+// UpdateSystemSettings updates editable backend system settings.
+func (s *Service) UpdateSystemSettings(req SystemSettingsUpdateRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if !s.adminPrincipalHasPermission(actor, "office.system-settings.edit") {
+		if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+			return Response{}, statusCode(err), err
+		}
+	}
+
+	settings, err := validateSystemSettingsUpdate(req)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	updated, err := s.repo.UpdateSystemSettings(settings, actor.AdminUserID)
+	if err != nil {
+		return Response{}, 500, err
+	}
+	return Response{
+		Success: true,
+		Code:    "SYSTEM_SETTINGS_UPDATED",
+		Message: "系統設定已更新",
+		Data:    normalizeSystemSettings(updated),
+	}, 200, nil
+}
+
 // ListDevices returns the recent devices for a target user. Only system_admin is allowed.
 func (s *Service) ListDevices(targetUserID int64, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -1938,6 +1997,64 @@ func normalizeAdminRoleStatus(status string) (string, error) {
 		return "", ErrInvalidStatus
 	}
 	return status, nil
+}
+
+func validateSystemSettingsUpdate(req SystemSettingsUpdateRequest) (SystemSettings, error) {
+	settings := SystemSettings{
+		ChatAutoDeleteMaxDays:         req.ChatAutoDeleteMaxDays,
+		AdminChatHistoryRetentionDays: req.AdminChatHistoryRetentionDays,
+	}
+	if settings.ChatAutoDeleteMaxDays < 1 || settings.ChatAutoDeleteMaxDays > 30 {
+		return SystemSettings{}, ErrInvalidRole
+	}
+	if settings.AdminChatHistoryRetentionDays < 1 {
+		return SystemSettings{}, ErrInvalidRole
+	}
+	return settings, nil
+}
+
+func normalizeSystemSettings(settings SystemSettings) SystemSettings {
+	if settings.ChatAutoDeleteMaxDays < 1 {
+		settings.ChatAutoDeleteMaxDays = 30
+	}
+	if settings.ChatAutoDeleteMaxDays > 30 {
+		settings.ChatAutoDeleteMaxDays = 30
+	}
+	if settings.AdminChatHistoryRetentionDays < 1 {
+		settings.AdminChatHistoryRetentionDays = 90
+	}
+	return settings
+}
+
+func (s *Service) applyAdminChatHistoryRetention(filter *AdminConversationFilter) error {
+	cutoff, err := s.adminChatHistoryCutoff()
+	if err != nil {
+		return err
+	}
+	if filter.LastActivityFrom == nil || filter.LastActivityFrom.Before(cutoff) {
+		filter.LastActivityFrom = &cutoff
+	}
+	return nil
+}
+
+func (s *Service) applyAdminChatMessageRetention(filter *AdminConversationMessageFilter) error {
+	cutoff, err := s.adminChatHistoryCutoff()
+	if err != nil {
+		return err
+	}
+	if filter.SentFrom == nil || filter.SentFrom.Before(cutoff) {
+		filter.SentFrom = &cutoff
+	}
+	return nil
+}
+
+func (s *Service) adminChatHistoryCutoff() (time.Time, error) {
+	settings, err := s.repo.GetSystemSettings()
+	if err != nil {
+		return time.Time{}, err
+	}
+	settings = normalizeSystemSettings(settings)
+	return time.Now().AddDate(0, 0, -settings.AdminChatHistoryRetentionDays), nil
 }
 
 func buildAdminPermissionGroups(role AdminRoleSummary, stored map[string]bool, keyword string) []AdminPermissionGroup {
