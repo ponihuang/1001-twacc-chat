@@ -18,6 +18,7 @@ func SeedAdmin(args []string) error {
 	password := flags.String("password", "", "管理員密碼")
 	name := flags.String("name", "", "管理員名稱")
 	status := flags.String("status", "active", "帳號狀態: active 或 inactive")
+	resetPassword := flags.Bool("reset-password", false, "帳號已存在時重設密碼")
 
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -72,9 +73,29 @@ func SeedAdmin(args []string) error {
 		return err
 	}
 
+	passwordReset := false
+	if !result.AdminCreated && *resetPassword {
+		resp, _, err := service.UpdateSystemAdmin(result.Admin.AdminUserID, erp.SystemAdminCreateRequest{
+			DisplayName: result.Admin.DisplayName,
+			Password:    *password,
+			Role:        result.Admin.Role,
+			Status:      result.Admin.Status,
+		}, erp.AdminSessionPrincipal{AdminUserID: result.Admin.AdminUserID})
+		if err != nil {
+			return err
+		}
+		if admin, ok := resp.Data.(erp.SystemAdminSummary); ok {
+			result.Admin = admin
+		}
+		passwordReset = true
+	}
+
 	fmt.Printf("system admin ready: account=%s admin_created=%t\n",
 		result.Admin.ExternalUserID,
 		result.AdminCreated,
 	)
+	if passwordReset {
+		fmt.Printf("system admin password reset: account=%s\n", result.Admin.ExternalUserID)
+	}
 	return nil
 }
