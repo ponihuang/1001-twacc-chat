@@ -90,6 +90,34 @@ func (s *stubIntegrationRepository) ListSystemAdmins(filter SystemAdminFilter) (
 	return SystemAdminPage{Items: []SystemAdminSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
 
+func (s *stubIntegrationRepository) ListAdminRoles(filter AdminRoleFilter) (AdminRolePage, error) {
+	return AdminRolePage{Items: []AdminRoleSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
+}
+
+func (s *stubIntegrationRepository) FindAdminRoleByID(roleID int64) (AdminRoleSummary, error) {
+	return AdminRoleSummary{}, ErrUserNotFound
+}
+
+func (s *stubIntegrationRepository) FindAdminRoleByCode(code string) (AdminRoleSummary, error) {
+	return AdminRoleSummary{}, ErrUserNotFound
+}
+
+func (s *stubIntegrationRepository) CreateAdminRole(params AdminRoleCreateParams) (AdminRoleSummary, error) {
+	return AdminRoleSummary{ID: 1, Code: params.Code, Name: params.Name, Status: params.Status}, nil
+}
+
+func (s *stubIntegrationRepository) UpdateAdminRole(roleID int64, params AdminRoleUpdateParams) (AdminRoleSummary, error) {
+	return AdminRoleSummary{ID: roleID, Code: "system_admin", Name: params.Name, Status: params.Status}, nil
+}
+
+func (s *stubIntegrationRepository) ListAdminRolePermissions(roleID int64) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (s *stubIntegrationRepository) ReplaceAdminRolePermissions(roleID int64, permissions map[string]bool) error {
+	return nil
+}
+
 func (s *stubIntegrationRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{Items: []AdminConversationSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }
@@ -134,8 +162,8 @@ func (s *stubIntegrationRepository) UpdateUserPassword(userID int64, passwordHas
 	return User{ID: userID, SourceSystem: "office", ExternalUserID: "user_a", DisplayName: "User A", Status: "active", PasswordHash: passwordHash}, nil
 }
 
-func (s *stubIntegrationRepository) UpdateUserProfile(userID int64, displayName string) (User, error) {
-	return User{ID: userID, SourceSystem: "erp", ExternalUserID: "user_a", DisplayName: displayName}, nil
+func (s *stubIntegrationRepository) UpdateUserProfile(userID int64, displayName string, email string) (User, error) {
+	return User{ID: userID, SourceSystem: "erp", ExternalUserID: "user_a", DisplayName: displayName, Email: email}, nil
 }
 
 func (s *stubIntegrationRepository) IsSystemAdmin(userID int64) (bool, error) {

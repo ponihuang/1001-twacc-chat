@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,10 +19,50 @@ import (
 
 var sourceSystemPattern = regexp.MustCompile(`^[a-z0-9_-]{2,50}$`)
 var passwordPattern = regexp.MustCompile(`^[A-Za-z0-9[:punct:]]{4,20}$`)
+var adminRoleCodePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{2,50}$`)
 
 const passwordHashIterations = 120000
 const bulkInvitationTXTMaxBytes = 2 << 20
 const bulkInvitationTXTMaxEntries = 1000
+
+var adminPermissionCatalog = []AdminPermissionGroup{
+	{
+		Key:  "users",
+		Name: "用戶",
+		Items: []AdminPermissionItem{
+			{Key: "office.user.index", Name: "用戶管理", Category: "users"},
+			{Key: "office.user.create", Name: "用戶新增", Category: "users"},
+			{Key: "office.user.edit", Name: "用戶編輯", Category: "users"},
+			{Key: "office.user.chat-mute", Name: "禁止/解除發言", Category: "users"},
+			{Key: "office.user.temporary-password", Name: "臨時密碼", Category: "users"},
+			{Key: "office.user.invitation.index", Name: "註冊邀請", Category: "users"},
+			{Key: "office.user.invitation.create", Name: "邀請新增", Category: "users"},
+			{Key: "office.user.invitation.bulk", Name: "批量新增", Category: "users"},
+			{Key: "office.user.invitation.resend", Name: "重送邀請", Category: "users"},
+		},
+	},
+	{
+		Key:  "chat",
+		Name: "聊天",
+		Items: []AdminPermissionItem{
+			{Key: "office.conversations.index", Name: "聊天紀錄", Category: "chat"},
+			{Key: "office.conversations.detail", Name: "查看紀錄", Category: "chat"},
+		},
+	},
+	{
+		Key:  "system",
+		Name: "系統",
+		Items: []AdminPermissionItem{
+			{Key: "office.admin.index", Name: "管理員帳號", Category: "system"},
+			{Key: "office.admin.create", Name: "管理員新增", Category: "system"},
+			{Key: "office.admin.edit", Name: "管理員編輯", Category: "system"},
+			{Key: "office.permission.index", Name: "權限管理", Category: "system"},
+			{Key: "office.permission.create", Name: "權限新增", Category: "system"},
+			{Key: "office.permission.edit", Name: "權限編輯", Category: "system"},
+			{Key: "office.permission.detail", Name: "權限詳細", Category: "system"},
+		},
+	},
+}
 
 var (
 	ErrInvalidSourceSystem         = errors.New("invalid source system")
@@ -37,6 +78,8 @@ var (
 	ErrTemporaryPasswordMailFailed = errors.New("temporary password mail failed")
 	ErrPasswordConfirmation        = errors.New("password confirmation mismatch")
 	ErrInvalidStatus               = errors.New("invalid status")
+	ErrInvalidRole                 = errors.New("invalid role")
+	ErrRoleAlreadyExists           = errors.New("role already exists")
 	ErrInvalidPassword             = errors.New("invalid password")
 	ErrInvalidCredentials          = errors.New("invalid credentials")
 	ErrInvalidUserID               = errors.New("invalid user id")
@@ -264,7 +307,21 @@ func (s *Service) UpdateProfile(actor SessionPrincipal, req ProfileUpdateRequest
 		return Response{}, statusCode(ErrInvalidDisplayName), ErrInvalidDisplayName
 	}
 
-	user, err := s.repo.UpdateUserProfile(actor.UserID, displayName)
+	email := normalizeEmail(req.Email)
+	if email != "" && !isValidEmail(email) {
+		return Response{}, statusCode(ErrInvalidEmail), ErrInvalidEmail
+	}
+	if email != "" {
+		existing, err := s.repo.FindUserByEmail(email)
+		if err == nil && existing.ID != actor.UserID {
+			return Response{}, statusCode(ErrEmailAlreadyExists), ErrEmailAlreadyExists
+		}
+		if err != nil && !errors.Is(err, ErrUserNotFound) {
+			return Response{}, statusCode(err), err
+		}
+	}
+
+	user, err := s.repo.UpdateUserProfile(actor.UserID, displayName, email)
 	if err != nil {
 		return Response{}, statusCode(err), err
 	}
@@ -333,14 +390,57 @@ func (s *Service) UpdatePassword(actor SessionPrincipal, req PasswordUpdateReque
 
 	return Response{Success: true, Code: "PASSWORD_UPDATED", Message: "密碼已更新", Data: data}, 200, nil
 }
+func (s *Service) adminPrincipalHasPermission(actor AdminSessionPrincipal, key string) bool {
+	if s == nil || s.repo == nil || actor.AdminUserID <= 0 {
+		return false
+	}
+
+	admin, err := s.repo.FindSystemAdminByID(actor.AdminUserID)
+	if err != nil {
+		return false
+	}
+
+	role, err := s.repo.FindAdminRoleByCode(admin.Role)
+	if err != nil {
+		return false
+	}
+	if role.Code == "system_admin" {
+		return true
+	}
+
+	permissions, err := s.repo.ListAdminRolePermissions(role.ID)
+	if err != nil {
+		return false
+	}
+
+	if permissions[key] {
+		return true
+	}
+
+	// 有任何 user 分類權限就允許列表顯示
+	if strings.HasPrefix(key, "office.user.") {
+		for perm, enabled := range permissions {
+			if enabled && strings.HasPrefix(perm, "office.user.") {
+				return true
+			}
+		}
+	}
+
+	return false
+}
 
 // ListUsers returns users for the admin console. Only system_admin is allowed.
 func (s *Service) ListUsers(filter AdminUserFilter, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
 		return Response{}, 503, fmt.Errorf("integration service unavailable")
 	}
-	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
-		return Response{}, statusCode(err), err
+
+	if !(s.adminPrincipalHasPermission(actor, "office.user.index") ||
+		s.adminPrincipalHasPermission(actor, "office.user.*") ||
+		s.adminPrincipalHasPermission(actor, "office.*")) {
+		if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+			return Response{}, statusCode(err), err
+		}
 	}
 
 	users, err := s.repo.ListUsers(filter)
@@ -555,6 +655,28 @@ func (s *Service) ListSystemAdmins(filter SystemAdminFilter, actor AdminSessionP
 		Code:    "SYSTEM_ADMINS_OK",
 		Message: "管理員列表讀取成功",
 		Data:    admins,
+	}, 200, nil
+}
+
+// ListAdminRoles returns backend admin roles for the admin console.
+func (s *Service) ListAdminRoles(filter AdminRoleFilter, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	roles, err := s.repo.ListAdminRoles(filter)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLES_OK",
+		Message: "角色列表讀取成功",
+		Data:    roles,
 	}, 200, nil
 }
 
@@ -1285,6 +1407,203 @@ func (s *Service) UpdateSystemAdmin(targetAdminID int64, req SystemAdminCreateRe
 	}, 200, nil
 }
 
+// CreateAdminRole creates a backend admin role.
+func (s *Service) CreateAdminRole(req AdminRoleCreateRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	params, err := validateAdminRoleCreateRequest(req, actor.AdminUserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	role, err := s.repo.CreateAdminRole(params)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLE_CREATED",
+		Message: "角色已新增",
+		Data:    role,
+	}, 201, nil
+}
+
+// GetAdminRole returns one backend admin role for editing.
+func (s *Service) GetAdminRole(roleID int64, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if roleID <= 0 {
+		return Response{}, statusCode(ErrInvalidRole), ErrInvalidRole
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	role, err := s.repo.FindAdminRoleByID(roleID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLE_OK",
+		Message: "角色讀取成功",
+		Data:    role,
+	}, 200, nil
+}
+
+// UpdateAdminRole updates mutable backend admin role fields.
+func (s *Service) UpdateAdminRole(roleID int64, req AdminRoleCreateRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if roleID <= 0 {
+		return Response{}, statusCode(ErrInvalidRole), ErrInvalidRole
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	params, err := validateAdminRoleUpdateRequest(req)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	role, err := s.repo.UpdateAdminRole(roleID, params)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLE_UPDATED",
+		Message: "角色已更新",
+		Data:    role,
+	}, 200, nil
+}
+
+// GetCurrentAdminPermissions returns enabled route permission keys for the current admin.
+func (s *Service) GetCurrentAdminPermissions(actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+
+	admin, err := s.repo.FindSystemAdminByID(actor.AdminUserID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	role, err := s.repo.FindAdminRoleByCode(admin.Role)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	stored, err := s.repo.ListAdminRolePermissions(role.ID)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	state := buildAdminPermissionState(role, stored)
+	permissions := make([]string, 0, len(state))
+	for key, enabled := range state {
+		if enabled {
+			permissions = append(permissions, key)
+		}
+	}
+	sort.Strings(permissions)
+
+	return Response{
+		Success: true,
+		Code:    "CURRENT_ADMIN_PERMISSIONS_OK",
+		Message: "目前管理員權限讀取成功",
+		Data: CurrentAdminPermissionResponse{
+			Permissions: permissions,
+		},
+	}, 200, nil
+}
+
+// GetAdminRolePermissions returns the editable backend permission switches for a role.
+func (s *Service) GetAdminRolePermissions(roleID int64, keyword string, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if roleID <= 0 {
+		return Response{}, statusCode(ErrInvalidRole), ErrInvalidRole
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	role, err := s.repo.FindAdminRoleByID(roleID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	stored, err := s.repo.ListAdminRolePermissions(roleID)
+	if err != nil {
+		return Response{}, 500, err
+	}
+
+	detail := AdminRolePermissionDetail{
+		Role:   role,
+		Groups: buildAdminPermissionGroups(role, stored, keyword),
+	}
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLE_PERMISSIONS_OK",
+		Message: "角色權限讀取成功",
+		Data:    detail,
+	}, 200, nil
+}
+
+// UpdateAdminRolePermissions replaces the backend permission switches for a role.
+func (s *Service) UpdateAdminRolePermissions(roleID int64, req AdminRolePermissionUpdateRequest, actor AdminSessionPrincipal) (Response, int, error) {
+	if s == nil || s.repo == nil {
+		return Response{}, 503, fmt.Errorf("integration service unavailable")
+	}
+	if roleID <= 0 {
+		return Response{}, statusCode(ErrInvalidRole), ErrInvalidRole
+	}
+	if err := s.requireSystemAdmin(actor.AdminUserID); err != nil {
+		return Response{}, statusCode(err), err
+	}
+
+	role, err := s.repo.FindAdminRoleByID(roleID)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	updates, err := validateAdminRolePermissionUpdate(req)
+	if err != nil {
+		return Response{}, statusCode(err), err
+	}
+	stored, err := s.repo.ListAdminRolePermissions(roleID)
+	if err != nil {
+		return Response{}, 500, err
+	}
+	permissions := buildAdminPermissionState(role, stored)
+	for key, enabled := range updates {
+		permissions[key] = enabled
+	}
+	if err := s.repo.ReplaceAdminRolePermissions(roleID, permissions); err != nil {
+		return Response{}, 500, err
+	}
+
+	detail := AdminRolePermissionDetail{
+		Role:   role,
+		Groups: buildAdminPermissionGroups(role, permissions, ""),
+	}
+	return Response{
+		Success: true,
+		Code:    "ADMIN_ROLE_PERMISSIONS_UPDATED",
+		Message: "角色權限已更新",
+		Data:    detail,
+	}, 200, nil
+}
+
 // ListDevices returns the recent devices for a target user. Only system_admin is allowed.
 func (s *Service) ListDevices(targetUserID int64, actor AdminSessionPrincipal) (Response, int, error) {
 	if s == nil || s.repo == nil {
@@ -1577,6 +1896,128 @@ func normalizeSystemAdminRole(role string) string {
 	return role
 }
 
+func validateAdminRoleCreateRequest(req AdminRoleCreateRequest, createdBy int64) (AdminRoleCreateParams, error) {
+	code := strings.TrimSpace(req.Code)
+	name := strings.TrimSpace(req.Name)
+	status, err := normalizeAdminRoleStatus(req.Status)
+	if err != nil {
+		return AdminRoleCreateParams{}, err
+	}
+	if !adminRoleCodePattern.MatchString(code) {
+		return AdminRoleCreateParams{}, ErrInvalidRole
+	}
+	if name == "" || len([]rune(name)) > 100 {
+		return AdminRoleCreateParams{}, ErrInvalidRole
+	}
+	return AdminRoleCreateParams{
+		Code:      code,
+		Name:      name,
+		Status:    status,
+		CreatedBy: createdBy,
+	}, nil
+}
+
+func validateAdminRoleUpdateRequest(req AdminRoleCreateRequest) (AdminRoleUpdateParams, error) {
+	name := strings.TrimSpace(req.Name)
+	status, err := normalizeAdminRoleStatus(req.Status)
+	if err != nil {
+		return AdminRoleUpdateParams{}, err
+	}
+	if name == "" || len([]rune(name)) > 100 {
+		return AdminRoleUpdateParams{}, ErrInvalidRole
+	}
+	return AdminRoleUpdateParams{Name: name, Status: status}, nil
+}
+
+func normalizeAdminRoleStatus(status string) (string, error) {
+	status = strings.TrimSpace(status)
+	if status == "" {
+		status = "active"
+	}
+	if status != "active" && status != "inactive" {
+		return "", ErrInvalidStatus
+	}
+	return status, nil
+}
+
+func buildAdminPermissionGroups(role AdminRoleSummary, stored map[string]bool, keyword string) []AdminPermissionGroup {
+	keyword = strings.ToLower(strings.TrimSpace(keyword))
+	groups := make([]AdminPermissionGroup, 0, len(adminPermissionCatalog))
+	for _, group := range adminPermissionCatalog {
+		items := make([]AdminPermissionItem, 0, len(group.Items))
+		for _, item := range group.Items {
+			if keyword != "" && !adminPermissionMatchesKeyword(group, item, keyword) {
+				continue
+			}
+			enabled, ok := stored[item.Key]
+			if !ok && role.Code == "system_admin" {
+				enabled = true
+			}
+			items = append(items, AdminPermissionItem{
+				Key:      item.Key,
+				Name:     item.Name,
+				Category: item.Category,
+				Enabled:  enabled,
+			})
+		}
+		if len(items) == 0 {
+			continue
+		}
+		groups = append(groups, AdminPermissionGroup{
+			Key:   group.Key,
+			Name:  group.Name,
+			Items: items,
+		})
+	}
+	return groups
+}
+
+func adminPermissionMatchesKeyword(group AdminPermissionGroup, item AdminPermissionItem, keyword string) bool {
+	return strings.Contains(strings.ToLower(group.Key), keyword) ||
+		strings.Contains(strings.ToLower(group.Name), keyword) ||
+		strings.Contains(strings.ToLower(item.Key), keyword) ||
+		strings.Contains(strings.ToLower(item.Name), keyword)
+}
+
+func buildAdminPermissionState(role AdminRoleSummary, stored map[string]bool) map[string]bool {
+	allowed := adminPermissionKeySet()
+	permissions := make(map[string]bool, len(allowed))
+	for key := range allowed {
+		if role.Code == "system_admin" {
+			permissions[key] = true
+		}
+	}
+	for key, enabled := range stored {
+		if allowed[key] {
+			permissions[key] = enabled
+		}
+	}
+	return permissions
+}
+
+func validateAdminRolePermissionUpdate(req AdminRolePermissionUpdateRequest) (map[string]bool, error) {
+	allowed := adminPermissionKeySet()
+	permissions := make(map[string]bool, len(req.Permissions))
+	for _, setting := range req.Permissions {
+		key := strings.TrimSpace(setting.Key)
+		if !allowed[key] {
+			return nil, ErrInvalidRole
+		}
+		permissions[key] = setting.Enabled
+	}
+	return permissions, nil
+}
+
+func adminPermissionKeySet() map[string]bool {
+	allowed := make(map[string]bool)
+	for _, group := range adminPermissionCatalog {
+		for _, item := range group.Items {
+			allowed[item.Key] = true
+		}
+	}
+	return allowed
+}
+
 func validatePassword(password string) error {
 	if !passwordPattern.MatchString(strings.TrimSpace(password)) {
 		return ErrInvalidPassword
@@ -1699,6 +2140,7 @@ func (s *Service) profileResponseData(user User) (map[string]any, error) {
 		"source_system":                 user.SourceSystem,
 		"external_user_id":              user.ExternalUserID,
 		"display_name":                  user.DisplayName,
+		"email":                         user.Email,
 		"is_chat_muted":                 user.IsChatMuted,
 		"must_change_password":          user.MustChangePassword,
 		"temporary_password_expires_at": user.TemporaryPasswordExpiresAt,
@@ -1775,6 +2217,7 @@ func statusCode(err error) int {
 		errors.Is(err, ErrInvalidDisplayName),
 		errors.Is(err, ErrInvalidEmail),
 		errors.Is(err, ErrInvalidStatus),
+		errors.Is(err, ErrInvalidRole),
 		errors.Is(err, ErrInvalidPassword),
 		errors.Is(err, ErrPasswordConfirmation),
 		errors.Is(err, ErrInvalidUserID),
@@ -1802,7 +2245,8 @@ func statusCode(err error) int {
 		errors.Is(err, ErrUserInvitationNotFound),
 		errors.Is(err, ErrConversationNotFound):
 		return 404
-	case errors.Is(err, ErrUserAlreadyExists):
+	case errors.Is(err, ErrUserAlreadyExists),
+		errors.Is(err, ErrRoleAlreadyExists):
 		return 409
 	case errors.Is(err, ErrEmailAlreadyExists),
 		errors.Is(err, ErrUserInvitationPending),

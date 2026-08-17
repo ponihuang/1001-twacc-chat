@@ -239,6 +239,13 @@
                     <small>帳號</small>
                   </span>
                 </div>
+                <div class="settings-profile-row">
+                  <span class="settings-profile-row-icon" aria-hidden="true">E</span>
+                  <span class="settings-profile-row-text">
+                    <strong data-settings-profile-email>--</strong>
+                    <small>Email</small>
+                  </span>
+                </div>
               </div>
               <input id="settings-avatar-input" type="file" accept=".jpg,.jpeg,.png" hidden data-avatar-input>
             </section>
@@ -260,16 +267,20 @@
 
               <div class="settings-edit-fields">
                 <label class="settings-edit-field">
-                  <span>名稱</span>
+                  <span>帳號</span>
+                  <input class="text-input" data-profile-edit-account readonly>
+                </label>
+                <label class="settings-edit-field">
+                  <span>名稱（暱稱）</span>
                   <input class="text-input" data-profile-edit-name>
+                </label>
+                <label class="settings-edit-field">
+                  <span>Email</span>
+                  <input class="text-input" data-profile-edit-email autocomplete="email">
                 </label>
                 <label class="settings-edit-field">
                   <span>來源</span>
                   <input class="text-input" data-profile-edit-source readonly>
-                </label>
-                <label class="settings-edit-field">
-                  <span>帳號</span>
-                  <input class="text-input" data-profile-edit-account readonly>
                 </label>
               </div>
             </section>

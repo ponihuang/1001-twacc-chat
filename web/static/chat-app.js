@@ -989,7 +989,7 @@
       const initial = (member.display_name || member.external_user_id || "?").slice(0, 1).toUpperCase();
       const source = member.source_system || readSourceSystem();
       const externalID = member.external_user_id || "";
-      const isSelf = String(source || "").trim() === actorSource && String(externalID || "").trim().toLowerCase() === actorExternalID;
+      const isSelf = isCurrentUserMember(member);
       const roleBadge = member.role === "owner"
         ? '<span class="group-info-member-role">' + escapeHTML(memberRoleLabel(member.role)) + '</span>'
         : "";
@@ -1357,6 +1357,20 @@
     return String(member.display_name || member.external_user_id || "").trim();
   }
 
+  function isCurrentUserMember(member) {
+    if (!member) {
+      return false;
+    }
+    const actorExternalID = String(readExternalUserID() || "").trim().toLowerCase();
+    const memberExternalID = String(member.external_user_id || "").trim().toLowerCase();
+    if (!actorExternalID || !memberExternalID || actorExternalID !== memberExternalID) {
+      return false;
+    }
+    const actorSource = String(readSourceSystem() || "").trim();
+    const memberSource = String(member.source_system || actorSource).trim();
+    return !actorSource || !memberSource || memberSource === actorSource;
+  }
+
   async function loadMentionMembers(conversationID) {
     const id = Number(conversationID || 0);
     const headers = authHeaders();
@@ -1439,7 +1453,9 @@
     }
     const query = queryInfo.query.toLowerCase();
     const allItem = { kind: "all", title: "ALL", value: "@ALL" };
-    const memberItems = members.map(function (member) {
+    const memberItems = members.filter(function (member) {
+      return !isCurrentUserMember(member);
+    }).map(function (member) {
       const title = mentionTitle(member);
       return {
         kind: "member",
