@@ -755,20 +755,76 @@ func (r *ChatRepository) UpdateConversationNotificationMute(userID, conversation
 
 // MaxConversationAutoDeleteDays returns the system-configured frontend maximum auto-delete days.
 func (r *ChatRepository) MaxConversationAutoDeleteDays() (int, error) {
+	settings, err := r.chatRetentionSettings()
+	if err != nil {
+		return 0, err
+	}
+	maxDays := settings.frontendMaxDays
+	if settings.databaseRetentionDays > 0 && settings.databaseRetentionDays < maxDays {
+		maxDays = settings.databaseRetentionDays
+	}
+	if maxDays <= 0 {
+		return 30, nil
+	}
+	if maxDays > 30 {
+		return 30, nil
+	}
+	return maxDays, nil
+}
+
+type chatRetentionSettings struct {
+	frontendMaxDays       int
+	databaseRetentionDays int
+}
+
+func (r *ChatRepository) chatRetentionSettings() (chatRetentionSettings, error) {
+	rows, err := r.db.Query(`
+		SELECT setting_key, setting_value
+		  FROM app_settings
+		 WHERE setting_key IN ('chat_auto_delete_max_days', 'admin_chat_history_retention_days')`)
+	if err != nil {
+		return chatRetentionSettings{}, fmt.Errorf("get chat retention settings: %w", err)
+	}
+	defer rows.Close()
+
+	settings := chatRetentionSettings{
+		frontendMaxDays:       30,
+		databaseRetentionDays: 90,
+	}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return chatRetentionSettings{}, fmt.Errorf("scan chat retention settings: %w", err)
+		}
+		days, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || days <= 0 {
+			continue
+		}
+		switch key {
+		case "chat_auto_delete_max_days":
+			settings.frontendMaxDays = days
+		case "admin_chat_history_retention_days":
+			settings.databaseRetentionDays = days
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return chatRetentionSettings{}, fmt.Errorf("iterate chat retention settings: %w", err)
+	}
+	return settings, nil
+}
+
+func (r *ChatRepository) databaseChatRetentionDays() (int, error) {
 	var value string
-	row := r.db.QueryRow(`SELECT setting_value FROM app_settings WHERE setting_key = 'chat_auto_delete_max_days' LIMIT 1`)
+	row := r.db.QueryRow(`SELECT setting_value FROM app_settings WHERE setting_key = 'admin_chat_history_retention_days' LIMIT 1`)
 	if err := row.Scan(&value); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return 30, nil
+			return 90, nil
 		}
-		return 0, fmt.Errorf("get max conversation auto-delete days: %w", err)
+		return 0, fmt.Errorf("get database chat retention days: %w", err)
 	}
 	days, err := strconv.Atoi(strings.TrimSpace(value))
 	if err != nil || days <= 0 {
-		return 30, nil
-	}
-	if days > 30 {
-		return 30, nil
+		return 90, nil
 	}
 	return days, nil
 }
@@ -803,6 +859,13 @@ func (r *ChatRepository) PurgeExpiredConversationMessages(conversationID int64, 
 		return 0, fmt.Errorf("load conversation auto-delete days: %w", err)
 	}
 	if days <= 0 {
+		defaultDays, err := r.MaxConversationAutoDeleteDays()
+		if err != nil {
+			return 0, err
+		}
+		days = defaultDays
+	}
+	if days <= 0 {
 		return 0, nil
 	}
 	return r.purgeMessagesWhere(`conversation_id = ? AND created_at < ?`, conversationID, now.AddDate(0, 0, -days))
@@ -810,18 +873,31 @@ func (r *ChatRepository) PurgeExpiredConversationMessages(conversationID int64, 
 
 // PurgeExpiredMessages deletes expired messages for every auto-delete-enabled conversation.
 func (r *ChatRepository) PurgeExpiredMessages(now time.Time) (int64, error) {
-	rows, err := r.db.Query(`SELECT id, auto_delete_days FROM conversations WHERE auto_delete_days > 0`)
+	total, err := r.PurgeExpiredDatabaseMessages(now)
 	if err != nil {
-		return 0, fmt.Errorf("list auto-delete conversations: %w", err)
+		return total, err
+	}
+	defaultDays, err := r.MaxConversationAutoDeleteDays()
+	if err != nil {
+		return total, err
+	}
+	rows, err := r.db.Query(`SELECT id, auto_delete_days FROM conversations`)
+	if err != nil {
+		return total, fmt.Errorf("list auto-delete conversations: %w", err)
 	}
 	defer rows.Close()
 
-	var total int64
 	for rows.Next() {
 		var conversationID int64
 		var days int
 		if err := rows.Scan(&conversationID, &days); err != nil {
 			return total, fmt.Errorf("scan auto-delete conversation: %w", err)
+		}
+		if days <= 0 {
+			days = defaultDays
+		}
+		if days <= 0 {
+			continue
 		}
 		deleted, err := r.purgeMessagesWhere(`conversation_id = ? AND created_at < ?`, conversationID, now.AddDate(0, 0, -days))
 		if err != nil {
@@ -830,6 +906,18 @@ func (r *ChatRepository) PurgeExpiredMessages(now time.Time) (int64, error) {
 		total += deleted
 	}
 	return total, rows.Err()
+}
+
+// PurgeExpiredDatabaseMessages deletes messages older than the system database retention setting.
+func (r *ChatRepository) PurgeExpiredDatabaseMessages(now time.Time) (int64, error) {
+	days, err := r.databaseChatRetentionDays()
+	if err != nil {
+		return 0, err
+	}
+	if days <= 0 {
+		return 0, nil
+	}
+	return r.purgeMessagesWhere(`created_at < ?`, now.AddDate(0, 0, -days))
 }
 
 func (r *ChatRepository) purgeMessagesWhere(where string, args ...any) (int64, error) {

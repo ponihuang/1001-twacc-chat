@@ -693,6 +693,9 @@ func (s *Service) ListAdminConversations(filter AdminConversationFilter, actor A
 	if err := s.applyAdminChatHistoryRetention(&filter); err != nil {
 		return Response{}, 500, err
 	}
+	if _, err := s.repo.PurgeExpiredAdminChatMessages(time.Now().UTC()); err != nil {
+		return Response{}, 500, err
+	}
 
 	conversations, err := s.repo.ListAdminConversations(filter)
 	if err != nil {
@@ -716,6 +719,9 @@ func (s *Service) GetAdminConversationDetail(filter AdminConversationMessageFilt
 		return Response{}, statusCode(err), err
 	}
 	if err := s.applyAdminChatMessageRetention(&filter); err != nil {
+		return Response{}, 500, err
+	}
+	if _, err := s.repo.PurgeExpiredAdminChatMessages(time.Now().UTC()); err != nil {
 		return Response{}, 500, err
 	}
 
@@ -2010,6 +2016,9 @@ func validateSystemSettingsUpdate(req SystemSettingsUpdateRequest) (SystemSettin
 	if settings.AdminChatHistoryRetentionDays < 1 {
 		return SystemSettings{}, ErrInvalidRole
 	}
+	if settings.ChatAutoDeleteMaxDays > settings.AdminChatHistoryRetentionDays {
+		return SystemSettings{}, ErrInvalidRole
+	}
 	return settings, nil
 }
 
@@ -2022,6 +2031,9 @@ func normalizeSystemSettings(settings SystemSettings) SystemSettings {
 	}
 	if settings.AdminChatHistoryRetentionDays < 1 {
 		settings.AdminChatHistoryRetentionDays = 90
+	}
+	if settings.ChatAutoDeleteMaxDays > settings.AdminChatHistoryRetentionDays {
+		settings.ChatAutoDeleteMaxDays = settings.AdminChatHistoryRetentionDays
 	}
 	return settings
 }

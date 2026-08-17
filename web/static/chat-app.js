@@ -497,8 +497,6 @@
 
   function autoDeleteLabel(days) {
     switch (Number(days || 0)) {
-      case 0:
-        return "永久";
       case 1:
         return "1 天";
       case 3:
@@ -539,9 +537,51 @@
       ? active.auto_delete_options.map(Number).filter(Boolean)
       : [1, 3, 7, 30];
     const maxDays = Number(active && active.max_auto_delete_days ? active.max_auto_delete_days : 30);
-    return options.filter(function (days) {
-      return days > 0 && days <= Math.min(maxDays || 30, 30);
+    const limit = Math.min(maxDays || 30, 30);
+    const allowed = options.filter(function (days) {
+      return days > 0 && days <= limit;
     });
+    if (limit > 0 && allowed.indexOf(limit) === -1) {
+      allowed.push(limit);
+    }
+    return allowed.sort(function (a, b) {
+      return a - b;
+    });
+  }
+
+  function activeAutoDeleteDefaultDays(active) {
+    const maxDays = Number(active && active.max_auto_delete_days ? active.max_auto_delete_days : 30);
+    return Math.min(maxDays || 30, 30);
+  }
+
+  function autoDeleteMenuIcon() {
+    return [
+      '<svg class="chat-contact-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">',
+      '<path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 8.5 6"></path>',
+      '<path d="M21 4v5h-5"></path>',
+      '<path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-8.5-6"></path>',
+      '<path d="M3 20v-5h5"></path>',
+      '<path d="M12 7v5l3 2"></path>',
+      '</svg>'
+    ].join("");
+  }
+
+  function menuChevronIcon() {
+    return [
+      '<svg class="chat-contact-menu-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false">',
+      '<path d="m9 18 6-6-6-6"></path>',
+      '</svg>'
+    ].join("");
+  }
+
+  function autoDeleteOptionIcon() {
+    return [
+      '<svg class="chat-contact-menu-option-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">',
+      '<path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 8.5 6"></path>',
+      '<path d="M21 4v5h-5"></path>',
+      '<path d="M12 7v5l3 2"></path>',
+      '</svg>'
+    ].join("");
   }
 
   function renderContactMenu() {
@@ -555,22 +595,29 @@
     }
     const peer = activeDirectPeer();
     const canAddContact = Boolean(peer) && !isContactPeer(peer);
-    const currentDays = Number(active.auto_delete_days || 0);
-    const options = [0].concat(activeAutoDeleteOptions(active));
+    const options = activeAutoDeleteOptions(active);
+    const currentDays = Number(active.auto_delete_days || 0) || activeAutoDeleteDefaultDays(active);
     const autoDeleteItems = options.map(function (days) {
       const checked = Number(days) === currentDays;
       return [
         '<button type="button" class="chat-contact-menu-option' + (checked ? " is-active" : "") + '" data-contact-action="auto-delete" data-auto-delete-days="' + days + '">',
+        autoDeleteOptionIcon(),
         "<span>" + escapeHTML(autoDeleteLabel(days)) + "</span>",
-        checked ? "<b>✓</b>" : "",
+        '<b aria-hidden="true">' + (checked ? "✓" : "") + "</b>",
         "</button>"
       ].join("");
     }).join("");
     contactMenu.innerHTML = [
       canAddContact ? '<button type="button" data-contact-action="add">加入聯絡人</button>' : "",
-      '<div class="chat-contact-menu-group">',
-      '<div class="chat-contact-menu-title">自動刪除</div>',
+      '<div class="chat-contact-menu-submenu">',
+      '<button type="button" class="chat-contact-menu-submenu-trigger" aria-haspopup="menu">',
+      autoDeleteMenuIcon(),
+      '<span>自動刪除</span>',
+      menuChevronIcon(),
+      '</button>',
+      '<div class="chat-contact-menu-submenu-panel" role="menu">',
       autoDeleteItems,
+      '</div>',
       "</div>"
     ].join("");
   }
@@ -851,6 +898,27 @@
     }
     contactMenu.hidden = !isOpen;
     contactMenuToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    if (isOpen) {
+      window.requestAnimationFrame(updateAutoDeleteSubmenuPlacement);
+    }
+  }
+
+  function updateAutoDeleteSubmenuPlacement() {
+    if (!contactMenu || contactMenu.hidden) {
+      return;
+    }
+    const submenu = contactMenu.querySelector(".chat-contact-menu-submenu");
+    const panel = contactMenu.querySelector(".chat-contact-menu-submenu-panel");
+    if (!submenu || !panel) {
+      return;
+    }
+    submenu.classList.remove("is-flipped");
+    const submenuRect = submenu.getBoundingClientRect();
+    const panelWidth = Math.ceil(panel.getBoundingClientRect().width || 154);
+    const gutter = 12;
+    if (submenuRect.right + 8 + panelWidth + gutter > window.innerWidth) {
+      submenu.classList.add("is-flipped");
+    }
   }
 
   function setContactPanelOpen(isOpen) {
@@ -5550,6 +5618,16 @@
         }).catch(function (err) {
           setMessageStatus(err.message || "自動刪除設定更新失敗。", true);
         });
+      }
+    });
+    contactMenu.addEventListener("pointerenter", function (event) {
+      if (event.target.closest(".chat-contact-menu-submenu")) {
+        updateAutoDeleteSubmenuPlacement();
+      }
+    }, true);
+    contactMenu.addEventListener("focusin", function (event) {
+      if (event.target.closest(".chat-contact-menu-submenu")) {
+        updateAutoDeleteSubmenuPlacement();
       }
     });
   }

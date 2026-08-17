@@ -32,6 +32,7 @@
   let activePermissionRoleID = null;
   let originalEditablePermissionRole = null;
   let currentPermissionDetail = null;
+  let currentSystemSettings = null;
   let modalConfirmHandler = null;
   const state = {
     permissions: new Set()
@@ -101,6 +102,35 @@
     '/admin/dashboard': 'dashboard',
     '/office/user/invite': 'userInvitations'
   });
+
+  const SYSTEM_SETTING_ITEMS = [
+    {
+      key: 'chat_auto_delete_max_days',
+      name: '前台自動刪除最大天數',
+      type: '數字',
+      min: 1,
+      max: 30,
+      fallback: 30,
+      validate(value) {
+        const retentionDays = Number(currentSystemSettings?.admin_chat_history_retention_days || 90);
+        return Number.isInteger(value) && value >= 1 && value <= 30 && value <= retentionDays;
+      },
+      error: '前台自動刪除最大天數需為 1 到 30 的整數，且不可大於聊天資料庫保留天數'
+    },
+    {
+      key: 'admin_chat_history_retention_days',
+      name: '聊天資料庫保留天數',
+      type: '數字',
+      min: 1,
+      max: null,
+      fallback: 90,
+      validate(value) {
+        const frontendMaxDays = Number(currentSystemSettings?.chat_auto_delete_max_days || 30);
+        return Number.isInteger(value) && value >= 1 && value >= frontendMaxDays;
+      },
+      error: '聊天資料庫保留天數需為大於 0 的整數，且不可小於前台自動刪除最大天數'
+    }
+  ];
 
   function resolveInitialView() {
     const editMatch = window.location.pathname.match(/^\/office\/user\/(\d+)\/edit$/);
@@ -476,11 +506,11 @@
       submitPermissionDetail: document.getElementById('submit-permission-detail'),
 
       // System settings
-      systemSettingsForm: document.getElementById('system-settings-form'),
-      settingChatAutoDeleteMaxDays: document.getElementById('setting-chat-auto-delete-max-days'),
-      settingAdminChatHistoryRetentionDays: document.getElementById('setting-admin-chat-history-retention-days'),
-      submitSystemSettings: document.getElementById('submit-system-settings'),
-      resetSystemSettings: document.getElementById('reset-system-settings'),
+      systemSettingsLoading: document.getElementById('system-settings-loading'),
+      systemSettingsEmpty: document.getElementById('system-settings-empty'),
+      systemSettingsTable: document.getElementById('system-settings-table'),
+      systemSettingsTbody: document.getElementById('system-settings-tbody'),
+      refreshSystemSettings: document.getElementById('refresh-system-settings'),
       
       // Devices
       deviceUserId: document.getElementById('device-user-id'),
@@ -792,11 +822,11 @@
     if (elements.submitPermissionDetail) {
       elements.submitPermissionDetail.addEventListener('click', savePermissionRolePermissions);
     }
-    if (elements.systemSettingsForm) {
-      elements.systemSettingsForm.addEventListener('submit', saveSystemSettings);
+    if (elements.systemSettingsTbody) {
+      elements.systemSettingsTbody.addEventListener('click', handleSystemSettingTableClick);
     }
-    if (elements.resetSystemSettings) {
-      elements.resetSystemSettings.addEventListener('click', loadSystemSettings);
+    if (elements.refreshSystemSettings) {
+      elements.refreshSystemSettings.addEventListener('click', loadSystemSettings);
     }
 
     // Devices management
@@ -1062,9 +1092,11 @@
         loadUserForEdit();
         break;
       case 'conversations':
+        loadAdminChatRetentionDateLimits();
         loadAdminConversations();
         break;
       case 'conversationDetail':
+        loadAdminChatRetentionDateLimits();
         loadAdminConversationDetail();
         break;
       case 'admins':
@@ -2972,54 +3004,237 @@
   }
 
   async function loadSystemSettings() {
-    if (elements.submitSystemSettings) elements.submitSystemSettings.disabled = true;
+    if (elements.systemSettingsLoading) elements.systemSettingsLoading.hidden = false;
+    if (elements.systemSettingsEmpty) elements.systemSettingsEmpty.hidden = true;
+    if (elements.systemSettingsTable) elements.systemSettingsTable.hidden = true;
+    if (elements.refreshSystemSettings) elements.refreshSystemSettings.disabled = true;
     try {
-      const response = await makeAuthenticatedRequest('/api/system-admin/settings');
-      if (!response) return;
-
-      const data = await readJSONResponse(response);
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || '載入系統設定失敗');
-      }
-
-      const settings = data.data || {};
-      if (elements.settingChatAutoDeleteMaxDays) {
-        elements.settingChatAutoDeleteMaxDays.value = String(settings.chat_auto_delete_max_days || 30);
-      }
-      if (elements.settingAdminChatHistoryRetentionDays) {
-        elements.settingAdminChatHistoryRetentionDays.value = String(settings.admin_chat_history_retention_days || 90);
-      }
+      currentSystemSettings = await fetchSystemSettings();
+      applyAdminChatRetentionDateLimits();
+      renderSystemSettings();
     } catch (err) {
       showError(err.message || '載入系統設定失敗');
     } finally {
-      if (elements.submitSystemSettings) elements.submitSystemSettings.disabled = false;
+      if (elements.systemSettingsLoading) elements.systemSettingsLoading.hidden = true;
+      if (elements.refreshSystemSettings) elements.refreshSystemSettings.disabled = false;
     }
   }
 
-  async function saveSystemSettings(event) {
-    event.preventDefault();
-
-    const chatAutoDeleteMaxDays = Number(elements.settingChatAutoDeleteMaxDays?.value || 0);
-    const adminChatHistoryRetentionDays = Number(elements.settingAdminChatHistoryRetentionDays?.value || 0);
-    if (!Number.isInteger(chatAutoDeleteMaxDays) || chatAutoDeleteMaxDays < 1 || chatAutoDeleteMaxDays > 30) {
-      showError('前台自動刪除最大天數需為 1 到 30 的整數');
-      elements.settingChatAutoDeleteMaxDays?.focus();
-      return;
-    }
-    if (!Number.isInteger(adminChatHistoryRetentionDays) || adminChatHistoryRetentionDays < 1) {
-      showError('後台聊天紀錄可查詢天數需為大於 0 的整數');
-      elements.settingAdminChatHistoryRetentionDays?.focus();
-      return;
+  async function fetchSystemSettings() {
+    const response = await makeAuthenticatedRequest('/api/system-admin/settings');
+    if (!response) {
+      return normalizeSystemSettingsForView(currentSystemSettings || {});
     }
 
-    if (elements.submitSystemSettings) elements.submitSystemSettings.disabled = true;
+    const data = await readJSONResponse(response);
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || '載入系統設定失敗');
+    }
+    return normalizeSystemSettingsForView(data.data || {});
+  }
+
+  async function loadAdminChatRetentionDateLimits() {
+    try {
+      currentSystemSettings = await fetchSystemSettings();
+      applyAdminChatRetentionDateLimits();
+    } catch (err) {
+      showError(err.message || '載入聊天紀錄日期限制失敗');
+    }
+  }
+
+  function normalizeSystemSettingsForView(settings) {
+    const normalized = {
+      updated_at: settings?.updated_at || null
+    };
+    SYSTEM_SETTING_ITEMS.forEach(item => {
+      const value = Number(settings?.[item.key]);
+      normalized[item.key] = Number.isInteger(value) && value > 0 ? value : item.fallback;
+    });
+    return normalized;
+  }
+
+  function applyAdminChatRetentionDateLimits() {
+    const retentionDays = Number(currentSystemSettings?.admin_chat_history_retention_days || 90);
+    if (!Number.isInteger(retentionDays) || retentionDays < 1) {
+      return;
+    }
+    const minDate = formatDateInputValue(addDays(new Date(), -retentionDays));
+    [
+      elements.adminConversationLastFrom,
+      elements.adminConversationLastTo,
+      elements.adminConversationMessageFrom,
+      elements.adminConversationMessageTo
+    ].forEach(input => {
+      if (!input) {
+        return;
+      }
+      input.min = minDate;
+      if (input.value && input.value < minDate) {
+        input.value = minDate;
+        updateDateInputPlaceholder(input);
+      }
+    });
+  }
+
+  function addDays(date, days) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  function formatDateInputValue(date) {
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  function renderSystemSettings() {
+    if (!elements.systemSettingsTbody) {
+      return;
+    }
+
+    elements.systemSettingsTbody.replaceChildren();
+    const rows = SYSTEM_SETTING_ITEMS.map((item, index) => ({
+      ...item,
+      index: index + 1,
+      value: currentSystemSettings?.[item.key] ?? item.fallback,
+      updatedAt: currentSystemSettings?.updated_at || null
+    }));
+
+    if (elements.systemSettingsEmpty) elements.systemSettingsEmpty.hidden = rows.length > 0;
+    if (elements.systemSettingsTable) elements.systemSettingsTable.hidden = rows.length === 0;
+
+    rows.forEach(rowData => {
+      const row = document.createElement('tr');
+      [
+        rowData.index,
+        rowData.name,
+        rowData.key,
+        rowData.type,
+        rowData.value,
+        formatDate(rowData.updatedAt)
+      ].forEach(value => {
+        const cell = document.createElement('td');
+        cell.textContent = String(value || '--');
+        row.appendChild(cell);
+      });
+
+      const actionCell = document.createElement('td');
+      if (can('office.system-settings.edit')) {
+        const editButton = document.createElement('button');
+        editButton.type = 'button';
+        editButton.className = 'system-setting-edit-action';
+        editButton.dataset.systemSettingEdit = rowData.key;
+        editButton.setAttribute('aria-label', `編輯${rowData.name}`);
+        editButton.title = '編輯';
+        editButton.innerHTML = pencilIcon();
+        actionCell.appendChild(editButton);
+      } else {
+        actionCell.textContent = '--';
+      }
+      row.appendChild(actionCell);
+      elements.systemSettingsTbody.appendChild(row);
+    });
+  }
+
+  function handleSystemSettingTableClick(event) {
+    const button = event.target.closest('[data-system-setting-edit]');
+    if (!button) {
+      return;
+    }
+    const item = SYSTEM_SETTING_ITEMS.find(candidate => candidate.key === button.dataset.systemSettingEdit);
+    if (item) {
+      openSystemSettingEditModal(item);
+    }
+  }
+
+  function openSystemSettingEditModal(item) {
+    if (!can('office.system-settings.edit')) {
+      showError('沒有系統設定編輯權限');
+      return;
+    }
+    const currentValue = currentSystemSettings?.[item.key] ?? item.fallback;
+
+    if (elements.modalTitle) {
+      elements.modalTitle.textContent = '系統設定 - 修改';
+    }
+    if (elements.modalBody) {
+      elements.modalBody.replaceChildren();
+      const form = document.createElement('form');
+      form.className = 'system-setting-edit-form';
+      form.id = 'system-setting-edit-form';
+
+      const fields = document.createElement('div');
+      fields.className = 'system-setting-edit-fields';
+
+      const nameField = document.createElement('label');
+      nameField.className = 'system-setting-edit-field';
+      const nameLabel = document.createElement('span');
+      nameLabel.textContent = '名稱';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = item.name;
+      nameInput.readOnly = true;
+      nameInput.setAttribute('aria-readonly', 'true');
+      nameField.append(nameLabel, nameInput);
+
+      const valueField = document.createElement('label');
+      valueField.className = 'system-setting-edit-field';
+      const valueLabel = document.createElement('span');
+      valueLabel.textContent = '數值';
+      const valueInput = document.createElement('input');
+      valueInput.type = 'number';
+      valueInput.id = 'system-setting-edit-value';
+      valueInput.min = String(item.min);
+      if (item.max) {
+        valueInput.max = String(item.max);
+      }
+      valueInput.step = '1';
+      valueInput.value = String(currentValue);
+      valueInput.required = true;
+      valueField.append(valueLabel, valueInput);
+
+      fields.append(nameField, valueField);
+      form.appendChild(fields);
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        elements.modalConfirmBtn?.click();
+      });
+      elements.modalBody.appendChild(form);
+      setTimeout(() => valueInput.focus(), 0);
+    }
+    modalConfirmHandler = async () => {
+      const valueInput = document.getElementById('system-setting-edit-value');
+      const nextValue = Number(valueInput?.value || 0);
+      if (!item.validate(nextValue)) {
+        showError(item.error);
+        valueInput?.focus();
+        throw new Error(item.error);
+      }
+      await saveSystemSettingItem(item.key, nextValue);
+    };
+    if (elements.modalConfirmBtn) {
+      elements.modalConfirmBtn.disabled = false;
+      elements.modalConfirmBtn.textContent = '修改';
+    }
+    if (elements.modal) {
+      elements.modal.hidden = false;
+      elements.modal.classList.add('is-active');
+      elements.modal.classList.remove('confirm-modal');
+      elements.modal.classList.add('system-setting-modal');
+    }
+  }
+
+  async function saveSystemSettingItem(key, value) {
+    const nextSettings = {
+      chat_auto_delete_max_days: currentSystemSettings?.chat_auto_delete_max_days || 30,
+      admin_chat_history_retention_days: currentSystemSettings?.admin_chat_history_retention_days || 90
+    };
+    nextSettings[key] = value;
+
     try {
       const response = await makeAuthenticatedRequest('/api/system-admin/settings', {
         method: 'PATCH',
-        body: JSON.stringify({
-          chat_auto_delete_max_days: chatAutoDeleteMaxDays,
-          admin_chat_history_retention_days: adminChatHistoryRetentionDays
-        })
+        body: JSON.stringify(nextSettings)
       });
       if (!response) return;
 
@@ -3028,12 +3243,22 @@
         throw new Error(data.message || '儲存系統設定失敗');
       }
       showSuccess('系統設定已更新');
-      await loadSystemSettings();
+      currentSystemSettings = normalizeSystemSettingsForView(data.data || nextSettings);
+      applyAdminChatRetentionDateLimits();
+      renderSystemSettings();
     } catch (err) {
       showError(err.message || '儲存系統設定失敗');
-    } finally {
-      if (elements.submitSystemSettings) elements.submitSystemSettings.disabled = false;
+      throw err;
     }
+  }
+
+  function pencilIcon() {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 20h9"></path>
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+      </svg>
+    `;
   }
 
   function userInitial(value) {
@@ -3818,7 +4043,7 @@
    */
   function closeModal() {
     if (elements.modal) {
-      elements.modal.classList.remove('is-active', 'confirm-modal');
+      elements.modal.classList.remove('is-active', 'confirm-modal', 'system-setting-modal');
       elements.modal.hidden = true;
     }
     modalConfirmHandler = null;

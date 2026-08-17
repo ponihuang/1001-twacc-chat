@@ -126,6 +126,10 @@ func (s *stubIntegrationRepository) UpdateSystemSettings(settings SystemSettings
 	return settings, nil
 }
 
+func (s *stubIntegrationRepository) PurgeExpiredAdminChatMessages(now time.Time) (int64, error) {
+	return 0, nil
+}
+
 func (s *stubIntegrationRepository) ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error) {
 	return AdminConversationPage{Items: []AdminConversationSummary{}, Page: filter.Page, PerPage: filter.PerPage}, nil
 }

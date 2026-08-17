@@ -1847,8 +1847,8 @@ func (r *IntegrationRepository) UpdateSystemSettings(settings erp.SystemSettings
 		name  string
 		value int
 	}{
-		{"chat_auto_delete_max_days", "聊天自動刪除可選最大天數", settings.ChatAutoDeleteMaxDays},
-		{"admin_chat_history_retention_days", "後台聊天紀錄可查詢天數", settings.AdminChatHistoryRetentionDays},
+		{"chat_auto_delete_max_days", "前台自動刪除最大天數", settings.ChatAutoDeleteMaxDays},
+		{"admin_chat_history_retention_days", "聊天資料庫保留天數", settings.AdminChatHistoryRetentionDays},
 	}
 	for _, item := range values {
 		if _, err := tx.Exec(`
@@ -1867,6 +1867,80 @@ func (r *IntegrationRepository) UpdateSystemSettings(settings erp.SystemSettings
 		return erp.SystemSettings{}, fmt.Errorf("commit update system settings: %w", err)
 	}
 	return r.GetSystemSettings()
+}
+
+// PurgeExpiredAdminChatMessages deletes chat messages older than the system database retention setting.
+func (r *IntegrationRepository) PurgeExpiredAdminChatMessages(now time.Time) (int64, error) {
+	settings, err := r.GetSystemSettings()
+	if err != nil {
+		return 0, err
+	}
+	settings = erp.SystemSettings{
+		ChatAutoDeleteMaxDays:         settings.ChatAutoDeleteMaxDays,
+		AdminChatHistoryRetentionDays: settings.AdminChatHistoryRetentionDays,
+		UpdatedAt:                     settings.UpdatedAt,
+	}
+	if settings.AdminChatHistoryRetentionDays < 1 {
+		settings.AdminChatHistoryRetentionDays = 90
+	}
+
+	rows, err := r.db.Query(`SELECT id FROM messages WHERE created_at < ?`, now.AddDate(0, 0, -settings.AdminChatHistoryRetentionDays))
+	if err != nil {
+		return 0, fmt.Errorf("select expired admin chat messages: %w", err)
+	}
+	defer rows.Close()
+
+	messageIDs := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return 0, fmt.Errorf("scan expired admin chat message: %w", err)
+		}
+		messageIDs = append(messageIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate expired admin chat messages: %w", err)
+	}
+	if len(messageIDs) == 0 {
+		return 0, nil
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("begin purge admin chat messages: %w", err)
+	}
+	defer tx.Rollback()
+
+	placeholders := queryPlaceholders(len(messageIDs))
+	idArgs := make([]any, 0, len(messageIDs))
+	for _, id := range messageIDs {
+		idArgs = append(idArgs, id)
+	}
+
+	if _, err := tx.Exec(`DELETE FROM chat_email_notifications WHERE first_message_id IN (`+placeholders+`) OR latest_message_id IN (`+placeholders+`)`, append(idArgs, idArgs...)...); err != nil {
+		return 0, fmt.Errorf("delete expired admin chat notifications: %w", err)
+	}
+	if _, err := tx.Exec(`UPDATE conversation_reads SET last_read_message_id = NULL WHERE last_read_message_id IN (`+placeholders+`)`, idArgs...); err != nil {
+		return 0, fmt.Errorf("clear expired admin chat read pointers: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM attachments WHERE message_id IN (`+placeholders+`)`, idArgs...); err != nil {
+		return 0, fmt.Errorf("delete expired admin chat attachments: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM message_mentions WHERE message_id IN (`+placeholders+`)`, idArgs...); err != nil {
+		return 0, fmt.Errorf("delete expired admin chat mentions: %w", err)
+	}
+	result, err := tx.Exec(`DELETE FROM messages WHERE id IN (`+placeholders+`)`, idArgs...)
+	if err != nil {
+		return 0, fmt.Errorf("delete expired admin chat messages: %w", err)
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read expired admin chat delete rows: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit purge admin chat messages: %w", err)
+	}
+	return deleted, nil
 }
 
 type adminRoleScanner interface {

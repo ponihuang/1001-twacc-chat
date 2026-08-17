@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 INSERT INTO app_settings (setting_key, setting_name, value_type, setting_value)
 VALUES
-    ('chat_auto_delete_max_days', '聊天自動刪除可選最大天數', 'number', '30'),
-    ('admin_chat_history_retention_days', '後台聊天紀錄可查詢天數', 'number', '90')
+    ('chat_auto_delete_max_days', '前台自動刪除最大天數', 'number', '30'),
+    ('admin_chat_history_retention_days', '聊天資料庫保留天數', 'number', '90')
 ON DUPLICATE KEY UPDATE
     setting_name = VALUES(setting_name),
     value_type = VALUES(value_type);

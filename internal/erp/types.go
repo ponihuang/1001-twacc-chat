@@ -705,6 +705,7 @@ type Repository interface {
 	ReplaceAdminRolePermissions(roleID int64, permissions map[string]bool) error
 	GetSystemSettings() (SystemSettings, error)
 	UpdateSystemSettings(settings SystemSettings, adminUserID int64) (SystemSettings, error)
+	PurgeExpiredAdminChatMessages(now time.Time) (int64, error)
 	ListAdminConversations(filter AdminConversationFilter) (AdminConversationPage, error)
 	GetAdminConversationDetail(filter AdminConversationMessageFilter) (AdminConversationDetail, error)
 	FindSystemAdminByID(adminUserID int64) (SystemAdminSummary, error)
