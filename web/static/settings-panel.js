@@ -11,7 +11,8 @@
     token: "twacc_chat_session_token",
     sourceSystem: "twacc_chat_source_system",
     externalUserID: "twacc_chat_external_user_id",
-    displayName: "twacc_chat_display_name"
+    displayName: "twacc_chat_display_name",
+    email: "twacc_chat_email"
   };
 
   const avatarPreview = panel.querySelector("[data-avatar-preview]");
@@ -22,8 +23,10 @@
   const profileName = panel.querySelector("[data-settings-profile-name]");
   const profileSource = panel.querySelector("[data-settings-profile-source]");
   const profileAccount = panel.querySelector("[data-settings-profile-account]");
+  const profileEmail = panel.querySelector("[data-settings-profile-email]");
   const avatarPreviewEdit = panel.querySelector("[data-avatar-preview-edit]");
   const profileEditName = panel.querySelector("[data-profile-edit-name]");
+  const profileEditEmail = panel.querySelector("[data-profile-edit-email]");
   const profileEditSource = panel.querySelector("[data-profile-edit-source]");
   const profileEditAccount = panel.querySelector("[data-profile-edit-account]");
   const profileEditSaveButton = panel.querySelector("[data-profile-edit-save]");
@@ -49,6 +52,7 @@
   let activeFolderDraft = null;
   let activeFolderIsNew = false;
   let profileEditOriginalName = "";
+  let profileEditOriginalEmail = "";
   let folderToastTimer = 0;
 
   function readSession() {
@@ -56,7 +60,8 @@
       token: localStorage.getItem(sessionStorageKeys.token) || "",
       sourceSystem: localStorage.getItem(sessionStorageKeys.sourceSystem) || "",
       externalUserID: localStorage.getItem(sessionStorageKeys.externalUserID) || "",
-      displayName: localStorage.getItem(sessionStorageKeys.displayName) || ""
+      displayName: localStorage.getItem(sessionStorageKeys.displayName) || "",
+      email: localStorage.getItem(sessionStorageKeys.email) || ""
     };
   }
 
@@ -122,6 +127,9 @@
       if (profileSource) {
         profileSource.textContent = "尚未登入";
       }
+      if (profileEmail) {
+        profileEmail.textContent = "--";
+      }
       if (avatarPreview) {
         avatarPreview.textContent = "";
         avatarPreview.style.backgroundImage = "";
@@ -136,6 +144,10 @@
       }
       if (profileEditName) {
         profileEditName.value = "";
+      }
+      if (profileEditEmail) {
+        profileEditOriginalEmail = "";
+        profileEditEmail.value = "";
       }
       if (profileEditSource) {
         profileEditSource.value = "";
@@ -156,6 +168,9 @@
     if (profileAccount) {
       profileAccount.textContent = session.externalUserID || "unknown";
     }
+    if (profileEmail) {
+      profileEmail.textContent = session.email || "--";
+    }
     const avatarKey = avatarStorageKey();
     const avatarDataURL = avatarKey ? localStorage.getItem(avatarKey) || "" : "";
     applyAvatarImage(avatarDataURL);
@@ -169,6 +184,10 @@
     if (profileEditName) {
       profileEditOriginalName = session.displayName || session.externalUserID || "";
       profileEditName.value = profileEditOriginalName;
+    }
+    if (profileEditEmail) {
+      profileEditOriginalEmail = session.email || "";
+      profileEditEmail.value = profileEditOriginalEmail;
     }
     if (profileEditSource) {
       profileEditSource.value = session.sourceSystem || "";
@@ -184,7 +203,8 @@
       return;
     }
     const displayName = profileEditName.value.trim();
-    const changed = Boolean(displayName) && displayName !== profileEditOriginalName;
+    const email = profileEditEmail ? profileEditEmail.value.trim().toLowerCase() : "";
+    const changed = Boolean(displayName) && (displayName !== profileEditOriginalName || email !== profileEditOriginalEmail);
     profileEditSaveButton.hidden = !changed;
   }
 
@@ -209,16 +229,48 @@
     }
   }
 
-  async function saveProfileName() {
+  async function refreshProfileFromAPI() {
+    const headers = authHeaders();
+    if (!headers) {
+      return false;
+    }
+    const response = await fetch("/api/users/me/profile", {
+      headers: { Authorization: headers.Authorization }
+    });
+    const result = await parseJSON(response);
+    if (!response.ok || !result.success || !result.data) {
+      return false;
+    }
+
+    const data = result.data;
+    localStorage.setItem(sessionStorageKeys.sourceSystem, data.source_system || readSession().sourceSystem);
+    localStorage.setItem(sessionStorageKeys.externalUserID, data.external_user_id || readSession().externalUserID);
+    localStorage.setItem(sessionStorageKeys.displayName, data.display_name || readSession().displayName || "");
+    if (data.email) {
+      localStorage.setItem(sessionStorageKeys.email, data.email);
+    } else {
+      localStorage.removeItem(sessionStorageKeys.email);
+    }
+    return true;
+  }
+
+  async function saveProfile() {
     if (!profileEditName) {
       return false;
     }
     const displayName = profileEditName.value.trim();
+    const email = profileEditEmail ? profileEditEmail.value.trim().toLowerCase() : "";
     if (!displayName) {
       profileEditName.focus();
       return false;
     }
-    if (displayName === profileEditOriginalName) {
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (profileEditEmail) {
+        profileEditEmail.focus();
+      }
+      return false;
+    }
+    if (displayName === profileEditOriginalName && email === profileEditOriginalEmail) {
       return true;
     }
     const headers = authHeaders();
@@ -229,7 +281,7 @@
     const response = await fetch("/api/users/me/profile", {
       method: "PATCH",
       headers: headers,
-      body: JSON.stringify({ display_name: displayName })
+      body: JSON.stringify({ display_name: displayName, email: email })
     });
     const result = await parseJSON(response);
     if (!response.ok || !result.success) {
@@ -238,8 +290,15 @@
 
     const data = result.data || {};
     const savedName = data.display_name || displayName;
+    const savedEmail = data.email || "";
     localStorage.setItem(sessionStorageKeys.displayName, savedName);
+    if (savedEmail) {
+      localStorage.setItem(sessionStorageKeys.email, savedEmail);
+    } else {
+      localStorage.removeItem(sessionStorageKeys.email);
+    }
     profileEditOriginalName = savedName;
+    profileEditOriginalEmail = savedEmail;
     renderProfile();
     updateProfileSaveVisibility();
     document.dispatchEvent(new CustomEvent("twacc:session-changed", {
@@ -248,7 +307,8 @@
         token: readSession().token,
         sourceSystem: data.source_system || readSession().sourceSystem,
         externalUserID: data.external_user_id || readSession().externalUserID,
-        displayName: savedName
+        displayName: savedName,
+        email: savedEmail
       }
     }));
     return true;
@@ -816,9 +876,11 @@
   });
 
   if (editProfileButton) {
-    editProfileButton.addEventListener("click", function () {
+    editProfileButton.addEventListener("click", async function () {
       renderProfile();
       setSubview("profile-edit");
+      await refreshProfileFromAPI();
+      renderProfile();
       updateProfileSaveVisibility();
     });
   }
@@ -826,6 +888,16 @@
   if (profileEditName) {
     profileEditName.addEventListener("input", updateProfileSaveVisibility);
     profileEditName.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+    });
+  }
+
+  if (profileEditEmail) {
+    profileEditEmail.addEventListener("input", updateProfileSaveVisibility);
+    profileEditEmail.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") {
         return;
       }
@@ -848,6 +920,11 @@
     renderSettingsForSession();
     setSubview("main");
     setFolderView("list");
+    refreshProfileFromAPI().then(function (updated) {
+      if (updated) {
+        renderProfile();
+      }
+    }).catch(function () {});
   });
 
   document.addEventListener("twacc:sidebar-back", function (event) {
@@ -863,7 +940,7 @@
     profileEditSaveButton.addEventListener("click", async function () {
       profileEditSaveButton.disabled = true;
       try {
-        const saved = await saveProfileName();
+        const saved = await saveProfile();
         if (saved) {
           setSubview("main");
         }

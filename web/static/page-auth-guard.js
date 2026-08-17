@@ -14,6 +14,7 @@
     localStorage.removeItem("twacc_chat_source_system");
     localStorage.removeItem("twacc_chat_external_user_id");
     localStorage.removeItem("twacc_chat_display_name");
+    localStorage.removeItem("twacc_chat_email");
   }
 
   function hasValidSession() {

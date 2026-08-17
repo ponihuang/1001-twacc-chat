@@ -35,6 +35,7 @@
     sourceSystem: "twacc_chat_source_system",
     externalUserID: "twacc_chat_external_user_id",
     displayName: "twacc_chat_display_name",
+    email: "twacc_chat_email",
     deviceID: "twacc_chat_device_id"
   };
 
@@ -171,6 +172,11 @@
     localStorage.setItem(storageKeys.sourceSystem, loginPayload.source_system);
     localStorage.setItem(storageKeys.externalUserID, loginPayload.external_user_id);
     localStorage.setItem(storageKeys.displayName, data.display_name || loginPayload.external_user_id);
+    if (data.email) {
+      localStorage.setItem(storageKeys.email, data.email);
+    } else {
+      localStorage.removeItem(storageKeys.email);
+    }
     localStorage.setItem(storageKeys.deviceID, loginPayload.device_id);
   }
 

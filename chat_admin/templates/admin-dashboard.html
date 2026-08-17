@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理儀表板</title>
-  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-filter-rwd-20260721e">
+  <link rel="stylesheet" href="/admin/static/admin.css?v=admin-permissions-detail-20260722a">
   <script defer src="/admin/static/admin-auth.js?v=2"></script>
-  <script defer src="/admin/static/admin-app.js?v=admin-filter-rwd-20260721e"></script>
+  <script defer src="/admin/static/admin-app.js?v=admin-permissions-detail-20260722a"></script>
 </head>
 <body class="admin-page" data-require-auth-redirect="/admin/login">
   <div class="admin-shell" data-admin-app data-require-auth-redirect="/admin/login" data-logout-redirect="/admin/login">
@@ -88,6 +88,15 @@
                 </svg>
               </span>
               <span>管理員帳號</span>
+            </button>
+            <button type="button" class="sidebar-subitem" data-menu-item="permissions">
+              <span class="menu-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M12 3l8 4v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"></path>
+                  <path d="M9 12l2 2 4-4"></path>
+                </svg>
+              </span>
+              <span>權限管理</span>
             </button>
           </div>
         </div>
@@ -770,6 +779,12 @@
                   <input type="text" id="edit-admin-display-name" maxlength="100" autocomplete="off" required>
                 </label>
                 <label class="user-create-field">
+                  <span>角色名稱</span>
+                  <select id="edit-admin-role">
+                    <option value="system_admin">系統管理員</option>
+                  </select>
+                </label>
+                <label class="user-create-field">
                   <span>狀態</span>
                   <select id="edit-admin-status">
                     <option value="active">啟用</option>
@@ -783,6 +798,174 @@
                 <button type="button" class="btn btn-compact" id="reset-edit-admin">重置</button>
               </div>
             </form>
+          </div>
+        </section>
+
+        <section data-view="permissions" hidden>
+          <div class="admin-page-panel">
+            <p class="admin-breadcrumb">首頁 / 權限管理</p>
+
+            <form class="admin-filter-panel permission-filter-panel" id="permission-filter-form" aria-label="權限篩選">
+              <label>
+                <span>角色</span>
+                <input type="search" id="permission-role-search" placeholder="搜尋代碼或名稱" autocomplete="off">
+              </label>
+              <div class="filter-actions admin-filter-actions">
+                <button type="submit" class="btn" id="refresh-permissions-btn">搜尋</button>
+                <button type="button" class="btn btn-success" data-menu-item="permissionCreate">新增</button>
+              </div>
+            </form>
+
+            <section class="user-table-card admin-table-card">
+              <div class="is-empty" id="permissions-loading" hidden>
+                <div class="loading"></div>
+                <p>載入中...</p>
+              </div>
+              <div class="is-empty" id="permissions-empty" hidden>
+                <p>找不到角色</p>
+              </div>
+              <table class="data-table permission-list-table" id="permissions-table">
+                <thead>
+                  <tr>
+                    <th>編號</th>
+                    <th>代碼</th>
+                    <th>角色名稱</th>
+                    <th>數量</th>
+                    <th>狀態</th>
+                    <th>選項</th>
+                  </tr>
+                </thead>
+                <tbody id="permissions-tbody"></tbody>
+              </table>
+            </section>
+            <div class="table-pagination" id="permissions-pagination" hidden>
+              <span class="pagination-total">總筆數: <strong id="permissions-total">0</strong></span>
+              <nav class="pagination-pages" id="permissions-pages" aria-label="權限管理列表分頁"></nav>
+              <label class="pagination-size">
+                <span class="sr-only">每頁筆數</span>
+                <select id="permissions-per-page">
+                  <option value="10" selected>10 / 頁</option>
+                  <option value="20">20 / 頁</option>
+                  <option value="50">50 / 頁</option>
+                  <option value="100">100 / 頁</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section data-view="permissionCreate" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="permissions" aria-label="返回權限管理">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="permissions">權限管理</button>
+              <span>/</span>
+              <span>新增角色</span>
+            </nav>
+
+            <form class="user-create-form" id="permission-create-form">
+              <div class="user-create-fields">
+                <label class="user-create-field">
+                  <span>代碼</span>
+                  <input type="text" id="create-permission-code" maxlength="50" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>名稱</span>
+                  <input type="text" id="create-permission-name" maxlength="100" autocomplete="off" required>
+                </label>
+              </div>
+
+              <div class="user-create-actions">
+                <button type="submit" class="btn btn-primary btn-compact" id="submit-create-permission">建立</button>
+                <button type="reset" class="btn btn-compact" id="reset-create-permission">重置</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section data-view="permissionEdit" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="permissions" aria-label="返回權限管理">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="permissions">權限管理</button>
+              <span>/</span>
+              <span>編輯角色</span>
+            </nav>
+
+            <form class="user-create-form" id="permission-edit-form">
+              <div class="user-create-fields">
+                <label class="user-create-field">
+                  <span>代碼</span>
+                  <input type="text" id="edit-permission-code" autocomplete="off" readonly aria-readonly="true">
+                </label>
+                <label class="user-create-field">
+                  <span>名稱</span>
+                  <input type="text" id="edit-permission-name" maxlength="100" autocomplete="off" required>
+                </label>
+                <label class="user-create-field">
+                  <span>狀態</span>
+                  <select id="edit-permission-status">
+                    <option value="active">啟用</option>
+                    <option value="inactive">停用</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="user-create-actions">
+                <button type="submit" class="btn btn-primary btn-compact" id="submit-edit-permission">儲存</button>
+                <button type="button" class="btn btn-compact" id="reset-edit-permission">重置</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section data-view="permissionDetail" hidden>
+          <div class="admin-page-panel">
+            <nav class="admin-breadcrumb admin-breadcrumb-nav" aria-label="麵包屑">
+              <button type="button" class="breadcrumb-back" data-menu-item="permissions" aria-label="返回權限管理">←</button>
+              <button type="button" class="breadcrumb-link" data-menu-item="dashboard">首頁</button>
+              <span>/</span>
+              <button type="button" class="breadcrumb-link" data-menu-item="permissions">權限管理</button>
+              <span>/</span>
+              <span id="permission-detail-breadcrumb-title">權限詳細</span>
+            </nav>
+
+            <form class="admin-filter-panel permission-detail-filter-panel" id="permission-detail-filter-form" aria-label="權限詳細篩選">
+              <label class="permission-detail-role-field">
+                <span>角色</span>
+                <input type="text" id="permission-detail-role-name" readonly aria-readonly="true">
+              </label>
+              <label>
+                <span>搜尋</span>
+                <input type="search" id="permission-detail-keyword" placeholder="輸入關鍵字搜尋" autocomplete="off">
+              </label>
+              <div class="filter-actions admin-filter-actions permission-detail-actions">
+                <button type="button" class="btn" id="collapse-permission-groups">收起列表</button>
+                <button type="button" class="btn" id="expand-permission-groups">展開列表</button>
+                <button type="button" class="btn" id="disable-all-permissions">關閉所有權限</button>
+                <button type="button" class="btn" id="enable-all-permissions">給予所有權限</button>
+              </div>
+            </form>
+
+            <section class="permission-detail-card" aria-label="角色權限細項">
+              <div class="is-empty" id="permission-detail-loading" hidden>
+                <div class="loading"></div>
+                <p>載入中...</p>
+              </div>
+              <div class="is-empty" id="permission-detail-empty" hidden>
+                <p>找不到權限項目</p>
+              </div>
+              <div class="permission-groups" id="permission-detail-groups"></div>
+            </section>
+
+            <div class="user-create-actions permission-detail-save-actions">
+              <button type="button" class="btn btn-primary btn-compact" id="submit-permission-detail">儲存</button>
+              <button type="button" class="btn btn-compact" data-menu-item="permissions">返回</button>
+            </div>
           </div>
         </section>
       </main>
