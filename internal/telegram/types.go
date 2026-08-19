@@ -32,3 +32,15 @@ type BotUser struct {
 	Username  string `json:"username"`
 	FirstName string `json:"first_name"`
 }
+
+// WebhookInfo contains Telegram webhook status returned by getWebhookInfo.
+type WebhookInfo struct {
+	URL                  string   `json:"url"`
+	HasCustomCertificate bool     `json:"has_custom_certificate"`
+	PendingUpdateCount   int      `json:"pending_update_count"`
+	LastErrorDate        int64    `json:"last_error_date"`
+	LastErrorMessage     string   `json:"last_error_message"`
+	MaxConnections       int      `json:"max_connections"`
+	IPAddress            string   `json:"ip_address"`
+	AllowedUpdates       []string `json:"allowed_updates"`
+}
